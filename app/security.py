@@ -1,13 +1,17 @@
 # app/security.py
 from datetime import datetime, timedelta, timezone
-import hmac
+import hmac, os
 from typing import Optional
 import jwt  # PyJWT
-from fastapi import HTTPException, Depends, Header
+from fastapi import HTTPException, Depends, Header, Cookie
 from fastapi.security.utils import get_authorization_scheme_param
 from .config import get_settings
 
 settings = get_settings()
+
+COOKIE_NAME = os.getenv("COOKIE_NAME", "access_token")
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "1") == "1"    # set to 1 in prod (HTTPS); 0 for localhost
+COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax")     # lax/strict/none
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -36,24 +40,30 @@ def _const_time_eq(a: str, b: str) -> bool:
 async def require_auth(
     authorization: Optional[str] = Header(default=None, alias="Authorization"),
     api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    access_token_cookie: Optional[str] = Cookie(default=None, alias=COOKIE_NAME),
 ):
-    # 1) API Key auth
+    # 1) API key
     if api_key:
         for key in settings.api_keys:
             if _const_time_eq(api_key, key):
                 return {"auth": "api_key", "sub": "api_key_user"}
+
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    # 2) Bearer JWT
+    # 2) Bearer header
     if authorization:
         scheme, token = get_authorization_scheme_param(authorization)
         if scheme.lower() == "bearer" and token:
             payload = _decode_token(token)
             return {"auth": "jwt", "sub": payload.get("sub", "unknown")}
 
-    # 3) Dev escape hatch (optional; disable in prod)
+    # 3) Cookie (for browser forms)
+    if access_token_cookie:
+        payload = _decode_token(access_token_cookie)
+        return {"auth": "cookie", "sub": payload.get("sub", "unknown")}
+
+    # 4) Dev bypass (never enable in prod)
     if settings.dev_allow_no_auth:
         return {"auth": "dev", "sub": "dev-user"}
 
-    # 4) Otherwise, reject
-    raise HTTPException(status_code=401, detail="Unauthorized. Provide X-API-Key or Bearer token.")
+    raise HTTPException(status_code=401, detail="Unauthorized.")
