@@ -1,5 +1,6 @@
 # app/routers/meetings.py
 from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException, Depends  # <-- add Depends
+from typing import Optional
 from ..security import require_auth  # <-- import
 from fastapi.responses import FileResponse
 from pathlib import Path
@@ -14,6 +15,8 @@ from ..utils.text import safe_preview
 import json, re, asyncio, mimetypes
 from ..services.branding import compose_meeting_email_parts
 from ..services.emailer import send_email
+from ..utils.storage import save_upload, save_text
+from ..services.pipeline import process_meeting   # whatever you named it
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])
 
@@ -151,3 +154,71 @@ def download_summary(meeting_id: int):
             raise HTTPException(status_code=404, detail="Summary not found")
         return FileResponse(m.summary_path, media_type="application/json",
                             filename=Path(m.summary_path).name)
+        
+# ---------- from text ----------
+@router.post("/meetings/from-text")
+def from_text(
+    title: str = Form(...),
+    transcript: str = Form(...),
+    email_to: Optional[str] = Form(None),
+    slack_channel: Optional[str] = Form(None),
+    sync: Optional[bool] = Form(False),                # NEW
+    background_tasks: BackgroundTasks = None,          # NEW
+):
+    with get_session() as s:
+        m = Meeting(title=title, transcript_path=None, audio_path=None,
+                    email_to=email_to, slack_channel=slack_channel, status="queued")
+        s.add(m); s.commit(); s.refresh(m)
+    # write transcript to a temp file for consistency if your pipeline expects a path
+    # or pass transcript text straight into process_meeting depending on your implementation
+
+    if sync:
+        process_meeting(m.id)                          # run now
+        with get_session() as s:
+            m = s.get(Meeting, m.id)
+            return {"id": m.id, "status": m.status}
+    else:
+        if background_tasks is None:
+            raise HTTPException(500, "Background tasks unavailable")
+        background_tasks.add_task(process_meeting, m.id)
+        return {"id": m.id, "status": "queued"}
+
+
+# ---------- upload audio/video ----------
+@router.post("/meetings/upload")
+def upload_meeting(
+    title: str = Form(...),
+    file: UploadFile = File(...),
+    language: Optional[str] = Form(None),
+    hints: Optional[str] = Form(None),
+    email_to: Optional[str] = Form(None),
+    slack_channel: Optional[str] = Form(None),
+    sync: Optional[bool] = Form(False),                # NEW
+    background_tasks: BackgroundTasks = None,          # NEW
+):
+    # save the file to disk, create Meeting row with status="queued"
+    with get_session() as s:
+        m = Meeting(title=title, audio_path=save_upload(file), email_to=email_to,
+                    slack_channel=slack_channel, status="queued")
+        s.add(m); s.commit(); s.refresh(m)
+
+    if sync:
+        process_meeting(m.id)                          # run now
+        with get_session() as s:
+            m = s.get(Meeting, m.id)
+            return {"id": m.id, "status": m.status}
+    else:
+        if background_tasks is None:
+            raise HTTPException(500, "Background tasks unavailable")
+        background_tasks.add_task(process_meeting, m.id)
+        return {"id": m.id, "status": "queued"}
+    
+@router.post("/meetings/{mid}/run")
+def run_now(mid: int):
+    process_meeting(mid)
+    with get_session() as s:
+        m = s.get(Meeting, mid)
+        if not m:
+            raise HTTPException(404, "Not found")
+        return {"id": m.id, "status": m.status}
+

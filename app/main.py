@@ -77,6 +77,7 @@ def upload_test(request: Request):
         <textarea name="transcript" rows="10" placeholder="Paste transcript here…" required></textarea>
         <label>Email results to (optional)</label>
         <input type="email" name="email_to" />
+        <label><input type="checkbox" name="sync" value="1"> Run synchronously (wait for result)</label>
         <br/><br/><button type="submit">Summarize</button>
       </form>
     </div>
@@ -109,6 +110,7 @@ def upload_test(request: Request):
 
         <label>Audio/Video file (.mp3/.m4a/.wav/.mp4)</label>
         <input type="file" name="file" accept="audio/*,video/mp4" required />
+        <label><input type="checkbox" name="sync" value="1"> Run synchronously (wait for result)</label>
         <br/><br/><button type="submit">Upload & Process</button>
       </form>
     </div>
