@@ -9,7 +9,8 @@ from ..db import get_session, DATA_DIR
 from ..models import Meeting
 from ..services.asr import transcribe
 from ..services.summarizer import summarize
-from ..services.emailer import send_email
+from ..db import get_session
+from ..models import Meeting
 from ..services.slacker import send_slack
 from ..utils.text import safe_preview
 import json, re, asyncio, mimetypes
@@ -101,6 +102,12 @@ async def process_meeting(meeting_id: int, language: str | None, hints: str | No
         send_slack(f"*{m.title}* meeting summarized.\n\n{safe_preview(body_text)}")
         m.status = "delivered"
         s.add(m); s.commit()
+        
+def _truthy(v) -> bool:
+    if v is None:
+        return False
+    return str(v).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
 
 @router.post("/from-text")
 async def create_from_text(
@@ -162,7 +169,7 @@ def from_text(
     transcript: str = Form(...),
     email_to: Optional[str] = Form(None),
     slack_channel: Optional[str] = Form(None),
-    sync: Optional[bool] = Form(False),                # NEW
+    sync: Optional[str] = Form(None),                # NEW
     background_tasks: BackgroundTasks = None,          # NEW
 ):
     with get_session() as s:
@@ -193,7 +200,7 @@ def upload_meeting(
     hints: Optional[str] = Form(None),
     email_to: Optional[str] = Form(None),
     slack_channel: Optional[str] = Form(None),
-    sync: Optional[bool] = Form(False),                # NEW
+    sync: Optional[str] = Form(None),               # NEW
     background_tasks: BackgroundTasks = None,          # NEW
 ):
     # save the file to disk, create Meeting row with status="queued"
@@ -213,6 +220,16 @@ def upload_meeting(
         background_tasks.add_task(process_meeting, m.id)
         return {"id": m.id, "status": "queued"}
     
+@router.post("/meetings/run")
+def run_now_form(id: int = Form(...)):
+    process_meeting(id)
+    with get_session() as s:
+        m = s.get(Meeting, id)
+        if not m:
+            raise HTTPException(404, "Not found")
+        return {"id": m.id, "status": m.status}
+
+    
 @router.post("/meetings/{mid}/run")
 def run_now(mid: int):
     process_meeting(mid)
@@ -221,4 +238,6 @@ def run_now(mid: int):
         if not m:
             raise HTTPException(404, "Not found")
         return {"id": m.id, "status": m.status}
+    
+
 
