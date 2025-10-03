@@ -114,7 +114,7 @@ def _summarize_with_openai(transcript: str, title: str) -> dict:
 
 # ---------- Email (Resend) ----------
 
-def _email_with_resend(meeting: Meeting, summary_json: dict, summary_path: str):
+def _email_with_resend(meeting: Meeting, summary_json: dict, summary_path: str, override_to: str | None = None):
     """
     Send the formatted email using Resend. No-op if config isn't present.
     """
@@ -125,6 +125,7 @@ def _email_with_resend(meeting: Meeting, summary_json: dict, summary_path: str):
     api = os.getenv("EMAIL_API_KEY")
     from_email = os.getenv("FROM_EMAIL")
     from_name = os.getenv("FROM_NAME", "AI Meeting Notes")
+    to_addr = override_to or meeting.email_to
     if not api or not from_email or not meeting.email_to:
         return  # not configured or no recipient
 
@@ -172,71 +173,75 @@ def _email_with_resend(meeting: Meeting, summary_json: dict, summary_path: str):
         timeout=30,
     )
     r.raise_for_status()
+    
+def send_summary_email(meeting_id: int, to: str):
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m or not m.summary_path or not Path(m.summary_path).exists():
+            raise RuntimeError("Summary not ready")
+    summary_json = json.loads(Path(m.summary_path).read_text(encoding="utf-8"))
+    _email_with_resend(m, summary_json, m.summary_path, override_to=to)
 
 # ---------- Main pipeline ----------
 
-def process_meeting(meeting_id: int, *, language: Optional[str] = None, hints: Optional[str] = None) -> None:
-    """
-    Full pipeline:
-      - set status=processing
-      - transcribe if needed (AssemblyAI)
-      - summarize with OpenAI
-      - save summary JSON, update DB
-      - email via Resend (optional)
-    """
-    # Mark processing
+def _set_progress(meeting_id: int, progress: int, *, step: str | None = None, status: str | None = None):
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m:
+            return
+        m.progress = max(0, min(progress, 100))
+        if step is not None:
+            m.step = step
+        if status is not None:
+            m.status = status
+        s.add(m)
+        s.commit()
+
+def process_meeting(meeting_id: int, *, language: str | None = None, hints: str | None = None) -> None:
+    # mark processing
+    _set_progress(meeting_id, 5, step="Starting", status="processing")
+
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
         if not m:
             raise RuntimeError(f"Meeting {meeting_id} not found")
-        m.status = "processing"
-        s.add(m)
-        s.commit()
 
     try:
-        # 1) Get transcript text
-        transcript_text: str = ""
+        transcript_text = ""
         if m.transcript_path and Path(m.transcript_path).exists():
+            _set_progress(meeting_id, 10, step="Reading transcript")
             transcript_text = Path(m.transcript_path).read_text(encoding="utf-8")
         elif m.audio_path and Path(m.audio_path).exists():
+            _set_progress(meeting_id, 20, step="Uploading audio")
             transcript_text = _aai_transcribe(m.audio_path, language=language, hints=hints)
-            # persist to a file for downloads
+            _set_progress(meeting_id, 60, step="Transcription complete, saving transcript")
             tpath = save_text(transcript_text, title=m.title)
             with get_session() as s:
                 mm = s.get(Meeting, meeting_id)
                 mm.transcript_path = tpath
-                s.add(mm)
-                s.commit()
+                s.add(mm); s.commit()
                 m = mm
         else:
-            raise RuntimeError("No transcript or audio found for this meeting.")
+            raise RuntimeError("No transcript or audio found.")
 
-        # 2) Summarize
+        _set_progress(meeting_id, 75, step="Summarizing")
         summary_json = _summarize_with_openai(transcript_text, m.title)
 
-        # 3) Save summary JSON next to transcript (or in data/summaries)
         base_dir = Path(m.transcript_path).parent if m.transcript_path else (DATA_DIR / "summaries")
         base_dir.mkdir(parents=True, exist_ok=True)
-        fname = f"{Path(m.title).stem.replace(' ', '_') or 'summary'}.summary.json"
-        spath = str((base_dir / fname).resolve())
+        spath = str((base_dir / "summary.json").resolve())
         Path(spath).write_text(json.dumps(summary_json, indent=2), encoding="utf-8")
 
-        # 4) Update DB -> delivered
         with get_session() as s:
             mm = s.get(Meeting, meeting_id)
             mm.summary_path = spath
-            mm.status = "delivered"
-            s.add(mm)
-            s.commit()
-            m = mm
+            s.add(mm); s.commit()
 
-        # 5) Email (optional)
+        _set_progress(meeting_id, 90, step="Emailing (if configured)")
         _email_with_resend(m, summary_json, spath)
 
+        _set_progress(meeting_id, 100, step="Done", status="delivered")
+
     except Exception as e:
-        with get_session() as s:
-            mm = s.get(Meeting, meeting_id)
-            mm.status = f"failed: {e}"
-            s.add(mm)
-            s.commit()
+        _set_progress(meeting_id, 100, step=f"Error", status=f"failed: {e}")
         raise

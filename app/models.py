@@ -12,3 +12,8 @@ class Meeting(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     email_to: Optional[str] = None
     slack_channel: Optional[str] = None
+    status: str = "queued"
+    # NEW:
+    progress: int = 0
+    step: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)

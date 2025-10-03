@@ -2,7 +2,7 @@
 from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException, Depends
 from typing import Optional
 from ..security import require_auth
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pathlib import Path
 from sqlmodel import select
 from ..db import get_session, DATA_DIR
@@ -13,6 +13,7 @@ from ..services.slacker import send_slack
 from ..utils.text import safe_preview
 from ..services.branding import compose_meeting_email_parts
 from ..services.emailer import send_email
+from ..services.pipeline import process_meeting, send_summary_email
 import json, re
 
 router = APIRouter(
@@ -96,6 +97,145 @@ async def process_meeting(
         m.status = "delivered"
         s.add(m)
         s.commit()
+        
+# --- status JSON (for polling the progress bar) ---
+@router.get("/{meeting_id}/status")
+def meeting_status(meeting_id: int):
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m:
+            raise HTTPException(404, "Not found")
+        return {
+            "id": m.id,
+            "title": m.title,
+            "status": m.status,
+            "progress": m.progress or 0,
+            "step": m.step,
+            "has_transcript": bool(m.transcript_path),
+            "has_summary": bool(m.summary_path),
+        }
+
+# --- send email from the results page ---
+@router.post("/{meeting_id}/email")
+def email_results(meeting_id: int, to: str = Form(...)):
+    try:
+        send_summary_email(meeting_id, to)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+# --- simple customer display page ---
+@router.get("/{meeting_id}/view", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
+def meeting_view(meeting_id: int):
+    return f"""
+<!doctype html>
+<meta charset="utf-8" />
+<title>Meeting #{meeting_id} • AI Meeting Notes</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  body{{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:900px;margin:32px}}
+  .card{{border:1px solid #ddd;border-radius:12px;padding:16px;margin-bottom:18px}}
+  .bar{{height:14px;background:#eee;border-radius:8px;overflow:hidden}}
+  .bar>div{{height:100%;background:#111;width:0%}}
+  pre{{white-space:pre-wrap;background:#0b1020;color:#e6edff;padding:12px;border-radius:10px;max-height:400px;overflow:auto}}
+  label,input,button{{font:inherit}} input{{padding:8px;width:100%}} button{{background:#111;color:#fff;border:none;border-radius:10px;padding:10px 16px;cursor:pointer}}
+  .row{{display:grid;grid-template-columns:1fr 160px;gap:10px;align-items:center}}
+</style>
+
+<h1>Meeting #{meeting_id}</h1>
+
+<div class="card">
+  <div class="row">
+    <div>
+      <div id="title" style="font-weight:600"></div>
+      <div id="status" style="color:#666;margin-top:6px"></div>
+    </div>
+    <button id="run" style="display:none">Run now</button>
+  </div>
+  <div class="bar" style="margin-top:12px"><div id="p"></div></div>
+</div>
+
+<div id="results" class="card" style="display:none">
+  <h3>Summary</h3>
+  <pre id="summary">Loading…</pre>
+
+  <h3 style="margin-top:16px">Send to email</h3>
+  <form id="emailForm">
+    <div class="row">
+      <input name="to" id="to" placeholder="customer@domain.com" type="email" required />
+      <button type="submit">Send</button>
+    </div>
+    <div id="emailOk" style="color:#16a34a;margin-top:8px;display:none">Sent ✓</div>
+    <div id="emailErr" style="color:#b91c1c;margin-top:8px;display:none"></div>
+  </form>
+
+  <p style="margin-top:10px">
+    <a id="dlSum" href="#">Download summary (JSON)</a> ·
+    <a id="dlTxt" href="#">Download transcript (TXT)</a>
+  </p>
+</div>
+
+<script>
+const id = {meeting_id};
+
+async function getStatus() {{
+  const r = await fetch(`/meetings/${{id}}/status`);
+  if (!r.ok) throw new Error('status error');
+  return r.json();
+}}
+
+async function getSummary() {{
+  const r = await fetch(`/meetings/${{id}}/download/summary`);
+  if (!r.ok) throw new Error('no summary yet');
+  return r.text();
+}}
+
+async function tick() {{
+  try {{
+    const s = await getStatus();
+    document.getElementById('title').textContent = s.title || `Meeting #${{id}}`;
+    document.getElementById('status').textContent = `${{s.status}}${{s.step ? ' — '+s.step : ''}}`;
+    document.getElementById('p').style.width = (s.progress||0) + '%';
+    // show Run Now if queued
+    document.getElementById('run').style.display = (s.status || '').startsWith('queued') ? '' : 'none';
+
+    if ((s.status||'').startsWith('delivered')) {{
+      document.getElementById('results').style.display = '';
+      // download links
+      document.getElementById('dlSum').href = `/meetings/${{id}}/download/summary`;
+      document.getElementById('dlTxt').href = `/meetings/${{id}}/download/transcript`;
+      // fetch summary pretty json once
+      if (!document.getElementById('summary').dataset.loaded) {{
+        try {{
+          const txt = await getSummary();
+          document.getElementById('summary').textContent = txt;
+          document.getElementById('summary').dataset.loaded = '1';
+        }} catch (e) {{}}
+      }}
+      return; // stop polling once delivered
+    }}
+  }} catch (e) {{}}
+  setTimeout(tick, 2000);
+}}
+
+document.getElementById('run').onclick = async () => {{
+  const r = await fetch(`/meetings/${{id}}/run`, {{ method: 'POST' }});
+  await r.json();
+  setTimeout(tick, 500);
+}};
+
+document.getElementById('emailForm').onsubmit = async (e) => {{
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const r = await fetch(`/meetings/${{id}}/email`, {{ method: 'POST', body: fd }});
+  document.getElementById('emailOk').style.display = r.ok ? '' : 'none';
+  document.getElementById('emailErr').style.display = r.ok ? 'none' : '';
+  if (!r.ok) document.getElementById('emailErr').textContent = (await r.text()) || 'Send failed';
+}};
+
+tick();
+</script>
+"""
 
 
 @router.post("/upload")

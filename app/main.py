@@ -9,6 +9,7 @@ from .services.branding import render_meeting_notes_email_html
 
 os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]
 
+init_db()
 
 app = FastAPI(title="AI Meeting Notes")
 
