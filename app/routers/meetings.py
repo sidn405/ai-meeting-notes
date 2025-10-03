@@ -255,6 +255,19 @@ def download_summary(meeting_id: int):
         )
 
 
+@router.get("/{meeting_id}/summary")
+def get_summary(meeting_id: int):
+    """Get meeting summary as JSON (for reading, not downloading)"""
+    import json
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not (m and m.summary_path and Path(m.summary_path).exists()):
+            raise HTTPException(status_code=404, detail="Summary not found")
+        
+        summary_text = Path(m.summary_path).read_text(encoding="utf-8")
+        return json.loads(summary_text)
+
+
 @router.post("/{meeting_id}/run")
 async def run_meeting(meeting_id: int):
     """Manually trigger processing for a meeting"""

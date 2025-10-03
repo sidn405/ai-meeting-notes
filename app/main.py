@@ -541,7 +541,7 @@ def progress_page():
     
     async function fetchResults(meeting) {
       try {
-        const response = await fetch(`/meetings/${meetingId}/download/summary`, {
+        const response = await fetch(`/meetings/${meetingId}/summary`, {
           credentials: 'include'
         });
         if (!response.ok) return;
