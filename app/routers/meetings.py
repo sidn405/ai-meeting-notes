@@ -254,5 +254,70 @@ def run_now(mid: int):
             raise HTTPException(404, "Not found")
         return {"id": m.id, "status": m.status}
     
+@router.post("/from-text-sync")
+def from_text_sync(
+    title: str = Form(...),
+    transcript: str = Form(...),
+    email_to: Optional[str] = Form(None),
+    slack_channel: Optional[str] = Form(None),
+):
+    # Save the transcript so it’s downloadable later
+    transcript_path = save_text(transcript, title=title)
 
+    with get_session() as s:
+        m = Meeting(
+            title=title,
+            audio_path=None,
+            transcript_path=transcript_path,
+            summary_path=None,
+            status="queued",
+            email_to=email_to,
+            slack_channel=slack_channel,
+        )
+        s.add(m); s.commit(); s.refresh(m)
+        mid = m.id
+
+    # Run the whole pipeline now (blocking)
+    process_meeting(mid)
+
+    with get_session() as s:
+        m = s.get(Meeting, mid)
+        if not m:
+            raise HTTPException(404, "Not found")
+        return {"id": m.id, "status": m.status}
+
+
+@router.post("/upload-sync")
+def upload_meeting_sync(
+    title: str = Form(...),
+    file: UploadFile = File(...),
+    language: Optional[str] = Form(None),
+    hints: Optional[str] = Form(None),
+    email_to: Optional[str] = Form(None),
+    slack_channel: Optional[str] = Form(None),
+):
+    # Persist file
+    audio_path = save_upload(file)
+
+    with get_session() as s:
+        m = Meeting(
+            title=title,
+            audio_path=audio_path,
+            transcript_path=None,
+            summary_path=None,
+            status="queued",
+            email_to=email_to,
+            slack_channel=slack_channel,
+        )
+        s.add(m); s.commit(); s.refresh(m)
+        mid = m.id
+
+    # Run the whole pipeline now (blocking)
+    process_meeting(mid, language=language, hints=hints)
+
+    with get_session() as s:
+        m = s.get(Meeting, mid)
+        if not m:
+            raise HTTPException(404, "Not found")
+        return {"id": m.id, "status": m.status}
 
