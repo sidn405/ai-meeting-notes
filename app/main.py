@@ -544,9 +544,21 @@ def progress_page():
         const response = await fetch(`/meetings/${meetingId}/summary`, {
           credentials: 'include'
         });
-        if (!response.ok) return;
         
-        const summary = await response.json();
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers.get('content-type'));
+        
+        if (!response.ok) {
+          console.error('Response not OK:', response.status);
+          return;
+        }
+        
+        // Get the raw text first to see what we're getting
+        const text = await response.text();
+        console.log('Response text:', text.substring(0, 200));
+        
+        // Try to parse it as JSON
+        const summary = JSON.parse(text);
         displayResults(summary);
         
         // Pre-fill email if available
@@ -555,6 +567,11 @@ def progress_page():
         }
       } catch (error) {
         console.error('Error fetching results:', error);
+        console.error('Error details:', error.message);
+        // Show error in UI
+        document.getElementById('resultsSection').classList.add('visible');
+        document.getElementById('executiveSummary').textContent = 
+          'Error loading summary. Check console for details. Error: ' + error.message;
       }
     }
     
