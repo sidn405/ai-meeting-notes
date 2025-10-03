@@ -235,7 +235,7 @@ def upload_meeting(
         background_tasks.add_task(process_meeting, mid, language, hints)
         return {"id": mid, "status": "queued"}
     
-@router.post("/meetings/run")
+@router.post("/run")
 def run_now_form(id: int = Form(...)):
     process_meeting(id)
     with get_session() as s:
@@ -245,7 +245,7 @@ def run_now_form(id: int = Form(...)):
         return {"id": m.id, "status": m.status}
 
     
-@router.post("/meetings/{mid}/run")
+@router.post("/{mid}/run")
 def run_now(mid: int):
     process_meeting(mid)
     with get_session() as s:
@@ -254,5 +254,39 @@ def run_now(mid: int):
             raise HTTPException(404, "Not found")
         return {"id": m.id, "status": m.status}
     
+# --- NEW: process-now upload that blocks and returns final status ---
+@router.post("/upload-sync")
+async def upload_meeting_sync(
+    title: str = Form(...),
+    email_to: str | None = Form(None),
+    file: UploadFile = File(...),
+
+    # optional tuning inputs you already accept on /upload:
+    language: str | None = Form(None),
+    hints: str | None = Form(None),
+    model_size: str | None = Form(None),
+    device: str | None = Form(None),
+    compute_type: str | None = Form(None),
+):
+    ext = Path(file.filename).suffix.lower()
+    if ext not in {".mp3", ".m4a", ".wav", ".mp4"}:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    audio_path = DATA_DIR / f"{Path(file.filename).stem}.uploaded{ext}"
+    audio_path.write_bytes(await file.read())
+
+    with get_session() as s:
+        m = Meeting(title=title, audio_path=str(audio_path), email_to=email_to)
+        s.add(m); s.commit(); s.refresh(m)
+        mid = m.id
+
+    # Run your existing pipeline inline and wait for the result
+    await process_meeting(mid, language, hints, model_size, device, compute_type)
+
+    with get_session() as s:
+        m = s.get(Meeting, mid)
+        if not m:
+            raise HTTPException(404, "Not found")
+        return {"id": m.id, "status": m.status}
 
 
