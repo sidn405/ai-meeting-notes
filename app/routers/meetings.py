@@ -264,3 +264,19 @@ async def run_meeting(meeting_id: int):
         if not m:
             raise HTTPException(404, "Not found")
         return {"id": m.id, "status": m.status}
+
+
+@router.post("/{meeting_id}/send-email")
+async def send_meeting_email(meeting_id: int, payload: dict):
+    """Send or resend meeting summary via email"""
+    from ..services.pipeline import send_summary_email
+    
+    email_to = payload.get("email_to")
+    if not email_to:
+        raise HTTPException(400, "email_to is required")
+    
+    try:
+        send_summary_email(meeting_id, email_to)
+        return {"success": True, "message": f"Email sent to {email_to}"}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to send email: {str(e)}")
