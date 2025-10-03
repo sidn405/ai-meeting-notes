@@ -9,7 +9,6 @@ from .services.branding import render_meeting_notes_email_html
 
 os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]
 
-
 app = FastAPI(title="AI Meeting Notes")
 
 app.add_middleware(
@@ -553,12 +552,7 @@ def progress_page():
           return;
         }
         
-        // Get the raw text first to see what we're getting
-        const text = await response.text();
-        console.log('Response text:', text.substring(0, 200));
-        
-        // Try to parse it as JSON
-        const summary = JSON.parse(text);
+        const summary = await response.json();
         displayResults(summary);
         
         // Pre-fill email if available

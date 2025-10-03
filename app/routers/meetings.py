@@ -243,7 +243,7 @@ def download_transcript(meeting_id: int):
 
 @router.get("/{meeting_id}/download/summary")
 def download_summary(meeting_id: int):
-    """Download meeting summary"""
+    """Download meeting summary (as file attachment)"""
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
         if not (m and m.summary_path and Path(m.summary_path).exists()):
@@ -258,7 +258,6 @@ def download_summary(meeting_id: int):
 @router.get("/{meeting_id}/summary")
 def get_summary(meeting_id: int):
     """Get meeting summary as JSON (for reading, not downloading)"""
-    import json
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
         if not (m and m.summary_path and Path(m.summary_path).exists()):

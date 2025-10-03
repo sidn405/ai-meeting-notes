@@ -2,7 +2,6 @@
 import os
 from sqlmodel import SQLModel, create_engine, Session
 from sqlalchemy import text
-from sqlalchemy import text as sql_text
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -39,16 +38,36 @@ def _try_pg_engine():
 _engine = _try_pg_engine() or create_engine(f"sqlite:///{DB_PATH}", echo=False)
 
 def ensure_meeting_progress_columns():
+    """Add progress and step columns if they don't exist"""
     with _engine.connect() as conn:
-        cols = {
-            r[0] for r in conn.exec_driver_sql(
+        # Detect database type
+        dialect_name = conn.dialect.name
+        
+        if dialect_name == "postgresql":
+            # PostgreSQL: use information_schema
+            result = conn.exec_driver_sql(
                 "SELECT column_name FROM information_schema.columns WHERE table_name='meeting';"
             )
-        }
-        if "progress" not in cols:
-            conn.exec_driver_sql("ALTER TABLE meeting ADD COLUMN progress INTEGER DEFAULT 0;")
-        if "step" not in cols:
-            conn.exec_driver_sql("ALTER TABLE meeting ADD COLUMN step TEXT;")
+            cols = {r[0] for r in result}
+            
+            if "progress" not in cols:
+                conn.exec_driver_sql("ALTER TABLE meeting ADD COLUMN progress INTEGER DEFAULT 0;")
+                conn.commit()
+            if "step" not in cols:
+                conn.exec_driver_sql("ALTER TABLE meeting ADD COLUMN step TEXT;")
+                conn.commit()
+                
+        elif dialect_name == "sqlite":
+            # SQLite: use PRAGMA table_info
+            result = conn.exec_driver_sql("PRAGMA table_info(meeting);")
+            cols = {r[1] for r in result}  # column name is at index 1
+            
+            if "progress" not in cols:
+                conn.exec_driver_sql("ALTER TABLE meeting ADD COLUMN progress INTEGER DEFAULT 0;")
+                conn.commit()
+            if "step" not in cols:
+                conn.exec_driver_sql("ALTER TABLE meeting ADD COLUMN step TEXT;")
+                conn.commit()
 
 # Call this once on startup
 def init_db():
