@@ -200,25 +200,40 @@ def upload_meeting(
     hints: Optional[str] = Form(None),
     email_to: Optional[str] = Form(None),
     slack_channel: Optional[str] = Form(None),
-    sync: Optional[str] = Form(None),               # NEW
-    background_tasks: BackgroundTasks = None,          # NEW
+    sync: Optional[str] = Form(None),
+    background_tasks: BackgroundTasks = None,
 ):
-    # save the file to disk, create Meeting row with status="queued"
-    with get_session() as s:
-        m = Meeting(title=title, audio_path=save_upload(file), email_to=email_to,
-                    slack_channel=slack_channel, status="queued")
-        s.add(m); s.commit(); s.refresh(m)
+    run_sync = _truthy(sync)
 
-    if sync:
-        process_meeting(m.id)                          # run now
+    # persist upload
+    audio_path = save_upload(file)
+
+    with get_session() as s:
+        m = Meeting(
+            title=title,
+            audio_path=audio_path,
+            transcript_path=None,
+            summary_path=None,
+            status="queued",
+            email_to=email_to,
+            slack_channel=slack_channel,
+        )
+        s.add(m)
+        s.commit()
+        s.refresh(m)
+        mid = m.id
+
+    if run_sync:
+        # process immediately (blocks until finished)
+        process_meeting(mid, language=language, hints=hints)
         with get_session() as s:
-            m = s.get(Meeting, m.id)
-            return {"id": m.id, "status": m.status}
+            mm = s.get(Meeting, mid)
+            return {"id": mm.id, "status": mm.status}
     else:
         if background_tasks is None:
             raise HTTPException(500, "Background tasks unavailable")
-        background_tasks.add_task(process_meeting, m.id)
-        return {"id": m.id, "status": "queued"}
+        background_tasks.add_task(process_meeting, mid, language, hints)
+        return {"id": mid, "status": "queued"}
     
 @router.post("/meetings/run")
 def run_now_form(id: int = Form(...)):
