@@ -115,9 +115,7 @@ def _summarize_with_openai(transcript: str, title: str) -> dict:
 # ---------- Email (Resend) ----------
 
 def _email_with_resend_by_id(meeting_id: int, summary_json: dict, summary_path: str, override_to: str):
-    """
-    Send the formatted email using Resend. No-op if config isn't present.
-    """
+    """Send the formatted email using Resend. No-op if config isn't present."""
     service = os.getenv("EMAIL_SERVICE", "resend").lower()
     if service != "resend":
         return
@@ -127,9 +125,9 @@ def _email_with_resend_by_id(meeting_id: int, summary_json: dict, summary_path: 
     from_name = os.getenv("FROM_NAME", "AI Meeting Notes")
     
     if not api or not from_email or not override_to:
-        return  # not configured or no recipient
+        return
 
-    # Get meeting title from database
+    # Get meeting title from database in a new session
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
         if not m:
@@ -144,7 +142,6 @@ def _email_with_resend_by_id(meeting_id: int, summary_json: dict, summary_path: 
             f'<a href="{app_base}/meetings/{meeting_id}/download/transcript">Download transcript (TXT)</a></p>'
         )
 
-    # Simple HTML
     ex = summary_json.get("executive_summary", "") or ""
     dec = summary_json.get("key_decisions", []) or []
     ai  = summary_json.get("action_items", []) or []
@@ -156,10 +153,8 @@ def _email_with_resend_by_id(meeting_id: int, summary_json: dict, summary_path: 
     html = f"""
     <h3>Executive Summary</h3>
     <p style="white-space:pre-wrap">{ex}</p>
-
     <h3>Key Decisions</h3>
     <ul>{"".join(f"<li>{d}</li>" for d in dec)}</ul>
-
     <h3>Action Items</h3>
     <table border="1" cellpadding="6" cellspacing="0">
       <tr><th>Owner</th><th>Task</th><th>Due Date</th><th>Priority</th></tr>

@@ -161,11 +161,15 @@ async def create_from_text_sync(
 @router.get("/list")
 def list_meetings():
     """Get all meetings ordered by creation date (newest first)"""
-    with get_session() as s:
-        meetings = s.exec(
-            select(Meeting).order_by(Meeting.created_at.desc())
-        ).all()
-        return meetings
+    try:
+        with get_session() as s:
+            meetings = s.exec(
+                select(Meeting).order_by(Meeting.created_at.desc())
+            ).all()
+            return meetings
+    except Exception as e:
+        print(f"Error fetching meetings: {e}")  # Check Railway logs
+        raise HTTPException(500, f"Failed to fetch meetings: {str(e)}")
 # ========== END NEW ==========
 
 @router.get("/{meeting_id}")
