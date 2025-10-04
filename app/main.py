@@ -686,31 +686,63 @@ def progress_page():
       const execSummary = summary.executive_summary || 'No summary available';
       document.getElementById('executiveSummary').textContent = execSummary;
       
+      // Key Decisions - safe DOM creation
       const decisionsList = document.getElementById('decisionsList');
       const decisions = summary.key_decisions || [];
+      decisionsList.innerHTML = ''; // Clear first
+      
       if (decisions.length === 0) {
-        decisionsList.innerHTML = '<li>No key decisions recorded</li>';
+        const li = document.createElement('li');
+        li.textContent = 'No key decisions recorded';
+        decisionsList.appendChild(li);
       } else {
-        decisionsList.innerHTML = decisions.map(d => `<li>${d}</li>`).join('');
+        decisions.forEach(d => {
+          const li = document.createElement('li');
+          li.textContent = d;
+          decisionsList.appendChild(li);
+        });
       }
       
+      // Action Items - safe DOM creation
       const actionItemsBody = document.getElementById('actionItemsBody');
+      actionItemsBody.innerHTML = ''; // Clear first
       const actionItems = summary.action_items || [];
+      
       if (actionItems.length === 0) {
-        actionItemsBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#6b7280">No action items</td></tr>';
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 4;
+        td.style.textAlign = 'center';
+        td.style.color = '#6b7280';
+        td.textContent = 'No action items';
+        tr.appendChild(td);
+        actionItemsBody.appendChild(tr);
       } else {
-        actionItemsBody.innerHTML = actionItems.map(item => {
+        actionItems.forEach(item => {
+          const tr = document.createElement('tr');
+          
+          const tdOwner = document.createElement('td');
+          tdOwner.textContent = item.owner || '-';
+          tr.appendChild(tdOwner);
+          
+          const tdTask = document.createElement('td');
+          tdTask.textContent = item.task || '-';
+          tr.appendChild(tdTask);
+          
+          const tdDue = document.createElement('td');
+          tdDue.textContent = item.due_date || '-';
+          tr.appendChild(tdDue);
+          
+          const tdPriority = document.createElement('td');
           const priority = item.priority || 'Medium';
-          const priorityClass = `priority-${priority.toLowerCase()}`;
-          return `
-            <tr>
-              <td>${item.owner || '-'}</td>
-              <td>${item.task || '-'}</td>
-              <td>${item.due_date || '-'}</td>
-              <td><span class="${priorityClass}">${priority}</span></td>
-            </tr>
-          `;
-        }).join('');
+          const span = document.createElement('span');
+          span.className = `priority-${priority.toLowerCase()}`;
+          span.textContent = priority;
+          tdPriority.appendChild(span);
+          tr.appendChild(tdPriority);
+          
+          actionItemsBody.appendChild(tr);
+        });
       }
     }
     
