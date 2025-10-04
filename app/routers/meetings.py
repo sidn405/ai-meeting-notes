@@ -7,14 +7,18 @@ from pathlib import Path
 from sqlmodel import select
 from ..db import get_session, DATA_DIR
 from ..models import Meeting
-from ..services.pipeline import process_meeting, send_summary_email
-import json, re
+from ..services.pipeline import process_meeting, send_summary_email  # CHANGED: Import from pipeline
+import json, re, os  # CHANGED: Added os import
 
 router = APIRouter(
     prefix="/meetings",
     tags=["meetings"],
     dependencies=[Depends(require_auth)],
 )
+
+# ========== NEW: File size limit configuration ==========
+MAX_FILE_SIZE = int(os.getenv("MAX_UPLOAD_SIZE_MB", "100")) * 1024 * 1024
+# ========== END NEW ==========
 
 def _truthy(v) -> bool:
     """Helper to check if form value is truthy"""
@@ -38,10 +42,25 @@ async def upload_meeting(
     """Upload audio/video file and queue for processing"""
     ext = Path(file.filename).suffix.lower()
     if ext not in {".mp3", ".m4a", ".wav", ".mp4"}:
-        raise HTTPException(status_code=400, detail="Unsupported file type")
+        raise HTTPException(status_code=400, detail="Unsupported file type. Allowed: .mp3, .m4a, .wav, .mp4")
+
+    # ========== NEW: File size validation ==========
+    file_content = await file.read()
+    file_size = len(file_content)
+    
+    if file_size > MAX_FILE_SIZE:
+        max_mb = MAX_FILE_SIZE / (1024 * 1024)
+        raise HTTPException(
+            status_code=413, 
+            detail=f"File too large. Maximum size is {max_mb}MB"
+        )
+    
+    if file_size == 0:
+        raise HTTPException(status_code=400, detail="File is empty")
+    # ========== END NEW ==========
 
     audio_path = DATA_DIR / f"{Path(file.filename).stem}.uploaded{ext}"
-    audio_path.write_bytes(await file.read())
+    audio_path.write_bytes(file_content)  # CHANGED: Write bytes we already read
 
     with get_session() as s:
         m = Meeting(title=title, audio_path=str(audio_path), email_to=email_to, status="queued")
@@ -50,7 +69,7 @@ async def upload_meeting(
         s.refresh(m)
         mid = m.id
 
-    # Queue the processing using pipeline's process_meeting
+    # CHANGED: Use pipeline's process_meeting
     background_tasks.add_task(
         process_meeting,
         mid,
@@ -87,7 +106,7 @@ async def upload_meeting_sync(
         s.refresh(m)
         mid = m.id
 
-    # Process immediately and wait
+    # CHANGED: Use pipeline's process_meeting
     process_meeting(mid, language=language, hints=hints)
 
     with get_session() as s:
@@ -121,7 +140,7 @@ async def create_from_text(
         s.refresh(m)
         mid = m.id
 
-    # Process immediately (text-only is fast)
+    # CHANGED: Use pipeline's process_meeting
     process_meeting(mid)
 
     with get_session() as s:
@@ -177,6 +196,7 @@ def download_summary(meeting_id: int):
         )
 
 
+# ========== NEW: Get summary as JSON (not download) ==========
 @router.get("/{meeting_id}/summary")
 def get_summary(meeting_id: int):
     """Get meeting summary as JSON (for reading, not downloading)"""
@@ -187,12 +207,13 @@ def get_summary(meeting_id: int):
         
         summary_text = Path(m.summary_path).read_text(encoding="utf-8")
         return json.loads(summary_text)
+# ========== END NEW ==========
 
 
 @router.post("/{meeting_id}/run")
 def run_meeting(meeting_id: int):
     """Manually trigger processing for a meeting"""
-    process_meeting(meeting_id)
+    process_meeting(meeting_id)  # CHANGED: Use pipeline's version
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
         if not m:
@@ -208,7 +229,43 @@ async def send_meeting_email(meeting_id: int, payload: dict):
         raise HTTPException(400, "email_to is required")
     
     try:
-        send_summary_email(meeting_id, email_to)
+        send_summary_email(meeting_id, email_to)  # CHANGED: Use pipeline's version
         return {"success": True, "message": f"Email sent to {email_to}"}
     except Exception as e:
         raise HTTPException(500, f"Failed to send email: {str(e)}")
+
+
+# ========== NEW: List all meetings ==========
+@router.get("/list")
+def list_meetings():
+    """Get all meetings ordered by creation date (newest first)"""
+    with get_session() as s:
+        meetings = s.exec(
+            select(Meeting).order_by(Meeting.created_at.desc())
+        ).all()
+        return meetings
+# ========== END NEW ==========
+
+
+# ========== NEW: Delete meeting ==========
+@router.delete("/{meeting_id}")
+def delete_meeting(meeting_id: int):
+    """Delete a meeting and its associated files"""
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m:
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        # Delete associated files
+        if m.audio_path and Path(m.audio_path).exists():
+            Path(m.audio_path).unlink()
+        if m.transcript_path and Path(m.transcript_path).exists():
+            Path(m.transcript_path).unlink()
+        if m.summary_path and Path(m.summary_path).exists():
+            Path(m.summary_path).unlink()
+        
+        # Delete from database
+        s.delete(m)
+        s.commit()
+        
+        return {"success": True, "message": "Meeting deleted"}
