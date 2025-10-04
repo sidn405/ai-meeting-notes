@@ -9,8 +9,6 @@ from .services.branding import render_meeting_notes_email_html
 
 os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]
 
-init_db()
-
 app = FastAPI(title="AI Meeting Notes")
 
 app.add_middleware(
@@ -63,7 +61,41 @@ def upload_test(request: Request):
       button{{padding:10px 16px;border-radius:10px;background:#111;color:#fff;border:none;cursor:pointer}}
       small{{color:#555}}
       .muted{{color:#555}}
-    </style></head><body>
+    </style>
+    <script>
+      function handleFormSubmit(form, endpoint) {{
+        form.addEventListener('submit', async (e) => {{
+          e.preventDefault();
+          const formData = new FormData(form);
+          
+          try {{
+            const response = await fetch(endpoint, {{
+              method: 'POST',
+              body: formData,
+              credentials: 'include'
+            }});
+            
+            const result = await response.json();
+            if (result.id) {{
+              window.location.href = `/progress?id=${{result.id}}`;
+            }} else {{
+              alert('Success! Meeting ID: ' + JSON.stringify(result));
+            }}
+          }} catch (error) {{
+            alert('Error: ' + error.message);
+          }}
+        }});
+      }}
+      
+      window.addEventListener('DOMContentLoaded', () => {{
+        const textForm = document.getElementById('textForm');
+        const uploadForm = document.getElementById('uploadForm');
+        
+        if (textForm) handleFormSubmit(textForm, '/meetings/from-text');
+        if (uploadForm) handleFormSubmit(uploadForm, '/meetings/upload');
+      }});
+    </script>
+    </head><body>
     <h1>AI Meeting Notes – Test</h1>
 
     {auth_section}
@@ -71,24 +103,22 @@ def upload_test(request: Request):
     <div class="box">
       <h2>From Transcript (No Audio)</h2>
       <p class="muted">This endpoint is protected; after login your browser will include the cookie automatically.</p>
-      <form action="/meetings/from-text" method="post" target="_blank">
+      <form id="textForm">
         <label>Title</label>
         <input name="title" required />
         <label>Transcript</label>
         <textarea name="transcript" rows="10" placeholder="Paste transcript here…" required></textarea>
         <label>Email results to (optional)</label>
         <input type="email" name="email_to" />
-        <label><input type="checkbox" name="sync" value="1"> Run synchronously (wait for result)</label>
         <br/>
-        <button type="submit">Summarize (queue)</button>
-        <button type="submit" formaction="/meetings/from-text-sync">Summarize Now</button>
+        <button type="submit">Summarize & Show Progress</button>
       </form>
     </div>
 
     <div class="box">
       <h2>Upload Meeting (Audio/Video)</h2>
       <p class="muted">On Railway we recommend cloud ASR (AssemblyAI); no ffmpeg needed in the container.</p>
-      <form action="/meetings/upload" method="post" enctype="multipart/form-data" target="_blank">
+      <form id="uploadForm" enctype="multipart/form-data">
         <div class="row">
           <div>
             <label>Title</label>
@@ -113,17 +143,520 @@ def upload_test(request: Request):
 
         <label>Audio/Video file (.mp3/.m4a/.wav/.mp4)</label>
         <input type="file" name="file" accept="audio/*,video/mp4" required />
-        <label><input type="checkbox" name="sync" value="1"> Run synchronously (wait for result)</label>
-        <br/>
-        <button type="submit">Upload & Queue</button>
-        <button type="submit" formaction="/meetings/upload-sync">Upload & Process Now</button>
+        <br/><br/>
+        <button type="submit">Upload & Show Progress</button>
       </form>
     </div>
 
-    <p class="muted">Tip: If you’re testing on localhost (http), set <code>COOKIE_SECURE=0</code>. On Railway (https), keep <code>COOKIE_SECURE=1</code>.</p>
+    <p class="muted">Tip: If you're testing on localhost (http), set <code>COOKIE_SECURE=0</code>. On Railway (https), keep <code>COOKIE_SECURE=1</code>.</p>
     </body></html>
     """
 
+@app.get("/progress", response_class=HTMLResponse)
+def progress_page():
+    """Progress tracking and results page"""
+    return """
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Meeting Progress</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 20px;
+      max-width: 900px;
+      margin: 0 auto;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin: 0 0 8px 0;
+      font-size: 24px;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 20px;
+    }
+    .status-processing { background: #fef3c7; color: #92400e; }
+    .status-delivered { background: #d1fae5; color: #065f46; }
+    .status-failed { background: #fee2e2; color: #991b1b; }
+    .status-queued { background: #e0e7ff; color: #3730a3; }
+    
+    .progress-section {
+      margin: 20px 0;
+    }
+    .progress-bar-container {
+      width: 100%;
+      height: 24px;
+      background: #e5e7eb;
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 12px 0;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #2563eb);
+      transition: width 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .step-text {
+      color: #6b7280;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+    
+    .results-section {
+      margin-top: 32px;
+      display: none;
+    }
+    .results-section.visible {
+      display: block;
+    }
+    
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 24px 0 12px 0;
+      color: #111827;
+    }
+    
+    .summary-box {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 12px 0;
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
+    
+    .decisions-list {
+      list-style: none;
+      padding: 0;
+    }
+    .decisions-list li {
+      padding: 10px 16px;
+      background: #fef3c7;
+      border-left: 3px solid #f59e0b;
+      margin: 8px 0;
+      border-radius: 4px;
+    }
+    
+    .action-items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+    }
+    .action-items-table th {
+      background: #f3f4f6;
+      padding: 10px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 13px;
+      color: #374151;
+    }
+    .action-items-table td {
+      padding: 10px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .action-items-table tr:last-child td {
+      border-bottom: none;
+    }
+    .priority-high { 
+      display: inline-block;
+      padding: 2px 8px;
+      background: #fee2e2;
+      color: #991b1b;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .priority-medium { 
+      display: inline-block;
+      padding: 2px 8px;
+      background: #fef3c7;
+      color: #92400e;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .priority-low { 
+      display: inline-block;
+      padding: 2px 8px;
+      background: #e0e7ff;
+      color: #3730a3;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    
+    .email-form {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 500;
+      font-size: 14px;
+      color: #374151;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .form-group input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #2563eb;
+    }
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #374151;
+      margin-left: 8px;
+    }
+    .btn-secondary:hover {
+      background: #d1d5db;
+    }
+    
+    .download-links {
+      margin: 16px 0;
+    }
+    .download-links a {
+      display: inline-block;
+      padding: 8px 16px;
+      background: #f3f4f6;
+      color: #374151;
+      text-decoration: none;
+      border-radius: 6px;
+      margin-right: 8px;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    .download-links a:hover {
+      background: #e5e7eb;
+    }
+    
+    .alert {
+      padding: 12px 16px;
+      border-radius: 6px;
+      margin: 12px 0;
+      font-size: 14px;
+    }
+    .alert-success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #6ee7b7;
+    }
+    .alert-error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+    
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #f3f4f6;
+      border-top: 2px solid #3b82f6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 id="meetingTitle">Loading...</h1>
+    <span id="statusBadge" class="status-badge">Loading</span>
+    
+    <div class="progress-section" id="progressSection">
+      <div class="progress-bar-container">
+        <div class="progress-bar" id="progressBar">0%</div>
+      </div>
+      <div class="step-text" id="stepText">Initializing...</div>
+    </div>
+    
+    <div class="results-section" id="resultsSection">
+      <div class="section-title">Executive Summary</div>
+      <div class="summary-box" id="executiveSummary"></div>
+      
+      <div class="section-title">Key Decisions</div>
+      <ul class="decisions-list" id="decisionsList"></ul>
+      
+      <div class="section-title">Action Items</div>
+      <table class="action-items-table">
+        <thead>
+          <tr>
+            <th>Owner</th>
+            <th>Task</th>
+            <th>Due Date</th>
+            <th>Priority</th>
+          </tr>
+        </thead>
+        <tbody id="actionItemsBody"></tbody>
+      </table>
+      
+      <div class="section-title">Downloads</div>
+      <div class="download-links">
+        <a id="downloadTranscript" href="#" style="display:none">📄 Download Transcript</a>
+        <a id="downloadSummary" href="#" style="display:none">📋 Download Summary</a>
+      </div>
+      
+      <div class="section-title">Send Summary via Email</div>
+      <div class="email-form">
+        <div id="emailAlert"></div>
+        <div class="form-group">
+          <label>Email Address</label>
+          <input type="email" id="emailInput" placeholder="recipient@example.com">
+        </div>
+        <button class="btn btn-primary" onclick="sendEmail()">
+          <span id="sendBtnText">Send Email</span>
+        </button>
+        <button class="btn btn-secondary" onclick="window.location.href='/upload-test'">
+          Back to Upload
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const meetingId = new URLSearchParams(window.location.search).get('id');
+    let pollInterval = null;
+    
+    async function fetchMeetingStatus() {
+      try {
+        const response = await fetch(`/meetings/${meetingId}`, {
+          credentials: 'include'
+        });
+        if (!response.ok) throw new Error('Failed to fetch meeting');
+        const meeting = await response.json();
+        updateUI(meeting);
+        
+        // Stop polling if complete or failed
+        if (meeting.status === 'delivered' || meeting.status === 'failed') {
+          if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
+          
+          // Fetch and display results
+          if (meeting.status === 'delivered' && meeting.summary_path) {
+            await fetchResults(meeting);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching meeting status:', error);
+      }
+    }
+    
+    function updateUI(meeting) {
+      // Update title and status
+      document.getElementById('meetingTitle').textContent = meeting.title;
+      
+      const statusBadge = document.getElementById('statusBadge');
+      statusBadge.textContent = meeting.status.toUpperCase();
+      statusBadge.className = `status-badge status-${meeting.status}`;
+      
+      // Update progress
+      const progress = meeting.progress || 0;
+      const progressBar = document.getElementById('progressBar');
+      progressBar.style.width = `${progress}%`;
+      progressBar.textContent = `${progress}%`;
+      
+      // Update step text
+      const stepText = document.getElementById('stepText');
+      if (meeting.step) {
+        stepText.innerHTML = `<span class="spinner"></span>${meeting.step}`;
+      }
+      
+      // Show/hide progress section
+      const progressSection = document.getElementById('progressSection');
+      if (meeting.status === 'delivered' || meeting.status === 'failed') {
+        progressSection.style.display = 'none';
+      }
+      
+      // Setup download links
+      if (meeting.transcript_path) {
+        const link = document.getElementById('downloadTranscript');
+        link.href = `/meetings/${meetingId}/download/transcript`;
+        link.style.display = 'inline-block';
+      }
+      if (meeting.summary_path) {
+        const link = document.getElementById('downloadSummary');
+        link.href = `/meetings/${meetingId}/download/summary`;
+        link.style.display = 'inline-block';
+      }
+    }
+    
+    async function fetchResults(meeting) {
+      try {
+        const response = await fetch(`/meetings/${meetingId}/summary`, {
+          credentials: 'include'
+        });
+        
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers.get('content-type'));
+        
+        if (!response.ok) {
+          console.error('Response not OK:', response.status);
+          return;
+        }
+        
+        const summary = await response.json();
+        displayResults(summary);
+        
+        // Pre-fill email if available
+        if (meeting.email_to) {
+          document.getElementById('emailInput').value = meeting.email_to;
+        }
+      } catch (error) {
+        console.error('Error fetching results:', error);
+        console.error('Error details:', error.message);
+        // Show error in UI
+        document.getElementById('resultsSection').classList.add('visible');
+        document.getElementById('executiveSummary').textContent = 
+          'Error loading summary. Check console for details. Error: ' + error.message;
+      }
+    }
+    
+    function displayResults(summary) {
+      // Show results section
+      document.getElementById('resultsSection').classList.add('visible');
+      
+      // Executive summary
+      const execSummary = summary.executive_summary || 'No summary available';
+      document.getElementById('executiveSummary').textContent = execSummary;
+      
+      // Key decisions
+      const decisionsList = document.getElementById('decisionsList');
+      const decisions = summary.key_decisions || [];
+      if (decisions.length === 0) {
+        decisionsList.innerHTML = '<li>No key decisions recorded</li>';
+      } else {
+        decisionsList.innerHTML = decisions.map(d => `<li>${d}</li>`).join('');
+      }
+      
+      // Action items
+      const actionItemsBody = document.getElementById('actionItemsBody');
+      const actionItems = summary.action_items || [];
+      if (actionItems.length === 0) {
+        actionItemsBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#6b7280">No action items</td></tr>';
+      } else {
+        actionItemsBody.innerHTML = actionItems.map(item => {
+          const priority = item.priority || 'Medium';
+          const priorityClass = `priority-${priority.toLowerCase()}`;
+          return `
+            <tr>
+              <td>${item.owner || '-'}</td>
+              <td>${item.task || '-'}</td>
+              <td>${item.due_date || '-'}</td>
+              <td><span class="${priorityClass}">${priority}</span></td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+    
+    async function sendEmail() {
+      const email = document.getElementById('emailInput').value.trim();
+      if (!email) {
+        showAlert('Please enter an email address', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('sendBtnText');
+      btn.innerHTML = '<span class="spinner"></span>Sending...';
+      
+      try {
+        const response = await fetch(`/meetings/${meetingId}/send-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ email_to: email })
+        });
+        
+        if (!response.ok) throw new Error('Failed to send email');
+        
+        showAlert('Email sent successfully!', 'success');
+      } catch (error) {
+        showAlert('Failed to send email. Please try again.', 'error');
+      } finally {
+        btn.textContent = 'Send Email';
+      }
+    }
+    
+    function showAlert(message, type) {
+      const alertDiv = document.getElementById('emailAlert');
+      alertDiv.className = `alert alert-${type}`;
+      alertDiv.textContent = message;
+      setTimeout(() => {
+        alertDiv.textContent = '';
+        alertDiv.className = '';
+      }, 5000);
+    }
+    
+    // Initialize
+    if (meetingId) {
+      fetchMeetingStatus();
+      // Poll every 2 seconds while processing
+      pollInterval = setInterval(fetchMeetingStatus, 2000);
+    } else {
+      document.body.innerHTML = '<div class="container"><h1>Error: No meeting ID provided</h1></div>';
+    }
+  </script>
+</body>
+</html>
+    """
     
 @app.get("/_brand_preview", response_class=HTMLResponse)
 def brand_preview():
@@ -187,7 +720,7 @@ def browser_test():
 <html>
 <head>
   <meta charset="utf-8">
-  <title>AI Meeting Notes — Browser Test</title>
+  <title>AI Meeting Notes – Browser Test</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:32px;max-width:980px}
@@ -202,7 +735,7 @@ def browser_test():
   </style>
 </head>
 <body>
-  <h1>AI Meeting Notes — Browser Test</h1>
+  <h1>AI Meeting Notes – Browser Test</h1>
 
   <div class="box">
     <h2>Auth</h2>
