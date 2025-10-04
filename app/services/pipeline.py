@@ -187,7 +187,7 @@ def send_summary_email(meeting_id: int, to: str):
         if not m or not m.summary_path or not Path(m.summary_path).exists():
             raise RuntimeError("Summary not ready")
     summary_json = json.loads(Path(m.summary_path).read_text(encoding="utf-8"))
-    _email_with_resend(m, summary_json, m.summary_path, override_to=to)
+    _email_with_resend_by_id(m, summary_json, m.summary_path, override_to=to)
 
 # ---------- Main pipeline ----------
 
