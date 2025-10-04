@@ -588,9 +588,12 @@ def progress_page():
       
       const stepText = document.getElementById('stepText');
       if (meeting.step) {
-        stepText.innerHTML = `<span class="spinner"></span>${meeting.step}`;
+        stepText.innerHTML = '<span class="spinner"></span>';
+        const span = document.createElement('span');
+        span.textContent = meeting.step;
+        stepText.appendChild(span);
       }
-      
+            
       const progressSection = document.getElementById('progressSection');
       if (meeting.status === 'delivered' || meeting.status === 'failed') {
         progressSection.style.display = 'none';
@@ -612,13 +615,20 @@ def progress_page():
       const errorBox = document.getElementById('errorBox');
       errorBox.style.display = 'block';
       errorBox.className = 'error-box';
-      errorBox.innerHTML = `
-        <h3>Processing Failed</h3>
-        <p>${meeting.step || 'An unknown error occurred'}</p>
-        <button class="btn btn-primary" style="margin-top: 12px;" onclick="retryMeeting()">
-          Retry Processing
-        </button>
-      `;
+      
+      // Clear and rebuild safely using DOM
+      errorBox.innerHTML = '<h3>Processing Failed</h3>';
+      
+      const p = document.createElement('p');
+      p.textContent = meeting.step || 'An unknown error occurred';
+      errorBox.appendChild(p);
+      
+      const retryBtn = document.createElement('button');
+      retryBtn.className = 'btn btn-primary';
+      retryBtn.style.marginTop = '12px';
+      retryBtn.textContent = 'Retry Processing';
+      retryBtn.onclick = retryMeeting;
+      errorBox.appendChild(retryBtn);
     }
     
     async function retryMeeting() {
