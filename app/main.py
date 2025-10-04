@@ -638,16 +638,25 @@ def progress_page():
     
     async function fetchResults(meeting) {
       try {
+        console.log('Fetching summary for meeting:', meetingId);
         const response = await fetch(`/meetings/${meetingId}/summary`, {
           credentials: 'include'
         });
+        
+        console.log('Summary response status:', response.status);
+        console.log('Summary response headers:', response.headers.get('content-type'));
         
         if (!response.ok) {
           console.error('Response not OK:', response.status);
           return;
         }
         
-        const summary = await response.json();
+        const text = await response.text();
+        console.log('Raw response text:', text.substring(0, 200));
+        
+        const summary = JSON.parse(text);
+        console.log('Parsed summary:', summary);
+        
         currentSummary = summary;
         displayResults(summary);
         
@@ -656,6 +665,7 @@ def progress_page():
         }
       } catch (error) {
         console.error('Error fetching results:', error);
+        console.error('Error stack:', error.stack);
         showToast('Error loading summary: ' + error.message, 'error');
       }
     }
