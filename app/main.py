@@ -899,13 +899,74 @@ def meetings_list_page(request: Request):
     function renderMeetings() {
       const container = document.getElementById('meetingsContainer');
       let filtered = currentFilter === 'all' ? allMeetings : allMeetings.filter(m => m.status === currentFilter);
+      
       if (filtered.length === 0) {
         container.innerHTML = '<div class="empty-state"><h2>No meetings found</h2><p>Upload your first meeting to get started</p></div>';
         return;
       }
-      container.innerHTML = '<div class="meetings-grid">' + filtered.map(meeting => {
-        return '<div class="meeting-card" onclick="viewMeeting(' + meeting.id + ')"><div class="meeting-info"><h3>' + meeting.title + '</h3><div class="meeting-meta"><span>Created: ' + new Date(meeting.created_at).toLocaleString() + '</span>' + (meeting.email_to ? '<span>📧 ' + meeting.email_to + '</span>' : '') + '</div>' + (meeting.status === 'failed' && meeting.step ? '<div class="error-message">' + meeting.step + '</div>' : '') + '</div><div class="meeting-actions" onclick="event.stopPropagation()"><span class="status-badge status-' + meeting.status + '">' + meeting.status.toUpperCase() + '</span>' + (meeting.status === 'failed' ? '<button class="btn btn-secondary btn-small" onclick="retryMeeting(' + meeting.id + ')">Retry</button>' : '') + '<button class="btn btn-danger btn-small" onclick="deleteMeeting(' + meeting.id + ')">Delete</button></div></div>';
-      }).join('') + '</div>';
+      
+      const grid = document.createElement('div');
+      grid.className = 'meetings-grid';
+      
+      filtered.forEach(meeting => {
+        const card = document.createElement('div');
+        card.className = 'meeting-card';
+        card.onclick = () => viewMeeting(meeting.id);
+        
+        const info = document.createElement('div');
+        info.className = 'meeting-info';
+        
+        const title = document.createElement('h3');
+        title.textContent = meeting.title;
+        info.appendChild(title);
+        
+        const meta = document.createElement('div');
+        meta.className = 'meeting-meta';
+        meta.innerHTML = '<span>Created: ' + new Date(meeting.created_at).toLocaleString() + '</span>';
+        if (meeting.email_to) {
+          const email = document.createElement('span');
+          email.textContent = '📧 ' + meeting.email_to;
+          meta.appendChild(email);
+        }
+        info.appendChild(meta);
+        
+        if (meeting.status === 'failed' && meeting.step) {
+          const error = document.createElement('div');
+          error.className = 'error-message';
+          error.textContent = meeting.step;
+          info.appendChild(error);
+        }
+        
+        const actions = document.createElement('div');
+        actions.className = 'meeting-actions';
+        actions.onclick = (e) => e.stopPropagation();
+        
+        const badge = document.createElement('span');
+        badge.className = 'status-badge status-' + meeting.status;
+        badge.textContent = meeting.status.toUpperCase();
+        actions.appendChild(badge);
+        
+        if (meeting.status === 'failed') {
+          const retry = document.createElement('button');
+          retry.className = 'btn btn-secondary btn-small';
+          retry.textContent = 'Retry';
+          retry.onclick = () => retryMeeting(meeting.id);
+          actions.appendChild(retry);
+        }
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-danger btn-small';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.onclick = () => deleteMeeting(meeting.id);
+        actions.appendChild(deleteBtn);
+        
+        card.appendChild(info);
+        card.appendChild(actions);
+        grid.appendChild(card);
+      });
+      
+      container.innerHTML = '';
+      container.appendChild(grid);
     }
     function viewMeeting(id) { window.location.href = '/progress?id=' + id; }
     async function retryMeeting(id) {
