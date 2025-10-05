@@ -470,7 +470,7 @@ def progress_page():
         <span id="statusBadge" class="status-badge">Loading</span>
       </div>
       <button class="btn btn-secondary" onclick="window.location.href='/meetings'">
-        ← Back to List
+        Back to List
       </button>
     </div>
     
@@ -487,7 +487,7 @@ def progress_page():
       <div class="section-title">
         Executive Summary
         <button class="btn btn-icon" onclick="copyToClipboard('executiveSummary', 'Executive Summary')">
-          📋 Copy
+          Copy
         </button>
       </div>
       <div class="summary-box" id="executiveSummary"></div>
@@ -495,7 +495,7 @@ def progress_page():
       <div class="section-title">
         Key Decisions
         <button class="btn btn-icon" onclick="copyDecisions()">
-          📋 Copy
+          Copy
         </button>
       </div>
       <ul class="decisions-list" id="decisionsList"></ul>
@@ -503,7 +503,7 @@ def progress_page():
       <div class="section-title">
         Action Items
         <button class="btn btn-icon" onclick="copyActionItems()">
-          📋 Copy
+          Copy
         </button>
       </div>
       <table class="action-items-table">
@@ -520,8 +520,8 @@ def progress_page():
       
       <div class="section-title">Downloads</div>
       <div class="download-links">
-        <a id="downloadTranscript" href="#" style="display:none">📄 Download Transcript</a>
-        <a id="downloadSummary" href="#" style="display:none">📋 Download Summary</a>
+        <a id="downloadTranscript" href="#" style="display:none">Download Transcript</a>
+        <a id="downloadSummary" href="#" style="display:none">Download Summary</a>
       </div>
       
       <div class="section-title">Send Summary via Email</div>
@@ -616,7 +616,6 @@ def progress_page():
       errorBox.style.display = 'block';
       errorBox.className = 'error-box';
       
-      // Clear and rebuild safely using DOM
       errorBox.innerHTML = '<h3>Processing Failed</h3>';
       
       const p = document.createElement('p');
@@ -654,17 +653,13 @@ def progress_page():
         });
         
         console.log('Summary response status:', response.status);
-        console.log('Summary response headers:', response.headers.get('content-type'));
         
         if (!response.ok) {
           console.error('Response not OK:', response.status);
           return;
         }
         
-        const text = await response.text();
-        console.log('Raw response text:', text.substring(0, 200));
-        
-        const summary = JSON.parse(text);
+        const summary = await response.json();
         console.log('Parsed summary:', summary);
         
         currentSummary = summary;
@@ -675,21 +670,21 @@ def progress_page():
         }
       } catch (error) {
         console.error('Error fetching results:', error);
-        console.error('Error stack:', error.stack);
         showToast('Error loading summary: ' + error.message, 'error');
       }
     }
     
     function displayResults(summary) {
+      console.log('displayResults called with:', summary);
       document.getElementById('resultsSection').classList.add('visible');
       
       const execSummary = summary.executive_summary || 'No summary available';
       document.getElementById('executiveSummary').textContent = execSummary;
       
-      // Key Decisions - safe DOM creation
+      // Key Decisions
       const decisionsList = document.getElementById('decisionsList');
       const decisions = summary.key_decisions || [];
-      decisionsList.innerHTML = ''; // Clear first
+      decisionsList.innerHTML = '';
       
       if (decisions.length === 0) {
         const li = document.createElement('li');
@@ -703,10 +698,10 @@ def progress_page():
         });
       }
       
-      // Action Items - safe DOM creation
+      // Action Items
       const actionItemsBody = document.getElementById('actionItemsBody');
       const actionItems = summary.action_items || [];
-      actionItemsBody.innerHTML = ''; // Clear first
+      actionItemsBody.innerHTML = '';
       
       if (actionItems.length === 0) {
         const tr = document.createElement('tr');
@@ -744,8 +739,10 @@ def progress_page():
           actionItemsBody.appendChild(tr);
         });
       }
+      
+      console.log('Results displayed successfully');
     }
-       
+    
     function copyToClipboard(elementId, label) {
       const text = document.getElementById(elementId).textContent;
       navigator.clipboard.writeText(text).then(() => {
