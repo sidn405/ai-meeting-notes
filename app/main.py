@@ -703,8 +703,49 @@ def progress_page():
         });
       }
       
+      // Action Items - safe DOM creation
+      const actionItemsBody = document.getElementById('actionItemsBody');
+      const actionItems = summary.action_items || [];
+      actionItemsBody.innerHTML = ''; // Clear first
       
-    
+      if (actionItems.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 4;
+        td.textContent = 'No action items recorded';
+        td.style.textAlign = 'center';
+        td.style.color = '#6b7280';
+        tr.appendChild(td);
+        actionItemsBody.appendChild(tr);
+      } else {
+        actionItems.forEach(item => {
+          const tr = document.createElement('tr');
+          
+          const ownerTd = document.createElement('td');
+          ownerTd.textContent = item.owner || 'Unassigned';
+          tr.appendChild(ownerTd);
+          
+          const taskTd = document.createElement('td');
+          taskTd.textContent = item.task || '';
+          tr.appendChild(taskTd);
+          
+          const dueTd = document.createElement('td');
+          dueTd.textContent = item.due_date || 'TBD';
+          tr.appendChild(dueTd);
+          
+          const priorityTd = document.createElement('td');
+          const priority = (item.priority || 'medium').toLowerCase();
+          const prioritySpan = document.createElement('span');
+          prioritySpan.className = `priority-${priority}`;
+          prioritySpan.textContent = priority.toUpperCase();
+          priorityTd.appendChild(prioritySpan);
+          tr.appendChild(priorityTd);
+          
+          actionItemsBody.appendChild(tr);
+        });
+      }
+    }
+       
     function copyToClipboard(elementId, label) {
       const text = document.getElementById(elementId).textContent;
       navigator.clipboard.writeText(text).then(() => {
