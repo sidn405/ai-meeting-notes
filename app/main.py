@@ -543,52 +543,283 @@ def progress_page():
   <div id="toast" class="toast"></div>
 
   <script>
-    function computeFallbackProgress(status, step) {
-      // If backend isn't sending `progress`, estimate from status/step.
-      const s = (status || '').toLowerCase();
-      const st = (step || '').toLowerCase();
-
-      if (s.startsWith('queued')) return 0;
-      if (s.startsWith('failed')) return 100;
-      if (s.startsWith('delivered')) return 100;
-
-      // processing
-      if (st.includes('upload')) return 20;
-      if (st.includes('transcrib')) return 60;
-      if (st.includes('summar')) return 75;
-      if (st.includes('email')) return 90;
-      if (st.includes('finaliz')) return 95;
-      return 10; // initializing/starting
-    }
-
-    function updateUI(state) {
-      const bar = document.getElementById('progressBar');
-      const stepText = document.getElementById('stepText');
-      const section = document.getElementById('progressSection');
-
-      // Prefer server progress; fallback to an estimate
-      let pct = typeof state.progress === 'number'
-        ? state.progress
-        : computeFallbackProgress(state.status, state.step);
-
-      // clamp & round
-      pct = Math.max(0, Math.min(100, Math.round(pct)));
-
-      // Update DOM
-      bar.style.width = pct + '%';
-      bar.textContent = pct + '%';
-      if (stepText) stepText.textContent = state.step || (state.status || 'Loading…');
-
-      // Hide the bar once delivered/failed
-      if ((state.status || '').toLowerCase().startsWith('delivered') ||
-          (state.status || '').toLowerCase().startsWith('failed')) {
-        section.style.display = 'none';
-      } else {
-        section.style.display = '';
+    const meetingId = new URLSearchParams(window.location.search).get('id');
+    let pollInterval = null;
+    let currentSummary = null;
+    
+    async function fetchMeetingStatus() {
+      try {
+        const response = await fetch(`/meetings/${meetingId}`, {
+          credentials: 'include'
+        });
+        if (!response.ok) throw new Error('Failed to fetch meeting');
+        const meeting = await response.json();
+        updateUI(meeting);
+        
+        if (meeting.status === 'delivered' || meeting.status === 'failed') {
+          if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
+          
+          if (meeting.status === 'delivered' && meeting.summary_path) {
+            await fetchResults(meeting);
+          } else if (meeting.status === 'failed') {
+            showError(meeting);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching meeting status:', error);
+        showToast('Failed to fetch meeting status', 'error');
       }
     }
+    
+    function updateUI(meeting) {
+      document.getElementById('meetingTitle').textContent = meeting.title;
+      
+      const statusBadge = document.getElementById('statusBadge');
+      statusBadge.textContent = meeting.status.toUpperCase();
+      statusBadge.className = `status-badge status-${meeting.status}`;
+      
+      const progress = meeting.progress || 0;
+      const progressBar = document.getElementById('progressBar');
+      progressBar.style.width = `${progress}%`;
+      progressBar.textContent = `${progress}%`;
+      
+      const stepText = document.getElementById('stepText');
+      if (meeting.step) {
+        stepText.innerHTML = '<span class="spinner"></span>';
+        const span = document.createElement('span');
+        span.textContent = meeting.step;
+        stepText.appendChild(span);
+      }
+            
+      const progressSection = document.getElementById('progressSection');
+      if (meeting.status === 'delivered' || meeting.status === 'failed') {
+        progressSection.style.display = 'none';
+      }
+      
+      if (meeting.transcript_path) {
+        const link = document.getElementById('downloadTranscript');
+        link.href = `/meetings/${meetingId}/download/transcript`;
+        link.style.display = 'inline-block';
+      }
+      if (meeting.summary_path) {
+        const link = document.getElementById('downloadSummary');
+        link.href = `/meetings/${meetingId}/download/summary`;
+        link.style.display = 'inline-block';
+      }
+    }
+    
+    function showError(meeting) {
+      const errorBox = document.getElementById('errorBox');
+      errorBox.style.display = 'block';
+      errorBox.className = 'error-box';
+      
+      errorBox.innerHTML = '<h3>Processing Failed</h3>';
+      
+      const p = document.createElement('p');
+      p.textContent = meeting.step || 'An unknown error occurred';
+      errorBox.appendChild(p);
+      
+      const retryBtn = document.createElement('button');
+      retryBtn.className = 'btn btn-primary';
+      retryBtn.style.marginTop = '12px';
+      retryBtn.textContent = 'Retry Processing';
+      retryBtn.onclick = retryMeeting;
+      errorBox.appendChild(retryBtn);
+    }
+    
+    async function retryMeeting() {
+      try {
+        const response = await fetch(`/meetings/${meetingId}/run`, {
+          method: 'POST',
+          credentials: 'include'
+        });
+        if (!response.ok) throw new Error('Failed to retry');
+        
+        showToast('Meeting queued for reprocessing', 'success');
+        setTimeout(() => location.reload(), 1000);
+      } catch (error) {
+        showToast('Failed to retry: ' + error.message, 'error');
+      }
+    }
+    
+    async function fetchResults(meeting) {
+      try {
+        console.log('Fetching summary for meeting:', meetingId);
+        const response = await fetch(`/meetings/${meetingId}/summary`, {
+          credentials: 'include'
+        });
+        
+        console.log('Summary response status:', response.status);
+        
+        if (!response.ok) {
+          console.error('Response not OK:', response.status);
+          return;
+        }
+        
+        const summary = await response.json();
+        console.log('Parsed summary:', summary);
+        
+        currentSummary = summary;
+        displayResults(summary);
+        
+        if (meeting.email_to) {
+          document.getElementById('emailInput').value = meeting.email_to;
+        }
+      } catch (error) {
+        console.error('Error fetching results:', error);
+        showToast('Error loading summary: ' + error.message, 'error');
+      }
+    }
+    
+    function displayResults(summary) {
+      console.log('displayResults called with:', summary);
+      document.getElementById('resultsSection').classList.add('visible');
+      
+      const execSummary = summary.executive_summary || 'No summary available';
+      document.getElementById('executiveSummary').textContent = execSummary;
+      
+      // Key Decisions
+      const decisionsList = document.getElementById('decisionsList');
+      const decisions = summary.key_decisions || [];
+      decisionsList.innerHTML = '';
+      
+      if (decisions.length === 0) {
+        const li = document.createElement('li');
+        li.textContent = 'No key decisions recorded';
+        decisionsList.appendChild(li);
+      } else {
+        decisions.forEach(d => {
+          const li = document.createElement('li');
+          li.textContent = d;
+          decisionsList.appendChild(li);
+        });
+      }
+      
+      // Action Items
+      const actionItemsBody = document.getElementById('actionItemsBody');
+      const actionItems = summary.action_items || [];
+      actionItemsBody.innerHTML = '';
+      
+      if (actionItems.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 4;
+        td.textContent = 'No action items recorded';
+        td.style.textAlign = 'center';
+        td.style.color = '#6b7280';
+        tr.appendChild(td);
+        actionItemsBody.appendChild(tr);
+      } else {
+        actionItems.forEach(item => {
+          const tr = document.createElement('tr');
+          
+          const ownerTd = document.createElement('td');
+          ownerTd.textContent = item.owner || 'Unassigned';
+          tr.appendChild(ownerTd);
+          
+          const taskTd = document.createElement('td');
+          taskTd.textContent = item.task || '';
+          tr.appendChild(taskTd);
+          
+          const dueTd = document.createElement('td');
+          dueTd.textContent = item.due_date || 'TBD';
+          tr.appendChild(dueTd);
+          
+          const priorityTd = document.createElement('td');
+          const priority = (item.priority || 'medium').toLowerCase();
+          const prioritySpan = document.createElement('span');
+          prioritySpan.className = `priority-${priority}`;
+          prioritySpan.textContent = priority.toUpperCase();
+          priorityTd.appendChild(prioritySpan);
+          tr.appendChild(priorityTd);
+          
+          actionItemsBody.appendChild(tr);
+        });
+      }
+      
+      console.log('Results displayed successfully');
+    }
+    
+    function copyToClipboard(elementId, label) {
+      const text = document.getElementById(elementId).textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(label + ' copied to clipboard!', 'success');
+      }).catch(err => {
+        showToast('Failed to copy', 'error');
+      });
+    }
+    
+    function copyDecisions() {
+      if (!currentSummary) return;
+      const decisions = currentSummary.key_decisions || [];
+      const text = 'Key Decisions:\n' + decisions.map((d, i) => `${i + 1}. ${d}`).join('\n');
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Key Decisions copied to clipboard!', 'success');
+      }).catch(err => {
+        showToast('Failed to copy', 'error');
+      });
+    }
+    
+    function copyActionItems() {
+      if (!currentSummary) return;
+      const items = currentSummary.action_items || [];
+      const text = 'Action Items:\n' + items.map(item => 
+        `- ${item.owner}: ${item.task} (Due: ${item.due_date || 'TBD'}, Priority: ${item.priority || 'Medium'})`
+      ).join('\n');
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Action Items copied to clipboard!', 'success');
+      }).catch(err => {
+        showToast('Failed to copy', 'error');
+      });
+    }
+    
+    async function sendEmail() {
+      const email = document.getElementById('emailInput').value.trim();
+      if (!email) {
+        showToast('Please enter an email address', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('sendBtnText');
+      btn.innerHTML = '<span class="spinner"></span>Sending...';
+      
+      try {
+        const response = await fetch(`/meetings/${meetingId}/send-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ email_to: email })
+        });
+        
+        if (!response.ok) throw new Error('Failed to send email');
+        
+        showToast('Email sent successfully!', 'success');
+      } catch (error) {
+        showToast('Failed to send email: ' + error.message, 'error');
+      } finally {
+        btn.textContent = 'Send Email';
+      }
+    }
+    
+    function showToast(message, type) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast toast-${type} show`;
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+    
+    if (meetingId) {
+      fetchMeetingStatus();
+      pollInterval = setInterval(fetchMeetingStatus, 2000);
+    } else {
+      document.body.innerHTML = '<div class="container"><h1>Error: No meeting ID provided</h1></div>';
+    }
   </script>
-
 </body>
 </html>
     """

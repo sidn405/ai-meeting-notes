@@ -2,7 +2,7 @@
 from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException, Depends
 from typing import Optional
 from ..security import require_auth
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from pathlib import Path
 from sqlmodel import select
 from ..db import get_session, DATA_DIR
@@ -213,20 +213,14 @@ def download_summary(meeting_id: int):
 # ========== NEW: Get summary as JSON (not download) ==========
 @router.get("/{meeting_id}/summary")
 def get_summary(meeting_id: int):
-    """Return summary as JSON when ready.
-       If the file isn't there yet, return 202 so the UI keeps polling."""
+    """Get meeting summary as JSON (for reading, not downloading)"""
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
-        if not m:
-            raise HTTPException(404, "Not found")
-
-        # File present? return it
-        if m.summary_path and Path(m.summary_path).exists():
-            return json.loads(Path(m.summary_path).read_text(encoding="utf-8"))
-
-        # Not ready yet: tell the client to retry
-        # If pipeline has finished but file still missing, we still 202 (finalizing)
-        return JSONResponse({"ready": False}, status_code=202)
+        if not (m and m.summary_path and Path(m.summary_path).exists()):
+            raise HTTPException(status_code=404, detail="Summary not found")
+        
+        summary_text = Path(m.summary_path).read_text(encoding="utf-8")
+        return json.loads(summary_text)
     
 @router.get("/{meeting_id}/status")
 def meeting_status(meeting_id: int):
