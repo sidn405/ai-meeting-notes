@@ -543,59 +543,81 @@ def progress_page():
   <div id="toast" class="toast"></div>
 
   <script>
-    const meetingId = new URLSearchParams(window.location.search).get('id');
+    // --- tiny toast helper (no dependencies) ---
+    function showToast(msg, type = "error") {
+      let t = document.getElementById("toast");
+      if (!t) {
+        t = document.createElement("div");
+        t.id = "toast";
+        t.style.cssText =
+          "position:fixed;right:16px;bottom:16px;max-width:420px;padding:12px 14px;border-radius:10px;color:#fff;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.2);display:none;";
+        document.body.appendChild(t);
+      }
+      t.style.background = type === "error" ? "#E11D48" : "#111827";
+      t.textContent = msg;
+      t.style.display = "block";
+      setTimeout(() => (t.style.display = "none"), 3000);
+    }
+
+    const meetingId = new URLSearchParams(window.location.search).get("id");
     let pollInterval = null;
-    let currentSummary = null;
 
     async function tryFetchSummary() {
-      const r = await fetch(`/meetings/${meetingId}/summary`, { credentials: 'include' });
+      // Use download endpoint (works even if it's a FileResponse)
+      const url = `/meetings/${meetingId}/download/summary?ts=${Date.now()}`;
+      const r = await fetch(url, { credentials: "include", cache: "no-store" });
       if (!r.ok) return false;
-      const summary = await r.json();
-      currentSummary = summary;
-      displayResults(summary);
-      document.getElementById('progressSection').style.display = 'none';
+
+      const txt = await r.text();
+      let summary;
+      try { summary = JSON.parse(txt); } catch { summary = { raw: txt }; }
+
+      // your function that renders the results — already in your page
+      if (typeof displayResults === "function") displayResults(summary);
+
+      const section = document.getElementById("progressSection");
+      if (section) section.style.display = "none";
       return true;
     }
 
     async function fetchStatus() {
-      // Prefer the slim /status endpoint if you added it, otherwise hit /meetings/{id}
-      const r = await fetch(`/meetings/${meetingId}/status`, { credentials: 'include' })
-                .catch(() => fetch(`/meetings/${meetingId}`, { credentials: 'include' }));
-      if (!r.ok) throw new Error('status fetch failed');
+      // Prefer /status if you added it; fall back to /meetings/{id}
+      const url1 = `/meetings/${meetingId}/status?ts=${Date.now()}`;
+      const url2 = `/meetings/${meetingId}?ts=${Date.now()}`;
+      let r = await fetch(url1, { credentials: "include", cache: "no-store" });
+      if (!r.ok) r = await fetch(url2, { credentials: "include", cache: "no-store" });
+      if (!r.ok) throw new Error("status fetch failed");
       return r.json();
     }
 
     async function tick() {
       try {
-        // If the summary is already there, show it immediately (no waiting on status).
-        if (await tryFetchSummary()) {
-          if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
-          return;
-        }
+        // If the summary file is already there, show it immediately.
+        const shown = await tryFetchSummary();
+        if (shown) { if (pollInterval) clearInterval(pollInterval); return; }
 
-        // Otherwise update progress/status
+        // Otherwise, update progress/status
         const s = await fetchStatus();
-        updateUI(s);
+        if (typeof updateUI === "function") updateUI(s);
 
-        if ((s.status || '').toLowerCase() === 'delivered') {
-          // One more attempt to get the summary now that we know it's delivered
+        if ((s.status || "").toLowerCase().startsWith("delivered")) {
           await tryFetchSummary();
-          if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+          if (pollInterval) clearInterval(pollInterval);
         }
       } catch (e) {
         console.error(e);
-        showToast('Failed to check status', 'error');
+        showToast("Failed to check status", "error");  // harmless if it fails
       }
     }
 
-    // boot
     if (meetingId) {
       tick();
       pollInterval = setInterval(tick, 2000);
     } else {
-      document.body.innerHTML = '<div class="container"><h1>Error: No meeting ID provided</h1></div>';
+      showToast("No meeting ID provided", "error");
     }
   </script>
+
 
 </body>
 </html>
