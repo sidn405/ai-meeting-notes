@@ -241,7 +241,7 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
 
         base_dir = Path(transcript_path).parent if transcript_path else (DATA_DIR / "summaries")
         base_dir.mkdir(parents=True, exist_ok=True)
-        spath = str((base_dir / "summary.json").resolve())
+        spath = str((base_dir / f"summary_{meeting_id}.json").resolve())
         Path(spath).write_text(json.dumps(summary_json, indent=2), encoding="utf-8")
 
         with get_session() as s:
