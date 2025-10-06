@@ -99,7 +99,7 @@ def upload_test(request: Request):
     </head><body>
     <div class="titlebar">
       <h1>AI Meeting Notes – Test</h1>
-      <a class="btn btn-secondary" href="/meetings" id="meetingsBtn">Meetings</a>
+      <button><a class="btn btn-secondary" href="/meetings" id="meetingsBtn">Meetings</a></button>
     </div>
 
 
