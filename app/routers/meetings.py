@@ -221,6 +221,23 @@ def get_summary(meeting_id: int):
         
         summary_text = Path(m.summary_path).read_text(encoding="utf-8")
         return json.loads(summary_text)
+    
+@router.get("/{meeting_id}/status")
+def meeting_status(meeting_id: int):
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m:
+            raise HTTPException(404, "Not found")
+        return {
+            "id": m.id,
+            "title": m.title,
+            "status": m.status,
+            "progress": m.progress or 0,
+            "step": m.step,
+            "has_summary": bool(m.summary_path),
+            "has_transcript": bool(m.transcript_path),
+        }
+
 # ========== END NEW ==========
 
 
