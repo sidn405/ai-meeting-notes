@@ -543,67 +543,53 @@ def progress_page():
   <div id="toast" class="toast"></div>
 
   <script>
-    // REPLACE your existing fetchResults(...) with this one
+    // Replace only this function
     async function fetchResults(meeting) {
-      // Retry for ~12–15s total so we don't race the filesystem
-      const maxTries = 10;
-
-      for (let i = 0; i < maxTries; i++) {
+      const tries = 10; // ~15s total
+      for (let i = 0; i < tries; i++) {
         try {
-          const r = await fetch(`/meetings/${meetingId}/summary?ts=${Date.now()}`, {
+          const res = await fetch(`/meetings/${meetingId}/download/summary?ts=${Date.now()}`, {
             credentials: 'include',
             cache: 'no-store'
           });
 
-          if (r.status === 200) {
-            // summary might be a JSON file; parse safely
-            const txt = await r.text();
-            let summary;
-            try { summary = JSON.parse(txt); } catch { summary = { raw: txt }; }
+          if (res.status === 200) {
+            const text = await res.text();
+            let data;
+            try { data = JSON.parse(text); } catch { data = { raw: text }; }
 
-            // your existing renderer
-            if (typeof displayResults === 'function') displayResults(summary);
+            // Render into your existing UI
+            if (typeof displayResults === 'function') displayResults(data);
 
-            // hide progress section
+            // Hide progress
             const ps = document.getElementById('progressSection');
             if (ps) ps.style.display = 'none';
 
-            // wire download links
+            // Wire download links
             const dlSum = document.getElementById('downloadSummary');
-            if (dlSum) {
-              dlSum.href = `/meetings/${meetingId}/download/summary`;
-              dlSum.style.display = 'inline-block';
-            }
+            if (dlSum) { dlSum.href = `/meetings/${meetingId}/download/summary`; dlSum.style.display = 'inline-block'; }
             const dlTxt = document.getElementById('downloadTranscript');
             if (dlTxt && meeting && meeting.transcript_path) {
-              dlTxt.href = `/meetings/${meetingId}/download/transcript`;
-              dlTxt.style.display = 'inline-block';
+              dlTxt.href = `/meetings/${meetingId}/download/transcript`; dlTxt.style.display = 'inline-block';
             }
-            return true; // shown
+            return true;
           }
 
-          // 404 (file not ready) or 202 (finalizing): wait and retry
-          if (r.status === 404 || r.status === 202) {
+          if (res.status === 404) {
             const st = document.getElementById('stepText');
-            if (st) st.textContent = r.status === 202 ? 'Finalizing summary…' : 'Preparing summary…';
-            await new Promise(res => setTimeout(res, 1500));
+            if (st) st.textContent = 'Finalizing summary…';
+            await new Promise(r => setTimeout(r, 1500));
             continue;
           }
 
-          // any other status: short backoff
-          await new Promise(res => setTimeout(res, 1200));
-
-        } catch (e) {
-          // transient network hiccup: short backoff
-          await new Promise(res => setTimeout(res, 1200));
+          await new Promise(r => setTimeout(r, 1200));
+        } catch {
+          await new Promise(r => setTimeout(r, 1200));
         }
       }
 
-      // still not readable; keep page usable
       try {
-        if (typeof showToast === 'function') {
-          showToast('Summary is taking a moment. Try refresh in a few seconds.', 'error');
-        }
+        if (typeof showToast === 'function') showToast('Summary is taking a moment. Try refresh shortly.', 'error');
       } catch {}
       return false;
     }
