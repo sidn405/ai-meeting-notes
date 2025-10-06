@@ -6,6 +6,7 @@ from .routers import meetings, health, auth
 import os
 from fastapi.responses import HTMLResponse
 from .services.branding import render_meeting_notes_email_html
+from pathlib import Path
 
 os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]
 
@@ -177,6 +178,12 @@ def progress_page():
       padding: 24px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 20px;
+    }
     h1 {
       margin: 0 0 8px 0;
       font-size: 24px;
@@ -187,7 +194,6 @@ def progress_page():
       border-radius: 20px;
       font-size: 13px;
       font-weight: 500;
-      margin-bottom: 20px;
     }
     .status-processing { background: #fef3c7; color: #92400e; }
     .status-delivered { background: #d1fae5; color: #065f46; }
@@ -222,6 +228,23 @@ def progress_page():
       margin-top: 8px;
     }
     
+    .error-box {
+      background: #fee2e2;
+      border: 1px solid #fca5a5;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+      color: #991b1b;
+    }
+    .error-box h3 {
+      margin: 0 0 8px 0;
+      font-size: 16px;
+    }
+    .error-box p {
+      margin: 0;
+      font-size: 14px;
+    }
+    
     .results-section {
       margin-top: 32px;
       display: none;
@@ -235,6 +258,9 @@ def progress_page():
       font-weight: 600;
       margin: 24px 0 12px 0;
       color: #111827;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     
     .summary-box {
@@ -245,6 +271,7 @@ def progress_page():
       margin: 12px 0;
       white-space: pre-wrap;
       line-height: 1.6;
+      position: relative;
     }
     
     .decisions-list {
@@ -362,6 +389,15 @@ def progress_page():
     .btn-secondary:hover {
       background: #d1d5db;
     }
+    .btn-icon {
+      padding: 6px 12px;
+      font-size: 13px;
+      background: #f3f4f6;
+      color: #374151;
+    }
+    .btn-icon:hover {
+      background: #e5e7eb;
+    }
     
     .download-links {
       margin: 16px 0;
@@ -381,18 +417,30 @@ def progress_page():
       background: #e5e7eb;
     }
     
-    .alert {
-      padding: 12px 16px;
-      border-radius: 6px;
-      margin: 12px 0;
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 12px 24px;
+      border-radius: 8px;
       font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 1000;
     }
-    .alert-success {
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    .toast-success {
       background: #d1fae5;
       color: #065f46;
       border: 1px solid #6ee7b7;
     }
-    .alert-error {
+    .toast-error {
       background: #fee2e2;
       color: #991b1b;
       border: 1px solid #fca5a5;
@@ -416,8 +464,15 @@ def progress_page():
 </head>
 <body>
   <div class="container">
-    <h1 id="meetingTitle">Loading...</h1>
-    <span id="statusBadge" class="status-badge">Loading</span>
+    <div class="header">
+      <div>
+        <h1 id="meetingTitle">Loading...</h1>
+        <span id="statusBadge" class="status-badge">Loading</span>
+      </div>
+      <button class="btn btn-secondary" onclick="window.location.href='/meetings'">
+        ← Back to List
+      </button>
+    </div>
     
     <div class="progress-section" id="progressSection">
       <div class="progress-bar-container">
@@ -426,14 +481,31 @@ def progress_page():
       <div class="step-text" id="stepText">Initializing...</div>
     </div>
     
+    <div id="errorBox" style="display:none;"></div>
+    
     <div class="results-section" id="resultsSection">
-      <div class="section-title">Executive Summary</div>
+      <div class="section-title">
+        Executive Summary
+        <button class="btn btn-icon" onclick="copyToClipboard('executiveSummary', 'Executive Summary')">
+          📋 Copy
+        </button>
+      </div>
       <div class="summary-box" id="executiveSummary"></div>
       
-      <div class="section-title">Key Decisions</div>
+      <div class="section-title">
+        Key Decisions
+        <button class="btn btn-icon" onclick="copyDecisions()">
+          📋 Copy
+        </button>
+      </div>
       <ul class="decisions-list" id="decisionsList"></ul>
       
-      <div class="section-title">Action Items</div>
+      <div class="section-title">
+        Action Items
+        <button class="btn btn-icon" onclick="copyActionItems()">
+          📋 Copy
+        </button>
+      </div>
       <table class="action-items-table">
         <thead>
           <tr>
@@ -454,7 +526,6 @@ def progress_page():
       
       <div class="section-title">Send Summary via Email</div>
       <div class="email-form">
-        <div id="emailAlert"></div>
         <div class="form-group">
           <label>Email Address</label>
           <input type="email" id="emailInput" placeholder="recipient@example.com">
@@ -462,16 +533,19 @@ def progress_page():
         <button class="btn btn-primary" onclick="sendEmail()">
           <span id="sendBtnText">Send Email</span>
         </button>
-        <button class="btn btn-secondary" onclick="window.location.href='/upload-test'">
-          Back to Upload
+        <button class="btn btn-secondary" onclick="window.location.href='/meetings'">
+          Back to List
         </button>
       </div>
     </div>
   </div>
+  
+  <div id="toast" class="toast"></div>
 
   <script>
     const meetingId = new URLSearchParams(window.location.search).get('id');
     let pollInterval = null;
+    let currentSummary = null;
     
     async function fetchMeetingStatus() {
       try {
@@ -482,50 +556,49 @@ def progress_page():
         const meeting = await response.json();
         updateUI(meeting);
         
-        // Stop polling if complete or failed
         if (meeting.status === 'delivered' || meeting.status === 'failed') {
           if (pollInterval) {
             clearInterval(pollInterval);
             pollInterval = null;
           }
           
-          // Fetch and display results
           if (meeting.status === 'delivered' && meeting.summary_path) {
             await fetchResults(meeting);
+          } else if (meeting.status === 'failed') {
+            showError(meeting);
           }
         }
       } catch (error) {
         console.error('Error fetching meeting status:', error);
+        showToast('Failed to fetch meeting status', 'error');
       }
     }
     
     function updateUI(meeting) {
-      // Update title and status
       document.getElementById('meetingTitle').textContent = meeting.title;
       
       const statusBadge = document.getElementById('statusBadge');
       statusBadge.textContent = meeting.status.toUpperCase();
       statusBadge.className = `status-badge status-${meeting.status}`;
       
-      // Update progress
       const progress = meeting.progress || 0;
       const progressBar = document.getElementById('progressBar');
       progressBar.style.width = `${progress}%`;
       progressBar.textContent = `${progress}%`;
       
-      // Update step text
       const stepText = document.getElementById('stepText');
       if (meeting.step) {
-        stepText.innerHTML = `<span class="spinner"></span>${meeting.step}`;
+        stepText.innerHTML = '<span class="spinner"></span>';
+        const span = document.createElement('span');
+        span.textContent = meeting.step;
+        stepText.appendChild(span);
       }
-      
-      // Show/hide progress section
+            
       const progressSection = document.getElementById('progressSection');
       if (meeting.status === 'delivered' || meeting.status === 'failed') {
         progressSection.style.display = 'none';
       }
       
-      // Setup download links
       if (meeting.transcript_path) {
         const link = document.getElementById('downloadTranscript');
         link.href = `/meetings/${meetingId}/download/transcript`;
@@ -538,79 +611,178 @@ def progress_page():
       }
     }
     
+    function showError(meeting) {
+      const errorBox = document.getElementById('errorBox');
+      errorBox.style.display = 'block';
+      errorBox.className = 'error-box';
+      
+      // Clear and rebuild safely using DOM
+      errorBox.innerHTML = '<h3>Processing Failed</h3>';
+      
+      const p = document.createElement('p');
+      p.textContent = meeting.step || 'An unknown error occurred';
+      errorBox.appendChild(p);
+      
+      const retryBtn = document.createElement('button');
+      retryBtn.className = 'btn btn-primary';
+      retryBtn.style.marginTop = '12px';
+      retryBtn.textContent = 'Retry Processing';
+      retryBtn.onclick = retryMeeting;
+      errorBox.appendChild(retryBtn);
+    }
+    
+    async function retryMeeting() {
+      try {
+        const response = await fetch(`/meetings/${meetingId}/run`, {
+          method: 'POST',
+          credentials: 'include'
+        });
+        if (!response.ok) throw new Error('Failed to retry');
+        
+        showToast('Meeting queued for reprocessing', 'success');
+        setTimeout(() => location.reload(), 1000);
+      } catch (error) {
+        showToast('Failed to retry: ' + error.message, 'error');
+      }
+    }
+    
     async function fetchResults(meeting) {
       try {
+        console.log('Fetching summary for meeting:', meetingId);
         const response = await fetch(`/meetings/${meetingId}/summary`, {
           credentials: 'include'
         });
         
-        console.log('Response status:', response.status);
-        console.log('Response headers:', response.headers.get('content-type'));
+        console.log('Summary response status:', response.status);
+        console.log('Summary response headers:', response.headers.get('content-type'));
         
         if (!response.ok) {
           console.error('Response not OK:', response.status);
           return;
         }
         
-        const summary = await response.json();
+        const text = await response.text();
+        console.log('Raw response text:', text.substring(0, 200));
+        
+        const summary = JSON.parse(text);
+        console.log('Parsed summary:', summary);
+        
+        currentSummary = summary;
         displayResults(summary);
         
-        // Pre-fill email if available
         if (meeting.email_to) {
           document.getElementById('emailInput').value = meeting.email_to;
         }
       } catch (error) {
         console.error('Error fetching results:', error);
-        console.error('Error details:', error.message);
-        // Show error in UI
-        document.getElementById('resultsSection').classList.add('visible');
-        document.getElementById('executiveSummary').textContent = 
-          'Error loading summary. Check console for details. Error: ' + error.message;
+        console.error('Error stack:', error.stack);
+        showToast('Error loading summary: ' + error.message, 'error');
       }
     }
     
     function displayResults(summary) {
-      // Show results section
       document.getElementById('resultsSection').classList.add('visible');
       
-      // Executive summary
       const execSummary = summary.executive_summary || 'No summary available';
       document.getElementById('executiveSummary').textContent = execSummary;
       
-      // Key decisions
+      // Key Decisions - safe DOM creation
       const decisionsList = document.getElementById('decisionsList');
       const decisions = summary.key_decisions || [];
+      decisionsList.innerHTML = ''; // Clear first
+      
       if (decisions.length === 0) {
-        decisionsList.innerHTML = '<li>No key decisions recorded</li>';
+        const li = document.createElement('li');
+        li.textContent = 'No key decisions recorded';
+        decisionsList.appendChild(li);
       } else {
-        decisionsList.innerHTML = decisions.map(d => `<li>${d}</li>`).join('');
+        decisions.forEach(d => {
+          const li = document.createElement('li');
+          li.textContent = d;
+          decisionsList.appendChild(li);
+        });
       }
       
-      // Action items
+      // Action Items - safe DOM creation
       const actionItemsBody = document.getElementById('actionItemsBody');
       const actionItems = summary.action_items || [];
+      actionItemsBody.innerHTML = ''; // Clear first
+      
       if (actionItems.length === 0) {
-        actionItemsBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#6b7280">No action items</td></tr>';
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 4;
+        td.textContent = 'No action items recorded';
+        td.style.textAlign = 'center';
+        td.style.color = '#6b7280';
+        tr.appendChild(td);
+        actionItemsBody.appendChild(tr);
       } else {
-        actionItemsBody.innerHTML = actionItems.map(item => {
-          const priority = item.priority || 'Medium';
-          const priorityClass = `priority-${priority.toLowerCase()}`;
-          return `
-            <tr>
-              <td>${item.owner || '-'}</td>
-              <td>${item.task || '-'}</td>
-              <td>${item.due_date || '-'}</td>
-              <td><span class="${priorityClass}">${priority}</span></td>
-            </tr>
-          `;
-        }).join('');
+        actionItems.forEach(item => {
+          const tr = document.createElement('tr');
+          
+          const ownerTd = document.createElement('td');
+          ownerTd.textContent = item.owner || 'Unassigned';
+          tr.appendChild(ownerTd);
+          
+          const taskTd = document.createElement('td');
+          taskTd.textContent = item.task || '';
+          tr.appendChild(taskTd);
+          
+          const dueTd = document.createElement('td');
+          dueTd.textContent = item.due_date || 'TBD';
+          tr.appendChild(dueTd);
+          
+          const priorityTd = document.createElement('td');
+          const priority = (item.priority || 'medium').toLowerCase();
+          const prioritySpan = document.createElement('span');
+          prioritySpan.className = `priority-${priority}`;
+          prioritySpan.textContent = priority.toUpperCase();
+          priorityTd.appendChild(prioritySpan);
+          tr.appendChild(priorityTd);
+          
+          actionItemsBody.appendChild(tr);
+        });
       }
+    }
+       
+    function copyToClipboard(elementId, label) {
+      const text = document.getElementById(elementId).textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(label + ' copied to clipboard!', 'success');
+      }).catch(err => {
+        showToast('Failed to copy', 'error');
+      });
+    }
+    
+    function copyDecisions() {
+      if (!currentSummary) return;
+      const decisions = currentSummary.key_decisions || [];
+      const text = 'Key Decisions:\n' + decisions.map((d, i) => `${i + 1}. ${d}`).join('\n');
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Key Decisions copied to clipboard!', 'success');
+      }).catch(err => {
+        showToast('Failed to copy', 'error');
+      });
+    }
+    
+    function copyActionItems() {
+      if (!currentSummary) return;
+      const items = currentSummary.action_items || [];
+      const text = 'Action Items:\n' + items.map(item => 
+        `- ${item.owner}: ${item.task} (Due: ${item.due_date || 'TBD'}, Priority: ${item.priority || 'Medium'})`
+      ).join('\n');
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Action Items copied to clipboard!', 'success');
+      }).catch(err => {
+        showToast('Failed to copy', 'error');
+      });
     }
     
     async function sendEmail() {
       const email = document.getElementById('emailInput').value.trim();
       if (!email) {
-        showAlert('Please enter an email address', 'error');
+        showToast('Please enter an email address', 'error');
         return;
       }
       
@@ -627,28 +799,25 @@ def progress_page():
         
         if (!response.ok) throw new Error('Failed to send email');
         
-        showAlert('Email sent successfully!', 'success');
+        showToast('Email sent successfully!', 'success');
       } catch (error) {
-        showAlert('Failed to send email. Please try again.', 'error');
+        showToast('Failed to send email: ' + error.message, 'error');
       } finally {
         btn.textContent = 'Send Email';
       }
     }
     
-    function showAlert(message, type) {
-      const alertDiv = document.getElementById('emailAlert');
-      alertDiv.className = `alert alert-${type}`;
-      alertDiv.textContent = message;
+    function showToast(message, type) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast toast-${type} show`;
       setTimeout(() => {
-        alertDiv.textContent = '';
-        alertDiv.className = '';
-      }, 5000);
+        toast.classList.remove('show');
+      }, 3000);
     }
     
-    // Initialize
     if (meetingId) {
       fetchMeetingStatus();
-      // Poll every 2 seconds while processing
       pollInterval = setInterval(fetchMeetingStatus, 2000);
     } else {
       document.body.innerHTML = '<div class="container"><h1>Error: No meeting ID provided</h1></div>';
@@ -681,9 +850,213 @@ Action Items
 def on_startup():
     init_db()
 
-@app.get("/")
-def index():
+@app.get("/", response_class=HTMLResponse)
+def index_redirect():
+    return """
+    <!doctype html>
+    <meta charset="utf-8">
+    <meta http-equiv="refresh" content="0;url=/meetings">
+    <title>AI Meeting Notes</title>
+    <p>Redirecting to <a href="/meetings">meetings list</a>...</p>
+    """
+
+@app.get("/api")
+def api_index():
     return {"ok": True, "app": "AI Meeting Notes", "routes": ["/health", "/meetings/upload", "/meetings/from-text", "/meetings/{id}"]}
+
+@app.get("/meetings", response_class=HTMLResponse)
+def meetings_list_page(request: Request):
+    """Meeting history list page"""
+    logged_in = COOKIE_NAME in request.cookies
+    if not logged_in:
+        return """
+        <!doctype html>
+        <meta charset="utf-8">
+        <meta http-equiv="refresh" content="0;url=/login">
+        <title>Login Required</title>
+        <p>Redirecting to <a href="/login">login page</a>...</p>
+        """
+    
+    # Inline the meetings list HTML from artifact
+    return open("meetings_list.html").read() if Path("meetings_list.html").exists() else """
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Meeting History</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+    h1 { margin: 0; font-size: 28px; }
+    .filters { display: flex; gap: 12px; margin-bottom: 20px; }
+    .filter-btn { padding: 8px 16px; border: 1px solid #d1d5db; background: white; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-size: 14px; }
+    .filter-btn:hover { background: #f3f4f6; }
+    .filter-btn.active { background: #3b82f6; color: white; border-color: #3b82f6; }
+    .meetings-grid { display: grid; gap: 16px; }
+    .meeting-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer; transition: all 0.2s; display: grid; grid-template-columns: 1fr auto; gap: 16px; }
+    .meeting-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); transform: translateY(-2px); }
+    .meeting-info h3 { margin: 0 0 8px 0; font-size: 18px; color: #111827; }
+    .meeting-meta { display: flex; gap: 16px; color: #6b7280; font-size: 14px; }
+    .meeting-actions { display: flex; gap: 8px; align-items: center; }
+    .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .status-processing { background: #fef3c7; color: #92400e; }
+    .status-delivered { background: #d1fae5; color: #065f46; }
+    .status-failed { background: #fee2e2; color: #991b1b; }
+    .status-queued { background: #e0e7ff; color: #3730a3; }
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-secondary { background: #e5e7eb; color: #374151; }
+    .btn-secondary:hover { background: #d1d5db; }
+    .btn-small { padding: 6px 12px; font-size: 13px; }
+    .empty-state { background: white; border-radius: 12px; padding: 60px 20px; text-align: center; color: #6b7280; }
+    .empty-state h2 { margin: 0 0 8px 0; color: #374151; }
+    .loading { text-align: center; padding: 40px; color: #6b7280; }
+    .error-message { color: #ef4444; font-size: 13px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Meeting History</h1>
+      <button class="btn btn-primary" onclick="window.location.href='/upload-test'">+ New Meeting</button>
+    </div>
+    <div class="filters">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="delivered">Delivered</button>
+      <button class="filter-btn" data-filter="processing">Processing</button>
+      <button class="filter-btn" data-filter="failed">Failed</button>
+      <button class="filter-btn" data-filter="queued">Queued</button>
+    </div>
+    <div id="meetingsContainer"><div class="loading">Loading meetings...</div></div>
+  </div>
+  <script>
+    let allMeetings = [];
+    let currentFilter = 'all';
+    async function fetchMeetings() {
+      try {
+        const response = await fetch('/meetings/list', { credentials: 'include' });
+        if (!response.ok) throw new Error('Failed to fetch meetings');
+        allMeetings = await response.json();
+        renderMeetings();
+      } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('meetingsContainer').innerHTML = '<div class="empty-state"><h2>Error loading meetings</h2><p>' + error.message + '</p></div>';
+      }
+    }
+    function renderMeetings() {
+      const container = document.getElementById('meetingsContainer');
+      let filtered = currentFilter === 'all' ? allMeetings : allMeetings.filter(m => m.status === currentFilter);
+      
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state"><h2>No meetings found</h2><p>Upload your first meeting to get started</p></div>';
+        return;
+      }
+      
+      const grid = document.createElement('div');
+      grid.className = 'meetings-grid';
+      
+      filtered.forEach(meeting => {
+        const card = document.createElement('div');
+        card.className = 'meeting-card';
+        card.onclick = () => viewMeeting(meeting.id);
+        
+        const info = document.createElement('div');
+        info.className = 'meeting-info';
+        
+        const title = document.createElement('h3');
+        title.textContent = meeting.title;
+        info.appendChild(title);
+        
+        const meta = document.createElement('div');
+        meta.className = 'meeting-meta';
+        meta.innerHTML = '<span>Created: ' + new Date(meeting.created_at).toLocaleString() + '</span>';
+        if (meeting.email_to) {
+          const email = document.createElement('span');
+          email.textContent = '📧 ' + meeting.email_to;
+          meta.appendChild(email);
+        }
+        info.appendChild(meta);
+        
+        if (meeting.status === 'failed' && meeting.step) {
+          const error = document.createElement('div');
+          error.className = 'error-message';
+          error.textContent = meeting.step;
+          info.appendChild(error);
+        }
+        
+        const actions = document.createElement('div');
+        actions.className = 'meeting-actions';
+        actions.onclick = (e) => e.stopPropagation();
+        
+        const badge = document.createElement('span');
+        badge.className = 'status-badge status-' + meeting.status;
+        badge.textContent = meeting.status.toUpperCase();
+        actions.appendChild(badge);
+        
+        if (meeting.status === 'failed') {
+          const retry = document.createElement('button');
+          retry.className = 'btn btn-secondary btn-small';
+          retry.textContent = 'Retry';
+          retry.onclick = () => retryMeeting(meeting.id);
+          actions.appendChild(retry);
+        }
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-danger btn-small';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.onclick = () => deleteMeeting(meeting.id);
+        actions.appendChild(deleteBtn);
+        
+        card.appendChild(info);
+        card.appendChild(actions);
+        grid.appendChild(card);
+      });
+      
+      container.innerHTML = '';
+      container.appendChild(grid);
+    }
+    function viewMeeting(id) { window.location.href = '/progress?id=' + id; }
+    async function retryMeeting(id) {
+      if (!confirm('Retry processing this meeting?')) return;
+      try {
+        const response = await fetch('/meetings/' + id + '/run', { method: 'POST', credentials: 'include' });
+        if (!response.ok) throw new Error('Failed to retry');
+        alert('Meeting queued for reprocessing');
+        fetchMeetings();
+      } catch (error) {
+        alert('Failed to retry: ' + error.message);
+      }
+    }
+    async function deleteMeeting(id) {
+      if (!confirm('Are you sure you want to delete this meeting? This cannot be undone.')) return;
+      try {
+        const response = await fetch('/meetings/' + id, { method: 'DELETE', credentials: 'include' });
+        if (!response.ok) throw new Error('Failed to delete');
+        allMeetings = allMeetings.filter(m => m.id !== id);
+        renderMeetings();
+      } catch (error) {
+        alert('Failed to delete: ' + error.message);
+      }
+    }
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.filter;
+        renderMeetings();
+      });
+    });
+    fetchMeetings();
+    setInterval(fetchMeetings, 5000);
+  </script>
+</body>
+</html>
+    """
 
 app.include_router(health.router)
 app.include_router(auth.router)
