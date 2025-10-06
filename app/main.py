@@ -598,6 +598,15 @@ def progress_page():
           await new Promise(res => setTimeout(res, 1200));
         }
       }
+
+      // still not readable; keep page usable
+      try {
+        if (typeof showToast === 'function') {
+          showToast('Summary is taking a moment. Try refresh in a few seconds.', 'error');
+        }
+      } catch {}
+      return false;
+    }
     
     function updateUI(meeting) {
       document.getElementById('meetingTitle').textContent = meeting.title;
