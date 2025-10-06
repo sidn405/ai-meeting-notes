@@ -543,81 +543,51 @@ def progress_page():
   <div id="toast" class="toast"></div>
 
   <script>
-    // --- tiny toast helper (no dependencies) ---
-    function showToast(msg, type = "error") {
-      let t = document.getElementById("toast");
-      if (!t) {
-        t = document.createElement("div");
-        t.id = "toast";
-        t.style.cssText =
-          "position:fixed;right:16px;bottom:16px;max-width:420px;padding:12px 14px;border-radius:10px;color:#fff;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.2);display:none;";
-        document.body.appendChild(t);
+    function computeFallbackProgress(status, step) {
+      // If backend isn't sending `progress`, estimate from status/step.
+      const s = (status || '').toLowerCase();
+      const st = (step || '').toLowerCase();
+
+      if (s.startsWith('queued')) return 0;
+      if (s.startsWith('failed')) return 100;
+      if (s.startsWith('delivered')) return 100;
+
+      // processing
+      if (st.includes('upload')) return 20;
+      if (st.includes('transcrib')) return 60;
+      if (st.includes('summar')) return 75;
+      if (st.includes('email')) return 90;
+      if (st.includes('finaliz')) return 95;
+      return 10; // initializing/starting
+    }
+
+    function updateUI(state) {
+      const bar = document.getElementById('progressBar');
+      const stepText = document.getElementById('stepText');
+      const section = document.getElementById('progressSection');
+
+      // Prefer server progress; fallback to an estimate
+      let pct = typeof state.progress === 'number'
+        ? state.progress
+        : computeFallbackProgress(state.status, state.step);
+
+      // clamp & round
+      pct = Math.max(0, Math.min(100, Math.round(pct)));
+
+      // Update DOM
+      bar.style.width = pct + '%';
+      bar.textContent = pct + '%';
+      if (stepText) stepText.textContent = state.step || (state.status || 'Loading…');
+
+      // Hide the bar once delivered/failed
+      if ((state.status || '').toLowerCase().startsWith('delivered') ||
+          (state.status || '').toLowerCase().startsWith('failed')) {
+        section.style.display = 'none';
+      } else {
+        section.style.display = '';
       }
-      t.style.background = type === "error" ? "#E11D48" : "#111827";
-      t.textContent = msg;
-      t.style.display = "block";
-      setTimeout(() => (t.style.display = "none"), 3000);
-    }
-
-    const meetingId = new URLSearchParams(window.location.search).get("id");
-    let pollInterval = null;
-
-    async function tryFetchSummary() {
-      // Use download endpoint (works even if it's a FileResponse)
-      const url = `/meetings/${meetingId}/download/summary?ts=${Date.now()}`;
-      const r = await fetch(url, { credentials: "include", cache: "no-store" });
-      if (!r.ok) return false;
-
-      const txt = await r.text();
-      let summary;
-      try { summary = JSON.parse(txt); } catch { summary = { raw: txt }; }
-
-      // your function that renders the results — already in your page
-      if (typeof displayResults === "function") displayResults(summary);
-
-      const section = document.getElementById("progressSection");
-      if (section) section.style.display = "none";
-      return true;
-    }
-
-    async function fetchStatus() {
-      // Prefer /status if you added it; fall back to /meetings/{id}
-      const url1 = `/meetings/${meetingId}/status?ts=${Date.now()}`;
-      const url2 = `/meetings/${meetingId}?ts=${Date.now()}`;
-      let r = await fetch(url1, { credentials: "include", cache: "no-store" });
-      if (!r.ok) r = await fetch(url2, { credentials: "include", cache: "no-store" });
-      if (!r.ok) throw new Error("status fetch failed");
-      return r.json();
-    }
-
-    async function tick() {
-      try {
-        // If the summary file is already there, show it immediately.
-        const shown = await tryFetchSummary();
-        if (shown) { if (pollInterval) clearInterval(pollInterval); return; }
-
-        // Otherwise, update progress/status
-        const s = await fetchStatus();
-        if (typeof updateUI === "function") updateUI(s);
-
-        if ((s.status || "").toLowerCase().startsWith("delivered")) {
-          await tryFetchSummary();
-          if (pollInterval) clearInterval(pollInterval);
-        }
-      } catch (e) {
-        console.error(e);
-        showToast("Failed to check status", "error");  // harmless if it fails
-      }
-    }
-
-    if (meetingId) {
-      tick();
-      pollInterval = setInterval(tick, 2000);
-    } else {
-      showToast("No meeting ID provided", "error");
     }
   </script>
-
 
 </body>
 </html>
