@@ -543,54 +543,37 @@ def progress_page():
   <div id="toast" class="toast"></div>
 
   <script>
-    // Replace only this function
     async function fetchResults(meeting) {
-      const tries = 10; // ~15s total
+      // Small retry loop to avoid racing the FS: ~8–10s total
+      const tries = 7;
+      const url = `/meetings/${meetingId}/summary?ts=${Date.now()}`; // avoid caching
+
       for (let i = 0; i < tries; i++) {
-        try {
-          const res = await fetch(`/meetings/${meetingId}/download/summary?ts=${Date.now()}`, {
-            credentials: 'include',
-            cache: 'no-store'
-          });
-
-          if (res.status === 200) {
-            const text = await res.text();
-            let data;
-            try { data = JSON.parse(text); } catch { data = { raw: text }; }
-
-            // Render into your existing UI
-            if (typeof displayResults === 'function') displayResults(data);
-
-            // Hide progress
-            const ps = document.getElementById('progressSection');
-            if (ps) ps.style.display = 'none';
-
-            // Wire download links
-            const dlSum = document.getElementById('downloadSummary');
-            if (dlSum) { dlSum.href = `/meetings/${meetingId}/download/summary`; dlSum.style.display = 'inline-block'; }
-            const dlTxt = document.getElementById('downloadTranscript');
-            if (dlTxt && meeting && meeting.transcript_path) {
-              dlTxt.href = `/meetings/${meetingId}/download/transcript`; dlTxt.style.display = 'inline-block';
-            }
-            return true;
-          }
-
-          if (res.status === 404) {
-            const st = document.getElementById('stepText');
-            if (st) st.textContent = 'Finalizing summary…';
-            await new Promise(r => setTimeout(r, 1500));
-            continue;
-          }
-
-          await new Promise(r => setTimeout(r, 1200));
-        } catch {
-          await new Promise(r => setTimeout(r, 1200));
+        const res = await fetch(url, { credentials: 'include', cache: 'no-store' });
+        if (res.status === 200) {
+          const summary = await res.json();  // exact JSON
+          // Your renderer expects the real keys: executive_summary, key_decisions, action_items
+          displayResults(summary);
+          // Show Downloads (you already link these elsewhere)
+          const dlSum = document.getElementById('downloadSummary');
+          if (dlSum) { dlSum.href = `/meetings/${meetingId}/download/summary`; dlSum.style.display = 'inline-block'; }
+          const dlTxt = document.getElementById('downloadTranscript');
+          if (dlTxt && meeting && meeting.transcript_path) { dlTxt.href = `/meetings/${meetingId}/download/transcript`; dlTxt.style.display = 'inline-block'; }
+          return true;
         }
+        if (res.status === 404) {
+          // summary file not flushed yet; wait and retry
+          const stepText = document.getElementById('stepText');
+          if (stepText) stepText.textContent = 'Finalizing summary…';
+          await new Promise(r => setTimeout(r, 1500));
+          continue;
+        }
+        // any other status: brief backoff and retry
+        await new Promise(r => setTimeout(r, 1200));
       }
 
-      try {
-        if (typeof showToast === 'function') showToast('Summary is taking a moment. Try refresh shortly.', 'error');
-      } catch {}
+      // Keep page usable if still not readable
+      console.warn('Summary not ready after retries');
       return false;
     }
     
