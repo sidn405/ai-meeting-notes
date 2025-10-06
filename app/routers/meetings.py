@@ -17,7 +17,7 @@ router = APIRouter(
 )
 
 # ========== NEW: File size limit configuration ==========
-MAX_FILE_SIZE = int(os.getenv("MAX_UPLOAD_SIZE_MB", "100")) * 1024 * 1024
+MAX_FILE_SIZE = int(os.getenv("MAX_UPLOAD_SIZE_MB", "1000")) * 1024 * 1024
 # ========== END NEW ==========
 
 def _truthy(v) -> bool:
