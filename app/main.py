@@ -543,36 +543,61 @@ def progress_page():
   <div id="toast" class="toast"></div>
 
   <script>
-    const meetingId = new URLSearchParams(window.location.search).get('id');
-    let pollInterval = null;
-    let currentSummary = null;
-    
-    async function fetchMeetingStatus() {
-      try {
-        const response = await fetch(`/meetings/${meetingId}`, {
-          credentials: 'include'
-        });
-        if (!response.ok) throw new Error('Failed to fetch meeting');
-        const meeting = await response.json();
-        updateUI(meeting);
-        
-        if (meeting.status === 'delivered' || meeting.status === 'failed') {
-          if (pollInterval) {
-            clearInterval(pollInterval);
-            pollInterval = null;
+    // REPLACE your existing fetchResults(...) with this one
+    async function fetchResults(meeting) {
+      // Retry for ~12–15s total so we don't race the filesystem
+      const maxTries = 10;
+
+      for (let i = 0; i < maxTries; i++) {
+        try {
+          const r = await fetch(`/meetings/${meetingId}/summary?ts=${Date.now()}`, {
+            credentials: 'include',
+            cache: 'no-store'
+          });
+
+          if (r.status === 200) {
+            // summary might be a JSON file; parse safely
+            const txt = await r.text();
+            let summary;
+            try { summary = JSON.parse(txt); } catch { summary = { raw: txt }; }
+
+            // your existing renderer
+            if (typeof displayResults === 'function') displayResults(summary);
+
+            // hide progress section
+            const ps = document.getElementById('progressSection');
+            if (ps) ps.style.display = 'none';
+
+            // wire download links
+            const dlSum = document.getElementById('downloadSummary');
+            if (dlSum) {
+              dlSum.href = `/meetings/${meetingId}/download/summary`;
+              dlSum.style.display = 'inline-block';
+            }
+            const dlTxt = document.getElementById('downloadTranscript');
+            if (dlTxt && meeting && meeting.transcript_path) {
+              dlTxt.href = `/meetings/${meetingId}/download/transcript`;
+              dlTxt.style.display = 'inline-block';
+            }
+            return true; // shown
           }
-          
-          if (meeting.status === 'delivered' && meeting.summary_path) {
-            await fetchResults(meeting);
-          } else if (meeting.status === 'failed') {
-            showError(meeting);
+
+          // 404 (file not ready) or 202 (finalizing): wait and retry
+          if (r.status === 404 || r.status === 202) {
+            const st = document.getElementById('stepText');
+            if (st) st.textContent = r.status === 202 ? 'Finalizing summary…' : 'Preparing summary…';
+            await new Promise(res => setTimeout(res, 1500));
+            continue;
           }
+
+          // any other status: short backoff
+          await new Promise(res => setTimeout(res, 1200));
+
+        } catch (e) {
+          // transient network hiccup: short backoff
+          await new Promise(res => setTimeout(res, 1200));
         }
-      } catch (error) {
-        console.error('Error fetching meeting status:', error);
-        showToast('Failed to fetch meeting status', 'error');
       }
-    }
     
     function updateUI(meeting) {
       document.getElementById('meetingTitle').textContent = meeting.title;
