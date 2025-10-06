@@ -97,7 +97,11 @@ def upload_test(request: Request):
       }});
     </script>
     </head><body>
-    <h1>AI Meeting Notes – Test</h1>
+    <div class="titlebar">
+      <h1>AI Meeting Notes – Test</h1>
+      <a class="btn btn-secondary" href="/meetings" id="meetingsBtn">Meetings</a>
+    </div>
+
 
     {auth_section}
 
@@ -337,6 +341,14 @@ def progress_page():
       outline: none;
       border-color: #3b82f6;
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    .titlebar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:16px;
     }
     
     .btn {
