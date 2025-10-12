@@ -1,0 +1,377 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>License Admin Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    h1 { margin: 0; font-size: 28px; }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: #374151;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-small { padding: 6px 12px; font-size: 13px; }
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+    .alert-success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+    .alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .license-key {
+      font-family: "Monaco", "Courier New", monospace;
+      background: #f3f4f6;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      display: inline-block;
+      margin: 8px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th {
+      background: #f3f4f6;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 13px;
+      color: #374151;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 14px;
+    }
+    tr:hover { background: #f9fafb; }
+    .tier-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .tier-starter { background: #dbeafe; color: #1e40af; }
+    .tier-professional { background: #e9d5ff; color: #6b21a8; }
+    .tier-business { background: #fef3c7; color: #92400e; }
+    .status-active { color: #059669; font-weight: 600; }
+    .status-inactive { color: #dc2626; font-weight: 600; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .copy-btn {
+      cursor: pointer;
+      color: #3b82f6;
+      text-decoration: none;
+      font-size: 12px;
+    }
+    .copy-btn:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🔑 License Admin</h1>
+      <div>
+        <button class="btn btn-primary" onclick="toggleGenerateForm()">+ Generate License</button>
+      </div>
+    </div>
+
+    <!-- API Key Input -->
+    <div class="card">
+      <h2 style="margin: 0 0 16px 0;">Admin Authentication</h2>
+      <div class="form-group">
+        <label>Admin API Key</label>
+        <input type="password" id="apiKey" placeholder="Enter your ADMIN_API_KEY">
+      </div>
+      <button class="btn btn-primary" onclick="saveApiKey()">Save Key</button>
+    </div>
+
+    <!-- Generate License Form -->
+    <div class="card" id="generateForm" style="display: none;">
+      <h2 style="margin: 0 0 16px 0;">Generate New License</h2>
+      <div id="generateAlert"></div>
+      
+      <div class="grid">
+        <div class="form-group">
+          <label>Customer Email *</label>
+          <input type="email" id="customerEmail" required>
+        </div>
+        <div class="form-group">
+          <label>Tier *</label>
+          <select id="tier">
+            <option value="starter">Starter - $29 (50MB, 10/month)</option>
+            <option value="professional">Professional - $79 (200MB, 50/month)</option>
+            <option value="business">Business - $149 (500MB, unlimited)</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label>Gumroad Order ID (optional)</label>
+        <input type="text" id="gumroadOrderId" placeholder="e.g., ABC123">
+      </div>
+      
+      <button class="btn btn-primary" onclick="generateLicense()">Generate License</button>
+      <button class="btn" onclick="toggleGenerateForm()" style="margin-left: 8px;">Cancel</button>
+      
+      <div id="generatedKey" style="display: none; margin-top: 20px;">
+        <h3 style="color: #059669;">✅ License Generated!</h3>
+        <p>Send this key to the customer:</p>
+        <div class="license-key" id="keyDisplay"></div>
+        <button class="btn btn-small" onclick="copyKey()">📋 Copy Key</button>
+      </div>
+    </div>
+
+    <!-- License List -->
+    <div class="card">
+      <h2 style="margin: 0 0 16px 0;">All Licenses</h2>
+      <div id="licenseList">
+        <p style="color: #6b7280;">Enter your API key above to view licenses</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentApiKey = localStorage.getItem('adminApiKey') || '';
+    if (currentApiKey) {
+      document.getElementById('apiKey').value = currentApiKey;
+      loadLicenses();
+    }
+
+    function saveApiKey() {
+      const key = document.getElementById('apiKey').value.trim();
+      if (!key) {
+        alert('Please enter an API key');
+        return;
+      }
+      currentApiKey = key;
+      localStorage.setItem('adminApiKey', key);
+      alert('API key saved');
+      loadLicenses();
+    }
+
+    function toggleGenerateForm() {
+      const form = document.getElementById('generateForm');
+      form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      document.getElementById('generatedKey').style.display = 'none';
+      document.getElementById('generateAlert').innerHTML = '';
+    }
+
+    async function generateLicense() {
+      const email = document.getElementById('customerEmail').value.trim();
+      const tier = document.getElementById('tier').value;
+      const orderId = document.getElementById('gumroadOrderId').value.trim();
+
+      if (!email) {
+        showGenerateAlert('Please enter customer email', 'error');
+        return;
+      }
+
+      if (!currentApiKey) {
+        showGenerateAlert('Please save your API key first', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch('/license/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': currentApiKey
+          },
+          body: JSON.stringify({
+            email: email,
+            tier: tier,
+            gumroad_order_id: orderId || null
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          document.getElementById('keyDisplay').textContent = data.license_key;
+          document.getElementById('generatedKey').style.display = 'block';
+          window.currentKey = data.license_key;
+          showGenerateAlert('License generated successfully!', 'success');
+          
+          // Refresh license list
+          setTimeout(loadLicenses, 1000);
+        } else {
+          showGenerateAlert(data.detail || 'Failed to generate license', 'error');
+        }
+      } catch (error) {
+        showGenerateAlert('Error: ' + error.message, 'error');
+      }
+    }
+
+    function copyKey() {
+      navigator.clipboard.writeText(window.currentKey);
+      alert('License key copied to clipboard!');
+    }
+
+    function showGenerateAlert(message, type) {
+      document.getElementById('generateAlert').innerHTML = 
+        `<div class="alert alert-${type}">${message}</div>`;
+    }
+
+    async function loadLicenses() {
+      if (!currentApiKey) return;
+
+      const listDiv = document.getElementById('licenseList');
+      listDiv.innerHTML = '<p style="color: #6b7280;">Loading licenses...</p>';
+
+      try {
+        const response = await fetch('/license/list', {
+          headers: { 'X-API-Key': currentApiKey }
+        });
+
+        if (!response.ok) {
+          listDiv.innerHTML = '<p style="color: #ef4444;">Failed to load licenses. Check your API key.</p>';
+          return;
+        }
+
+        const licenses = await response.json();
+
+        if (licenses.length === 0) {
+          listDiv.innerHTML = '<p style="color: #6b7280;">No licenses yet. Generate one above!</p>';
+          return;
+        }
+
+        const table = document.createElement('table');
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>License Key</th>
+              <th>Email</th>
+              <th>Tier</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="licenseTableBody"></tbody>
+        `;
+
+        const tbody = table.querySelector('tbody');
+        
+        licenses.forEach(license => {
+          const row = document.createElement('tr');
+          const tierClass = `tier-${license.tier}`;
+          const statusClass = license.is_active ? 'status-active' : 'status-inactive';
+          
+          row.innerHTML = `
+            <td>
+              <code style="font-size: 12px;">${license.license_key}</code>
+              <a class="copy-btn" onclick="navigator.clipboard.writeText('${license.license_key}'); alert('Copied!')">Copy</a>
+            </td>
+            <td>${license.email}</td>
+            <td><span class="tier-badge ${tierClass}">${license.tier}</span></td>
+            <td class="${statusClass}">${license.is_active ? 'Active' : 'Inactive'}</td>
+            <td>${new Date(license.created_at).toLocaleDateString()}</td>
+            <td>
+              ${license.is_active ? 
+                `<button class="btn btn-danger btn-small" onclick="deactivateLicense('${license.license_key}')">Deactivate</button>` :
+                '<span style="color: #9ca3af;">Inactive</span>'
+              }
+            </td>
+          `;
+          
+          tbody.appendChild(row);
+        });
+
+        listDiv.innerHTML = '';
+        listDiv.appendChild(table);
+
+      } catch (error) {
+        listDiv.innerHTML = '<p style="color: #ef4444;">Error loading licenses: ' + error.message + '</p>';
+      }
+    }
+
+    async function deactivateLicense(licenseKey) {
+      if (!confirm('Are you sure you want to deactivate this license? This cannot be undone.')) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/license/deactivate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': currentApiKey
+          },
+          body: JSON.stringify({ license_key: licenseKey })
+        });
+
+        if (response.ok) {
+          alert('License deactivated');
+          loadLicenses();
+        } else {
+          alert('Failed to deactivate license');
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    // Add list endpoint to router
+  </script>
+</body>
+</html>

@@ -2,11 +2,11 @@ from fastapi import FastAPI, Request
 from .security import COOKIE_NAME
 from fastapi.middleware.cors import CORSMiddleware
 from .db import init_db
-from .routers import meetings, health, auth
 import os
 from fastapi.responses import HTMLResponse
 from .services.branding import render_meeting_notes_email_html
 from pathlib import Path
+from .routers import meetings, health, auth, license
 
 os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]
 
@@ -17,6 +17,14 @@ app.add_middleware(
     allow_origins=["*"], allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"],
 )
+
+# Include license router
+app.include_router(license.router)
+
+@app.get("/activate", response_class=HTMLResponse)
+def activate_page():
+    # Option 1: If you saved the activation HTML as a file
+    return Path("templates/activation.html").read_text()
 
 @app.get("/upload-test", response_class=HTMLResponse)
 def upload_test(request: Request):
@@ -62,8 +70,159 @@ def upload_test(request: Request):
       button{{padding:10px 16px;border-radius:10px;background:#111;color:#fff;border:none;cursor:pointer}}
       small{{color:#555}}
       .muted{{color:#555}}
+      
+      /* License Widget Styles */
+      .license-widget {{
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 24px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }}
+      .license-loading {{ text-align: center; opacity: 0.8; }}
+      .license-content {{ display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center; }}
+      .license-info h3 {{ margin: 0 0 8px 0; font-size: 18px; font-weight: 600; }}
+      .license-tier {{
+        display: inline-block;
+        background: rgba(255,255,255,0.2);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 12px;
+      }}
+      .license-stats {{ display: flex; gap: 24px; font-size: 14px; opacity: 0.95; }}
+      .license-stat {{ display: flex; flex-direction: column; }}
+      .stat-label {{ opacity: 0.8; font-size: 12px; margin-bottom: 4px; }}
+      .stat-value {{ font-size: 18px; font-weight: 700; }}
+      .license-actions {{ display: flex; flex-direction: column; gap: 8px; }}
+      .license-btn {{
+        background: rgba(255,255,255,0.2);
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+        white-space: nowrap;
+      }}
+      .license-btn:hover {{ background: rgba(255,255,255,0.3); }}
+      .quota-bar {{
+        background: rgba(255,255,255,0.2);
+        border-radius: 10px;
+        height: 8px;
+        overflow: hidden;
+        margin-top: 8px;
+      }}
+      .quota-fill {{
+        background: rgba(255,255,255,0.9);
+        height: 100%;
+        transition: width 0.3s;
+      }}
+      .quota-warning {{ background: #fbbf24; }}
+      .quota-danger {{ background: #ef4444; }}
+      .license-error {{
+        background: #fee2e2;
+        color: #991b1b;
+        padding: 16px;
+        border-radius: 8px;
+        border: 1px solid #fca5a5;
+      }}
     </style>
     <script>
+      async function loadLicenseInfo() {{
+        const widget = document.getElementById('licenseWidget');
+        
+        try {{
+          const response = await fetch('/license/info', {{
+            credentials: 'include'
+          }});
+          
+          const data = await response.json();
+          
+          if (!data.valid) {{
+            widget.innerHTML = `
+              <div class="license-error">
+                <strong>⚠️ No Active License</strong><br>
+                ${{data.error || 'Please activate your license to continue.'}}<br>
+                <a href="/activate" style="color: #991b1b; text-decoration: underline; margin-top: 8px; display: inline-block;">
+                  Activate License →
+                </a>
+              </div>
+            `;
+            return;
+          }}
+          
+          const quotaPercent = data.meetings_limit > 0 
+            ? (data.meetings_used / data.meetings_limit * 100) 
+            : 0;
+          
+          let quotaClass = '';
+          if (quotaPercent >= 90) quotaClass = 'quota-danger';
+          else if (quotaPercent >= 75) quotaClass = 'quota-warning';
+          
+          const remaining = data.meetings_limit - data.meetings_used;
+          
+          widget.innerHTML = `
+            <div class="license-content">
+              <div class="license-info">
+                <h3>👋 ${{data.email}}</h3>
+                <span class="license-tier">${{data.tier_name}} Plan</span>
+                
+                <div class="license-stats">
+                  <div class="license-stat">
+                    <span class="stat-label">Meetings This Month</span>
+                    <span class="stat-value">${{data.meetings_used}} / ${{data.meetings_limit === 999999 ? '∞' : data.meetings_limit}}</span>
+                  </div>
+                  <div class="license-stat">
+                    <span class="stat-label">Max File Size</span>
+                    <span class="stat-value">${{data.max_file_size_mb}}MB</span>
+                  </div>
+                  ${{data.meetings_limit < 999999 ? `
+                    <div class="license-stat">
+                      <span class="stat-label">Remaining</span>
+                      <span class="stat-value">${{remaining}}</span>
+                    </div>
+                  ` : ''}}
+                </div>
+                
+                ${{data.meetings_limit < 999999 ? `
+                  <div class="quota-bar">
+                    <div class="quota-fill ${{quotaClass}}" style="width: ${{Math.min(quotaPercent, 100)}}%"></div>
+                  </div>
+                ` : ''}}
+              </div>
+              
+              <div class="license-actions">
+                <button class="license-btn" onclick="copyLicenseKey()">📋 Copy Key</button>
+                <button class="license-btn" onclick="window.location.href='https://gumroad.com/your-product'">
+                  ⬆️ Upgrade
+                </button>
+              </div>
+            </div>
+          `;
+          
+          window.currentLicenseKey = data.license_key;
+          
+        }} catch (error) {{
+          console.error('Failed to load license info:', error);
+          widget.innerHTML = `
+            <div class="license-error">
+              Failed to load license information. Please refresh the page.
+            </div>
+          `;
+        }}
+      }}
+
+      function copyLicenseKey() {{
+        if (window.currentLicenseKey) {{
+          navigator.clipboard.writeText(window.currentLicenseKey);
+          alert('License key copied to clipboard!');
+        }}
+      }}
+
       function handleFormSubmit(form, endpoint) {{
         form.addEventListener('submit', async (e) => {{
           e.preventDefault();
@@ -89,6 +248,7 @@ def upload_test(request: Request):
       }}
       
       window.addEventListener('DOMContentLoaded', () => {{
+        loadLicenseInfo();
         const textForm = document.getElementById('textForm');
         const uploadForm = document.getElementById('uploadForm');
         
@@ -102,8 +262,12 @@ def upload_test(request: Request):
       <button><a class="btn btn-secondary" href="/meetings" id="meetingsBtn">Meetings</a></button>
     </div>
 
-
     {auth_section}
+
+    <!-- License Widget -->
+    <div class="license-widget" id="licenseWidget">
+      <div class="license-loading">Loading license info...</div>
+    </div>
 
     <div class="box">
       <h2>From Transcript (No Audio)</h2>
@@ -156,7 +320,6 @@ def upload_test(request: Request):
     <p class="muted">Tip: If you're testing on localhost (http), set <code>COOKIE_SECURE=0</code>. On Railway (https), keep <code>COOKIE_SECURE=1</code>.</p>
     </body></html>
     """
-
 @app.get("/progress", response_class=HTMLResponse)
 def progress_page():
     """Progress tracking and results page"""

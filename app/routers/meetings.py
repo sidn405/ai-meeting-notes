@@ -1,5 +1,5 @@
 # app/routers/meetings.py
-from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException, Depends, Cookie
 from typing import Optional
 from ..security import require_auth
 from fastapi.responses import FileResponse
@@ -7,18 +7,18 @@ from pathlib import Path
 from sqlmodel import select
 from ..db import get_session, DATA_DIR
 from ..models import Meeting
-from ..services.pipeline import process_meeting, send_summary_email  # CHANGED: Import from pipeline
-import json, re, os  # CHANGED: Added os import
+from ..services.pipeline import process_meeting, send_summary_email
+import json, re, os
+
+# CHANGED: Import license system
+from ..middleware.license import require_license, track_meeting_usage, validate_file_size
+from ..services.license import LicenseTier, TIER_LIMITS
 
 router = APIRouter(
     prefix="/meetings",
     tags=["meetings"],
     dependencies=[Depends(require_auth)],
 )
-
-# ========== NEW: File size limit configuration ==========
-MAX_FILE_SIZE = int(os.getenv("MAX_UPLOAD_SIZE_MB", "1000")) * 1024 * 1024
-# ========== END NEW ==========
 
 def _truthy(v) -> bool:
     """Helper to check if form value is truthy"""
@@ -38,30 +38,34 @@ async def upload_meeting(
     model_size: str | None = Form(None),
     device: str | None = Form(None),
     compute_type: str | None = Form(None),
+    license_info: tuple = Depends(require_license),  # CHANGED: Use license dependency
+    db = Depends(get_session),
 ):
     """Upload audio/video file and queue for processing"""
+    license, tier_config = license_info  # Unpack license info
+    
+    # Validate file type
     ext = Path(file.filename).suffix.lower()
     if ext not in {".mp3", ".m4a", ".wav", ".mp4"}:
         raise HTTPException(status_code=400, detail="Unsupported file type. Allowed: .mp3, .m4a, .wav, .mp4")
 
-    # ========== NEW: File size validation ==========
+    # CHANGED: Read file and validate size based on license tier
     file_content = await file.read()
     file_size = len(file_content)
     
-    if file_size > MAX_FILE_SIZE:
-        max_mb = MAX_FILE_SIZE / (1024 * 1024)
-        raise HTTPException(
-            status_code=413, 
-            detail=f"File too large. Maximum size is {max_mb}MB"
-        )
-    
     if file_size == 0:
         raise HTTPException(status_code=400, detail="File is empty")
-    # ========== END NEW ==========
-
+    
+    # Check file size against tier limit
+    is_valid, error_msg = validate_file_size(file_size, license.tier)
+    if not is_valid:
+        raise HTTPException(status_code=413, detail=error_msg)
+    
+    # Save file
     audio_path = DATA_DIR / f"{Path(file.filename).stem}.uploaded{ext}"
-    audio_path.write_bytes(file_content)  # CHANGED: Write bytes we already read
+    audio_path.write_bytes(file_content)
 
+    # Create meeting record
     with get_session() as s:
         m = Meeting(title=title, audio_path=str(audio_path), email_to=email_to, status="queued")
         s.add(m)
@@ -69,7 +73,10 @@ async def upload_meeting(
         s.refresh(m)
         mid = m.id
 
-    # CHANGED: Use pipeline's process_meeting
+    # Track usage for license
+    track_meeting_usage(db, license.license_key)
+
+    # Queue processing
     background_tasks.add_task(
         process_meeting,
         mid,
@@ -77,7 +84,12 @@ async def upload_meeting(
         hints=hints
     )
     
-    return {"id": mid, "status": "queued"}
+    return {
+        "id": mid, 
+        "status": "queued",
+        "tier": license.tier.value,
+        "file_size_mb": round(file_size / (1024 * 1024), 2)
+    }
 
 
 @router.post("/upload-sync")
@@ -90,14 +102,26 @@ async def upload_meeting_sync(
     model_size: str | None = Form(None),
     device: str | None = Form(None),
     compute_type: str | None = Form(None),
+    license_info: tuple = Depends(require_license),  # CHANGED: Add license check
+    db = Depends(get_session),
 ):
     """Upload and process immediately (blocks until complete)"""
+    license, tier_config = license_info
+    
     ext = Path(file.filename).suffix.lower()
     if ext not in {".mp3", ".m4a", ".wav", ".mp4"}:
         raise HTTPException(status_code=400, detail="Unsupported file type")
 
+    # Validate file size
+    file_content = await file.read()
+    file_size = len(file_content)
+    
+    is_valid, error_msg = validate_file_size(file_size, license.tier)
+    if not is_valid:
+        raise HTTPException(status_code=413, detail=error_msg)
+
     audio_path = DATA_DIR / f"{Path(file.filename).stem}.uploaded{ext}"
-    audio_path.write_bytes(await file.read())
+    audio_path.write_bytes(file_content)
 
     with get_session() as s:
         m = Meeting(title=title, audio_path=str(audio_path), email_to=email_to, status="queued")
@@ -106,7 +130,10 @@ async def upload_meeting_sync(
         s.refresh(m)
         mid = m.id
 
-    # CHANGED: Use pipeline's process_meeting
+    # Track usage
+    track_meeting_usage(db, license.license_key)
+
+    # Process synchronously
     process_meeting(mid, language=language, hints=hints)
 
     with get_session() as s:
@@ -121,8 +148,12 @@ async def create_from_text(
     title: str = Form(...),
     transcript: str = Form(...),
     email_to: str | None = Form(None),
+    license_info: tuple = Depends(require_license),  # CHANGED: Add license check
+    db = Depends(get_session),
 ):
     """Create meeting from text transcript (no audio)"""
+    license, tier_config = license_info
+    
     safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", title.strip()) or "meeting"
     tpath = DATA_DIR / f"from_text_{safe_stem}.transcript.txt"
     tpath.write_text(transcript, encoding="utf-8")
@@ -140,7 +171,10 @@ async def create_from_text(
         s.refresh(m)
         mid = m.id
 
-    # CHANGED: Use pipeline's process_meeting
+    # Track usage
+    track_meeting_usage(db, license.license_key)
+
+    # Process meeting
     process_meeting(mid)
 
     with get_session() as s:
@@ -153,11 +187,13 @@ async def create_from_text_sync(
     title: str = Form(...),
     transcript: str = Form(...),
     email_to: str | None = Form(None),
+    license_info: tuple = Depends(require_license),  # CHANGED: Add license check
+    db = Depends(get_session),
 ):
     """Alias for from-text (already synchronous)"""
-    return await create_from_text(title, transcript, email_to)
+    return await create_from_text(title, transcript, email_to, license_info, db)
 
-# ========== NEW: List all meetings ==========
+
 @router.get("/list")
 def list_meetings():
     """Get all meetings ordered by creation date (newest first)"""
@@ -168,9 +204,9 @@ def list_meetings():
             ).all()
             return meetings
     except Exception as e:
-        print(f"Error fetching meetings: {e}")  # Check Railway logs
+        print(f"Error fetching meetings: {e}")
         raise HTTPException(500, f"Failed to fetch meetings: {str(e)}")
-# ========== END NEW ==========
+
 
 @router.get("/{meeting_id}")
 def get_meeting(meeting_id: int):
@@ -210,7 +246,6 @@ def download_summary(meeting_id: int):
         )
 
 
-# ========== NEW: Get summary as JSON (not download) ==========
 @router.get("/{meeting_id}/summary")
 def get_summary(meeting_id: int):
     """Get meeting summary as JSON (for reading, not downloading)"""
@@ -221,7 +256,8 @@ def get_summary(meeting_id: int):
         
         summary_text = Path(m.summary_path).read_text(encoding="utf-8")
         return json.loads(summary_text)
-    
+
+
 @router.get("/{meeting_id}/status")
 def meeting_status(meeting_id: int):
     with get_session() as s:
@@ -238,13 +274,11 @@ def meeting_status(meeting_id: int):
             "has_transcript": bool(m.transcript_path),
         }
 
-# ========== END NEW ==========
-
 
 @router.post("/{meeting_id}/run")
 def run_meeting(meeting_id: int):
     """Manually trigger processing for a meeting"""
-    process_meeting(meeting_id)  # CHANGED: Use pipeline's version
+    process_meeting(meeting_id)
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
         if not m:
@@ -260,12 +294,12 @@ async def send_meeting_email(meeting_id: int, payload: dict):
         raise HTTPException(400, "email_to is required")
     
     try:
-        send_summary_email(meeting_id, email_to)  # CHANGED: Use pipeline's version
+        send_summary_email(meeting_id, email_to)
         return {"success": True, "message": f"Email sent to {email_to}"}
     except Exception as e:
         raise HTTPException(500, f"Failed to send email: {str(e)}")
 
-# ========== NEW: Delete meeting ==========
+
 @router.delete("/{meeting_id}")
 def delete_meeting(meeting_id: int):
     """Delete a meeting and its associated files"""
