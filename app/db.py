@@ -1,6 +1,7 @@
 # app/db.py
 import os
 from sqlmodel import SQLModel, create_engine, Session
+from .models import License, LicenseUsage
 from sqlalchemy import text
 from pathlib import Path
 
