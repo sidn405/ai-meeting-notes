@@ -1669,10 +1669,16 @@ def meetings_list_page(request: Request):
         <p>Redirecting to <a href="/login">login page</a>...</p>
         """
     
-    # Inline the meetings list HTML from artifact
-    return open("meetings_list.html").read() if Path("meetings_list.html").exists()
-
+    # Use the modern meetings page HTML
+    html_path = Path(__file__).parent / "templates" / "meetings.html"
+    if html_path.exists():
+        return html_path.read_text(encoding="utf-8")
     
+    # Inline fallback - copy the HTML from the artifact above
+    return """
+    <!-- Paste the entire HTML from the artifact here -->
+    """
+       
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(meetings.router)
