@@ -734,11 +734,10 @@ def upload_test(request: Request):
           <div class="card-header">
             <h2>From Transcript (No Audio)</h2>
             <div class="feature-badges">
-              <span class="feature-badge">🎯 AI-Powered</span>
+              <span class="feature-badge">✨ AI Summarization</span>
             </div>
           </div>
-          <p class="subtitle">Already have a transcript? Skip transcription and go straight to AI summarization.</p>
-          
+        
           <form id="textForm">
             <div class="form-group">
               <label>Meeting Title</label>
@@ -757,13 +756,13 @@ def upload_test(request: Request):
             </div>
 
             <div class="btn-group">
-              <button type="button" class="btn btn-secondary" onclick="submitTranscriptForm('transcribe')">
-                📝 Transcribe Only
-              </button>
-              <button type="button" class="btn btn-primary" onclick="submitTranscriptForm('summarize')">
-                ✨ Full Summarization
+              <button type="button" class="btn btn-primary" onclick="submitTranscriptForm()" style="flex:1;">
+                ✨ Analyze & Summarize
               </button>
             </div>
+            <p style="font-size:13px;color:#718096;margin-top:12px;text-align:center;">
+              Get executive summary, key decisions, and action items
+            </p>
           </form>
         </div>
 
@@ -1858,25 +1857,251 @@ app.include_router(meetings.router)
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
     return """
-<!doctype html><meta charset="utf-8">
-<title>Login</title>
-<style>
- body{font-family:system-ui;margin:40px;max-width:480px}
- input,button{font:inherit;padding:8px} input{width:100%}
- button{background:#111;color:#fff;border:none;border-radius:8px;padding:10px 16px;margin-top:10px}
-</style>
-<h1>Login</h1>
-<form action="/auth/web-login" method="post">
-  <label>Username</label><input name="username" value="admin" required>
-  <label>Password</label><input name="password" type="password" required>
-  <input type="hidden" name="next_path" value="/upload-test">
-  <button type="submit">Login</button>
-</form>
-<form action="/auth/logout" method="post" style="margin-top:16px">
-  <input type="hidden" name="next_path" value="/upload-test">
-  <button type="submit">Logout</button>
-</form>
-<p style="color:#555">After login, the server sets an <b>HttpOnly cookie</b>. Your browser includes it automatically on form submits.</p>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Login - AI Meeting Notes</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 480px;
+      width: 100%;
+      padding: 48px 40px;
+    }
+    
+    .logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    
+    .logo-text {
+      font-size: 32px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    
+    .logo-subtitle {
+      color: #718096;
+      font-size: 15px;
+    }
+    
+    h1 {
+      font-size: 28px;
+      margin-bottom: 8px;
+      color: #1a202c;
+      text-align: center;
+    }
+    
+    .subtitle {
+      color: #718096;
+      margin-bottom: 32px;
+      font-size: 15px;
+      text-align: center;
+    }
+    
+    .form-group {
+      margin-bottom: 24px;
+    }
+    
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #2d3748;
+      font-size: 14px;
+    }
+    
+    input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 16px;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    .btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-top: 8px;
+    }
+    
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+    
+    .btn-secondary {
+      background: white;
+      color: #667eea;
+      border: 2px solid #e2e8f0;
+      margin-top: 12px;
+    }
+    
+    .btn-secondary:hover {
+      background: #f7fafc;
+      border-color: #667eea;
+    }
+    
+    .help-text {
+      margin-top: 24px;
+      font-size: 13px;
+      color: #718096;
+      text-align: center;
+      line-height: 1.6;
+    }
+    
+    .help-text a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    
+    .help-text a:hover {
+      text-decoration: underline;
+    }
+    
+    .divider {
+      margin: 24px 0;
+      text-align: center;
+      position: relative;
+    }
+    
+    .divider::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      width: 100%;
+      height: 1px;
+      background: #e2e8f0;
+    }
+    
+    .divider span {
+      background: white;
+      padding: 0 16px;
+      color: #718096;
+      font-size: 13px;
+      position: relative;
+    }
+    
+    .info-box {
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 16px;
+      margin-top: 24px;
+    }
+    
+    .info-box strong {
+      color: #2d3748;
+      display: block;
+      margin-bottom: 4px;
+    }
+    
+    .info-box p {
+      color: #718096;
+      font-size: 13px;
+      line-height: 1.5;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <div class="logo-text">🎙️ AI Meeting Notes</div>
+      <div class="logo-subtitle">Never miss important details</div>
+    </div>
+    
+    <h1>Welcome Back</h1>
+    <p class="subtitle">Sign in to access your meeting notes</p>
+    
+    <form action="/auth/web-login" method="post">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input 
+          type="text" 
+          id="username" 
+          name="username" 
+          value="admin" 
+          required
+          autocomplete="username"
+        >
+      </div>
+      
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input 
+          type="password" 
+          id="password" 
+          name="password" 
+          required
+          autocomplete="current-password"
+        >
+      </div>
+      
+      <input type="hidden" name="next_path" value="/upload-test">
+      
+      <button type="submit" class="btn">Sign In</button>
+    </form>
+    
+    <div class="divider">
+      <span>OR</span>
+    </div>
+    
+    <form action="/auth/logout" method="post">
+      <input type="hidden" name="next_path" value="/login">
+      <button type="submit" class="btn btn-secondary">Sign Out</button>
+    </form>
+    
+    <div class="info-box">
+      <strong>🔒 Secure Authentication</strong>
+      <p>After login, an HttpOnly cookie is set. Your browser includes it automatically on all requests.</p>
+    </div>
+    
+    <p class="help-text">
+      Don't have an account? <a href="/activate">Activate your license</a><br>
+      <a href="/">← Back to Home</a>
+    </p>
+  </div>
+</body>
+</html>
 """
 
 @app.get("/browser-test", response_class=HTMLResponse)
