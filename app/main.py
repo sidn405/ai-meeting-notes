@@ -1106,12 +1106,26 @@ def on_startup():
 @app.get("/", response_class=HTMLResponse)
 def index():
     """Homepage - Landing page"""
-    html_path = Path("templates/index.html")
+    # Get the directory where this file is located (app/)
+    current_dir = Path(__file__).parent
+    html_path = current_dir / "templates" / "index.html"
+    
     if html_path.exists():
         return html_path.read_text(encoding="utf-8")
     else:
-        # Fallback if file doesn't exist
-        return {"ok": True, "app": "AI Meeting Notes", "message": "Homepage not found"}
+        # Fallback with proper error message
+        return f"""
+        <!doctype html>
+        <html>
+        <head><meta charset="utf-8"><title>Error</title></head>
+        <body>
+          <h1>Homepage not found</h1>
+          <p>Looking for: {html_path}</p>
+          <p>File exists: {html_path.exists()}</p>
+          <p><a href="/upload-test">Go to Upload Test</a></p>
+        </body>
+        </html>
+        """
 
 @app.get("/meetings", response_class=HTMLResponse)
 def meetings_list_page(request: Request):
