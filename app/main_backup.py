@@ -2,10 +2,11 @@ from fastapi import FastAPI, Request
 from .security import COOKIE_NAME
 from fastapi.middleware.cors import CORSMiddleware
 from .db import init_db
-from .routers import meetings, health, auth
 import os
 from fastapi.responses import HTMLResponse
 from .services.branding import render_meeting_notes_email_html
+from pathlib import Path
+from .routers import meetings, health, auth, license
 
 os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]
 
@@ -16,6 +17,260 @@ app.add_middleware(
     allow_origins=["*"], allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"],
 )
+
+# Include license router
+app.include_router(license.router)
+
+@app.get("/activate", response_class=HTMLResponse)
+def activate_page():
+    return """
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Activate License - AI Meeting Notes</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 500px;
+      width: 100%;
+      padding: 40px;
+    }
+    h1 {
+      font-size: 28px;
+      margin-bottom: 8px;
+      color: #1a202c;
+    }
+    .subtitle {
+      color: #718096;
+      margin-bottom: 32px;
+      font-size: 15px;
+    }
+    .form-group {
+      margin-bottom: 24px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #2d3748;
+      font-size: 14px;
+    }
+    input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: all 0.2s;
+      font-family: "Monaco", "Courier New", monospace;
+      letter-spacing: 1px;
+    }
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    .alert-success {
+      background: #c6f6d5;
+      color: #22543d;
+      border: 1px solid #9ae6b4;
+    }
+    .alert-error {
+      background: #fed7d7;
+      color: #742a2a;
+      border: 1px solid #fc8181;
+    }
+    .help-text {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #718096;
+    }
+    .help-text a {
+      color: #667eea;
+      text-decoration: none;
+    }
+    .help-text a:hover {
+      text-decoration: underline;
+    }
+    .format-hint {
+      font-size: 12px;
+      color: #a0aec0;
+      margin-top: 6px;
+      font-family: "Monaco", "Courier New", monospace;
+    }
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #ffffff;
+      border-top: 2px solid transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎉 Welcome!</h1>
+    <p class="subtitle">Activate your AI Meeting Notes license to get started</p>
+    
+    <div id="alertBox"></div>
+    
+    <form id="activationForm">
+      <div class="form-group">
+        <label for="licenseKey">License Key</label>
+        <input 
+          type="text" 
+          id="licenseKey" 
+          placeholder="STA-XXXX-XXXX-XXXX-XXXX"
+          required
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <div class="format-hint">Format: XXX-XXXX-XXXX-XXXX-XXXX</div>
+      </div>
+      
+      <button type="submit" class="btn" id="submitBtn">
+        <span id="btnText">Activate License</span>
+      </button>
+      
+      <p class="help-text">
+        Don't have a license? <a href="https://gumroad.com/your-product" target="_blank">Purchase one here</a><br>
+        Need help? Contact <a href="mailto:support@yourdomain.com">support@yourdomain.com</a>
+      </p>
+    </form>
+  </div>
+
+  <script>
+    const form = document.getElementById('activationForm');
+    const input = document.getElementById('licenseKey');
+    const submitBtn = document.getElementById('submitBtn');
+    const btnText = document.getElementById('btnText');
+    const alertBox = document.getElementById('alertBox');
+
+    input.addEventListener('input', (e) => {
+      let value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      
+      // Format: XXX-XXXX-XXXX-XXXX-XXXX (3 chars, then 4 groups of 4)
+      let formatted = '';
+      if (value.length > 0) {
+        formatted = value.substring(0, 3); // First 3 chars
+        if (value.length > 3) {
+          formatted += '-' + value.substring(3, 7); // Next 4
+        }
+        if (value.length > 7) {
+          formatted += '-' + value.substring(7, 11); // Next 4
+        }
+        if (value.length > 11) {
+          formatted += '-' + value.substring(11, 15); // Next 4
+        }
+        if (value.length > 15) {
+          formatted += '-' + value.substring(15, 19); // Last 4
+        }
+      }
+      
+      e.target.value = formatted;
+    });
+
+    function showAlert(message, type) {
+      alertBox.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+      setTimeout(() => {
+        if (type !== 'success') {
+          alertBox.innerHTML = '';
+        }
+      }, 5000);
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const licenseKey = input.value.trim();
+      
+      if (!licenseKey) {
+        showAlert('Please enter your license key', 'error');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      btnText.innerHTML = '<span class="spinner"></span>Activating...';
+
+      try {
+        const response = await fetch('/license/activate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ license_key: licenseKey })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showAlert('✅ License activated successfully! Redirecting...', 'success');
+          setTimeout(() => {
+            window.location.href = '/upload-test';
+          }, 2000);
+        } else {
+          showAlert(data.detail || 'Invalid license key', 'error');
+          submitBtn.disabled = false;
+          btnText.textContent = 'Activate License';
+        }
+      } catch (error) {
+        showAlert('Connection error. Please try again.', 'error');
+        submitBtn.disabled = false;
+        btnText.textContent = 'Activate License';
+      }
+    });
+  </script>
+</body>
+</html>
+"""
 
 @app.get("/upload-test", response_class=HTMLResponse)
 def upload_test(request: Request):
@@ -61,8 +316,159 @@ def upload_test(request: Request):
       button{{padding:10px 16px;border-radius:10px;background:#111;color:#fff;border:none;cursor:pointer}}
       small{{color:#555}}
       .muted{{color:#555}}
+      
+      /* License Widget Styles */
+      .license-widget {{
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 24px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }}
+      .license-loading {{ text-align: center; opacity: 0.8; }}
+      .license-content {{ display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center; }}
+      .license-info h3 {{ margin: 0 0 8px 0; font-size: 18px; font-weight: 600; }}
+      .license-tier {{
+        display: inline-block;
+        background: rgba(255,255,255,0.2);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 12px;
+      }}
+      .license-stats {{ display: flex; gap: 24px; font-size: 14px; opacity: 0.95; }}
+      .license-stat {{ display: flex; flex-direction: column; }}
+      .stat-label {{ opacity: 0.8; font-size: 12px; margin-bottom: 4px; }}
+      .stat-value {{ font-size: 18px; font-weight: 700; }}
+      .license-actions {{ display: flex; flex-direction: column; gap: 8px; }}
+      .license-btn {{
+        background: rgba(255,255,255,0.2);
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+        white-space: nowrap;
+      }}
+      .license-btn:hover {{ background: rgba(255,255,255,0.3); }}
+      .quota-bar {{
+        background: rgba(255,255,255,0.2);
+        border-radius: 10px;
+        height: 8px;
+        overflow: hidden;
+        margin-top: 8px;
+      }}
+      .quota-fill {{
+        background: rgba(255,255,255,0.9);
+        height: 100%;
+        transition: width 0.3s;
+      }}
+      .quota-warning {{ background: #fbbf24; }}
+      .quota-danger {{ background: #ef4444; }}
+      .license-error {{
+        background: #fee2e2;
+        color: #991b1b;
+        padding: 16px;
+        border-radius: 8px;
+        border: 1px solid #fca5a5;
+      }}
     </style>
     <script>
+      async function loadLicenseInfo() {{
+        const widget = document.getElementById('licenseWidget');
+        
+        try {{
+          const response = await fetch('/license/info', {{
+            credentials: 'include'
+          }});
+          
+          const data = await response.json();
+          
+          if (!data.valid) {{
+            widget.innerHTML = `
+              <div class="license-error">
+                <strong>⚠️ No Active License</strong><br>
+                ${{data.error || 'Please activate your license to continue.'}}<br>
+                <a href="/activate" style="color: #991b1b; text-decoration: underline; margin-top: 8px; display: inline-block;">
+                  Activate License →
+                </a>
+              </div>
+            `;
+            return;
+          }}
+          
+          const quotaPercent = data.meetings_limit > 0 
+            ? (data.meetings_used / data.meetings_limit * 100) 
+            : 0;
+          
+          let quotaClass = '';
+          if (quotaPercent >= 90) quotaClass = 'quota-danger';
+          else if (quotaPercent >= 75) quotaClass = 'quota-warning';
+          
+          const remaining = data.meetings_limit - data.meetings_used;
+          
+          widget.innerHTML = `
+            <div class="license-content">
+              <div class="license-info">
+                <h3>👋 ${{data.email}}</h3>
+                <span class="license-tier">${{data.tier_name}} Plan</span>
+                
+                <div class="license-stats">
+                  <div class="license-stat">
+                    <span class="stat-label">Meetings This Month</span>
+                    <span class="stat-value">${{data.meetings_used}} / ${{data.meetings_limit === 999999 ? '∞' : data.meetings_limit}}</span>
+                  </div>
+                  <div class="license-stat">
+                    <span class="stat-label">Max File Size</span>
+                    <span class="stat-value">${{data.max_file_size_mb}}MB</span>
+                  </div>
+                  ${{data.meetings_limit < 999999 ? `
+                    <div class="license-stat">
+                      <span class="stat-label">Remaining</span>
+                      <span class="stat-value">${{remaining}}</span>
+                    </div>
+                  ` : ''}}
+                </div>
+                
+                ${{data.meetings_limit < 999999 ? `
+                  <div class="quota-bar">
+                    <div class="quota-fill ${{quotaClass}}" style="width: ${{Math.min(quotaPercent, 100)}}%"></div>
+                  </div>
+                ` : ''}}
+              </div>
+              
+              <div class="license-actions">
+                <button class="license-btn" onclick="copyLicenseKey()">📋 Copy Key</button>
+                <button class="license-btn" onclick="window.location.href='https://gumroad.com/your-product'">
+                  ⬆️ Upgrade
+                </button>
+              </div>
+            </div>
+          `;
+          
+          window.currentLicenseKey = data.license_key;
+          
+        }} catch (error) {{
+          console.error('Failed to load license info:', error);
+          widget.innerHTML = `
+            <div class="license-error">
+              Failed to load license information. Please refresh the page.
+            </div>
+          `;
+        }}
+      }}
+
+      function copyLicenseKey() {{
+        if (window.currentLicenseKey) {{
+          navigator.clipboard.writeText(window.currentLicenseKey);
+          alert('License key copied to clipboard!');
+        }}
+      }}
+
       function handleFormSubmit(form, endpoint) {{
         form.addEventListener('submit', async (e) => {{
           e.preventDefault();
@@ -88,6 +494,7 @@ def upload_test(request: Request):
       }}
       
       window.addEventListener('DOMContentLoaded', () => {{
+        loadLicenseInfo();
         const textForm = document.getElementById('textForm');
         const uploadForm = document.getElementById('uploadForm');
         
@@ -96,9 +503,17 @@ def upload_test(request: Request):
       }});
     </script>
     </head><body>
-    <h1>AI Meeting Notes – Test</h1>
+    <div class="titlebar">
+      <h1>AI Meeting Notes – Test</h1>
+      <button><a class="btn btn-secondary" href="/meetings" id="meetingsBtn">Meetings</a></button>
+    </div>
 
     {auth_section}
+
+    <!-- License Widget -->
+    <div class="license-widget" id="licenseWidget">
+      <div class="license-loading">Loading license info...</div>
+    </div>
 
     <div class="box">
       <h2>From Transcript (No Audio)</h2>
@@ -151,7 +566,6 @@ def upload_test(request: Request):
     <p class="muted">Tip: If you're testing on localhost (http), set <code>COOKIE_SECURE=0</code>. On Railway (https), keep <code>COOKIE_SECURE=1</code>.</p>
     </body></html>
     """
-
 @app.get("/progress", response_class=HTMLResponse)
 def progress_page():
     """Progress tracking and results page"""
@@ -336,6 +750,14 @@ def progress_page():
       outline: none;
       border-color: #3b82f6;
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    .titlebar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:16px;
     }
     
     .btn {
@@ -681,10 +1103,224 @@ Action Items
 def on_startup():
     init_db()
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 def index():
-    return {"ok": True, "app": "AI Meeting Notes", "routes": ["/health", "/meetings/upload", "/meetings/from-text", "/meetings/{id}"]}
+    """Homepage - Landing page"""
+    # Get the directory where this file is located (app/)
+    current_dir = Path(__file__).parent
+    html_path = current_dir / "templates" / "index.html"
+    
+    if html_path.exists():
+        return html_path.read_text(encoding="utf-8")
+    else:
+        # Fallback with proper error message
+        return f"""
+        <!doctype html>
+        <html>
+        <head><meta charset="utf-8"><title>Error</title></head>
+        <body>
+          <h1>Homepage not found</h1>
+          <p>Looking for: {html_path}</p>
+          <p>File exists: {html_path.exists()}</p>
+          <p><a href="/upload-test">Go to Upload Test</a></p>
+        </body>
+        </html>
+        """
 
+@app.get("/meetings", response_class=HTMLResponse)
+def meetings_list_page(request: Request):
+    """Meeting history list page"""
+    logged_in = COOKIE_NAME in request.cookies
+    if not logged_in:
+        return """
+        <!doctype html>
+        <meta charset="utf-8">
+        <meta http-equiv="refresh" content="0;url=/login">
+        <title>Login Required</title>
+        <p>Redirecting to <a href="/login">login page</a>...</p>
+        """
+    
+    # Inline the meetings list HTML from artifact
+    return open("meetings_list.html").read() if Path("meetings_list.html").exists() else """
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Meeting History</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+    h1 { margin: 0; font-size: 28px; }
+    .filters { display: flex; gap: 12px; margin-bottom: 20px; }
+    .filter-btn { padding: 8px 16px; border: 1px solid #d1d5db; background: white; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-size: 14px; }
+    .filter-btn:hover { background: #f3f4f6; }
+    .filter-btn.active { background: #3b82f6; color: white; border-color: #3b82f6; }
+    .meetings-grid { display: grid; gap: 16px; }
+    .meeting-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer; transition: all 0.2s; display: grid; grid-template-columns: 1fr auto; gap: 16px; }
+    .meeting-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); transform: translateY(-2px); }
+    .meeting-info h3 { margin: 0 0 8px 0; font-size: 18px; color: #111827; }
+    .meeting-meta { display: flex; gap: 16px; color: #6b7280; font-size: 14px; }
+    .meeting-actions { display: flex; gap: 8px; align-items: center; }
+    .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .status-processing { background: #fef3c7; color: #92400e; }
+    .status-delivered { background: #d1fae5; color: #065f46; }
+    .status-failed { background: #fee2e2; color: #991b1b; }
+    .status-queued { background: #e0e7ff; color: #3730a3; }
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-secondary { background: #e5e7eb; color: #374151; }
+    .btn-secondary:hover { background: #d1d5db; }
+    .btn-small { padding: 6px 12px; font-size: 13px; }
+    .empty-state { background: white; border-radius: 12px; padding: 60px 20px; text-align: center; color: #6b7280; }
+    .empty-state h2 { margin: 0 0 8px 0; color: #374151; }
+    .loading { text-align: center; padding: 40px; color: #6b7280; }
+    .error-message { color: #ef4444; font-size: 13px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Meeting History</h1>
+      <button class="btn btn-primary" onclick="window.location.href='/upload-test'">+ New Meeting</button>
+    </div>
+    <div class="filters">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="delivered">Delivered</button>
+      <button class="filter-btn" data-filter="processing">Processing</button>
+      <button class="filter-btn" data-filter="failed">Failed</button>
+      <button class="filter-btn" data-filter="queued">Queued</button>
+    </div>
+    <div id="meetingsContainer"><div class="loading">Loading meetings...</div></div>
+  </div>
+  <script>
+    let allMeetings = [];
+    let currentFilter = 'all';
+    async function fetchMeetings() {
+      try {
+        const response = await fetch('/meetings/list', { credentials: 'include' });
+        if (!response.ok) throw new Error('Failed to fetch meetings');
+        allMeetings = await response.json();
+        renderMeetings();
+      } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('meetingsContainer').innerHTML = '<div class="empty-state"><h2>Error loading meetings</h2><p>' + error.message + '</p></div>';
+      }
+    }
+    function renderMeetings() {
+      const container = document.getElementById('meetingsContainer');
+      let filtered = currentFilter === 'all' ? allMeetings : allMeetings.filter(m => m.status === currentFilter);
+      
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state"><h2>No meetings found</h2><p>Upload your first meeting to get started</p></div>';
+        return;
+      }
+      
+      const grid = document.createElement('div');
+      grid.className = 'meetings-grid';
+      
+      filtered.forEach(meeting => {
+        const card = document.createElement('div');
+        card.className = 'meeting-card';
+        card.onclick = () => viewMeeting(meeting.id);
+        
+        const info = document.createElement('div');
+        info.className = 'meeting-info';
+        
+        const title = document.createElement('h3');
+        title.textContent = meeting.title;
+        info.appendChild(title);
+        
+        const meta = document.createElement('div');
+        meta.className = 'meeting-meta';
+        meta.innerHTML = '<span>Created: ' + new Date(meeting.created_at).toLocaleString() + '</span>';
+        if (meeting.email_to) {
+          const email = document.createElement('span');
+          email.textContent = '📧 ' + meeting.email_to;
+          meta.appendChild(email);
+        }
+        info.appendChild(meta);
+        
+        if (meeting.status === 'failed' && meeting.step) {
+          const error = document.createElement('div');
+          error.className = 'error-message';
+          error.textContent = meeting.step;
+          info.appendChild(error);
+        }
+        
+        const actions = document.createElement('div');
+        actions.className = 'meeting-actions';
+        actions.onclick = (e) => e.stopPropagation();
+        
+        const badge = document.createElement('span');
+        badge.className = 'status-badge status-' + meeting.status;
+        badge.textContent = meeting.status.toUpperCase();
+        actions.appendChild(badge);
+        
+        if (meeting.status === 'failed') {
+          const retry = document.createElement('button');
+          retry.className = 'btn btn-secondary btn-small';
+          retry.textContent = 'Retry';
+          retry.onclick = () => retryMeeting(meeting.id);
+          actions.appendChild(retry);
+        }
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-danger btn-small';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.onclick = () => deleteMeeting(meeting.id);
+        actions.appendChild(deleteBtn);
+        
+        card.appendChild(info);
+        card.appendChild(actions);
+        grid.appendChild(card);
+      });
+      
+      container.innerHTML = '';
+      container.appendChild(grid);
+    }
+    function viewMeeting(id) { window.location.href = '/progress?id=' + id; }
+    async function retryMeeting(id) {
+      if (!confirm('Retry processing this meeting?')) return;
+      try {
+        const response = await fetch('/meetings/' + id + '/run', { method: 'POST', credentials: 'include' });
+        if (!response.ok) throw new Error('Failed to retry');
+        alert('Meeting queued for reprocessing');
+        fetchMeetings();
+      } catch (error) {
+        alert('Failed to retry: ' + error.message);
+      }
+    }
+    async function deleteMeeting(id) {
+      if (!confirm('Are you sure you want to delete this meeting? This cannot be undone.')) return;
+      try {
+        const response = await fetch('/meetings/' + id, { method: 'DELETE', credentials: 'include' });
+        if (!response.ok) throw new Error('Failed to delete');
+        allMeetings = allMeetings.filter(m => m.id !== id);
+        renderMeetings();
+      } catch (error) {
+        alert('Failed to delete: ' + error.message);
+      }
+    }
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.filter;
+        renderMeetings();
+      });
+    });
+    fetchMeetings();
+    setInterval(fetchMeetings, 5000);
+  </script>
+</body>
+</html>
+    """
+    
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(meetings.router)

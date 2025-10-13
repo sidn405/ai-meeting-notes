@@ -20,6 +20,12 @@ router = APIRouter(
     dependencies=[Depends(require_auth)],
 )
 
+def detect_language(audio_path: str) -> str:
+    """Auto-detect language if not specified"""
+    # If using AssemblyAI, they support auto-detection
+    # Just pass language=None or omit it
+    return None  # Let AssemblyAI auto-detect
+
 def _truthy(v) -> bool:
     """Helper to check if form value is truthy"""
     if v is None:
@@ -38,18 +44,28 @@ async def upload_meeting(
     model_size: str | None = Form(None),
     device: str | None = Form(None),
     compute_type: str | None = Form(None),
-    license_info: tuple = Depends(require_license),  # CHANGED: Use license dependency
+    license_info: tuple = Depends(require_license),
     db = Depends(get_session),
 ):
     """Upload audio/video file and queue for processing"""
-    license, tier_config = license_info  # Unpack license info
+    license, tier_config = license_info
+    
+    # ADDED: Handle empty string for auto-detect
+    if language == "":
+        language = None  # Triggers auto-detection in transcription
+    
+    # ADDED: Clean up hints (remove extra whitespace, handle empty)
+    if hints:
+        hints = hints.strip()
+        if not hints:
+            hints = None
     
     # Validate file type
     ext = Path(file.filename).suffix.lower()
     if ext not in {".mp3", ".m4a", ".wav", ".mp4"}:
         raise HTTPException(status_code=400, detail="Unsupported file type. Allowed: .mp3, .m4a, .wav, .mp4")
 
-    # CHANGED: Read file and validate size based on license tier
+    # Read file and validate size based on license tier
     file_content = await file.read()
     file_size = len(file_content)
     
@@ -80,15 +96,16 @@ async def upload_meeting(
     background_tasks.add_task(
         process_meeting,
         mid,
-        language=language,
+        language=language,  # Now properly None for auto-detect
         hints=hints
     )
     
     return {
         "id": mid, 
         "status": "queued",
-        "tier": license.tier,  # ✅ Just use license.tier directly
-        "file_size_mb": round(file_size / (1024 * 1024), 2)
+        "tier": license.tier,
+        "file_size_mb": round(file_size / (1024 * 1024), 2),
+        "language": language or "auto-detect",  # Show what was selected
     }
 
 
@@ -102,11 +119,17 @@ async def upload_meeting_sync(
     model_size: str | None = Form(None),
     device: str | None = Form(None),
     compute_type: str | None = Form(None),
-    license_info: tuple = Depends(require_license),  # CHANGED: Add license check
+    license_info: tuple = Depends(require_license),
     db = Depends(get_session),
 ):
     """Upload and process immediately (blocks until complete)"""
     license, tier_config = license_info
+    
+    # ADDED: Handle auto-detect
+    if language == "":
+        language = None
+    if hints:
+        hints = hints.strip() or None
     
     ext = Path(file.filename).suffix.lower()
     if ext not in {".mp3", ".m4a", ".wav", ".mp4"}:
@@ -141,7 +164,6 @@ async def upload_meeting_sync(
         if not m:
             raise HTTPException(404, "Not found")
         return {"id": m.id, "status": m.status}
-
 
 @router.post("/from-text")
 async def create_from_text(
@@ -180,7 +202,6 @@ async def create_from_text(
     with get_session() as s:
         m = s.get(Meeting, mid)
         return {"id": m.id, "status": m.status}
-
 
 @router.post("/from-text-sync")
 async def create_from_text_sync(

@@ -310,12 +310,15 @@ def upload_test(request: Request):
     <title>AI Meeting Notes – Test</title>
     <style>
       body{{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:40px;max-width:960px}}
-      input,textarea{{width:100%;padding:8px}} label{{display:block;margin:10px 0 4px}}
+      input,textarea,select{{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px}}
+      label{{display:block;margin:10px 0 4px;font-weight:500;color:#374151}}
       .row{{display:grid;grid-template-columns:1fr 1fr;gap:16px}}
-      .box{{padding:16px;border:1px solid #ddd;border-radius:10px;margin-bottom:28px}}
-      button{{padding:10px 16px;border-radius:10px;background:#111;color:#fff;border:none;cursor:pointer}}
+      .box{{padding:16px;border:1px solid #ddd;border-radius:10px;margin-bottom:28px;background:white}}
+      button{{padding:10px 16px;border-radius:10px;background:#111;color:#fff;border:none;cursor:pointer;font-weight:500}}
+      button:hover{{background:#333}}
       small{{color:#555}}
-      .muted{{color:#555}}
+      .muted{{color:#555;font-size:14px}}
+      .feature-badge{{display:inline-block;background:#e0e7ff;color:#3730a3;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:600;margin-bottom:8px}}
       
       /* License Widget Styles */
       .license-widget {{
@@ -503,9 +506,9 @@ def upload_test(request: Request):
       }});
     </script>
     </head><body>
-    <div class="titlebar">
-      <h1>AI Meeting Notes – Test</h1>
-      <button><a class="btn btn-secondary" href="/meetings" id="meetingsBtn">Meetings</a></button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+      <h1 style="margin:0;">AI Meeting Notes – Test</h1>
+      <button onclick="window.location.href='/meetings'">View All Meetings</button>
     </div>
 
     {auth_section}
@@ -516,54 +519,94 @@ def upload_test(request: Request):
     </div>
 
     <div class="box">
-      <h2>From Transcript (No Audio)</h2>
-      <p class="muted">This endpoint is protected; after login your browser will include the cookie automatically.</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h2 style="margin:0;">From Transcript (No Audio)</h2>
+        <span class="feature-badge">🎯 AI-Powered</span>
+      </div>
+      <p class="muted" style="margin-bottom:16px;">This endpoint is protected; after login your browser will include the cookie automatically.</p>
       <form id="textForm">
         <label>Title</label>
-        <input name="title" required />
+        <input name="title" required placeholder="e.g., Weekly Team Standup" />
         <label>Transcript</label>
         <textarea name="transcript" rows="10" placeholder="Paste transcript here…" required></textarea>
         <label>Email results to (optional)</label>
-        <input type="email" name="email_to" />
+        <input type="email" name="email_to" placeholder="you@company.com" />
         <br/>
         <button type="submit">Summarize & Show Progress</button>
       </form>
     </div>
 
     <div class="box">
-      <h2>Upload Meeting (Audio/Video)</h2>
-      <p class="muted">On Railway we recommend cloud ASR (AssemblyAI); no ffmpeg needed in the container.</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h2 style="margin:0;">Upload Meeting (Audio/Video)</h2>
+        <div>
+          <span class="feature-badge">🎯 AI-Powered</span>
+          <span class="feature-badge">🌍 Multi-Language</span>
+        </div>
+      </div>
+      <p class="muted" style="margin-bottom:16px;">Upload audio or video files for AI transcription and summarization.</p>
       <form id="uploadForm" enctype="multipart/form-data">
         <div class="row">
           <div>
             <label>Title</label>
-            <input name="title" required />
+            <input name="title" required placeholder="e.g., Sales Call with Acme Corp" />
           </div>
           <div>
             <label>Email results to (optional)</label>
-            <input type="email" name="email_to" />
+            <input type="email" name="email_to" placeholder="you@company.com" />
           </div>
         </div>
 
-        <div class="row">
+        <div class="row" style="margin-top:12px;">
           <div>
-            <label>Language (e.g., <code>en</code>)</label>
-            <input name="language" value="en" />
+            <label>Language 🌍</label>
+            <select name="language" id="languageSelect">
+              <option value="">Auto-detect</option>
+              <option value="en" selected>English</option>
+              <option value="es">Spanish (Español)</option>
+              <option value="fr">French (Français)</option>
+              <option value="de">German (Deutsch)</option>
+              <option value="it">Italian (Italiano)</option>
+              <option value="pt">Portuguese (Português)</option>
+              <option value="nl">Dutch (Nederlands)</option>
+              <option value="pl">Polish (Polski)</option>
+              <option value="ru">Russian (Русский)</option>
+              <option value="ja">Japanese (日本語)</option>
+              <option value="zh">Chinese (中文)</option>
+              <option value="ko">Korean (한국어)</option>
+              <option value="ar">Arabic (العربية)</option>
+              <option value="hi">Hindi (हिन्दी)</option>
+              <option value="tr">Turkish (Türkçe)</option>
+              <option value="sv">Swedish (Svenska)</option>
+              <option value="da">Danish (Dansk)</option>
+              <option value="no">Norwegian (Norsk)</option>
+              <option value="fi">Finnish (Suomi)</option>
+            </select>
           </div>
           <div>
-            <label>Hints / Terminology (comma or newline separated)</label>
-            <input name="hints" placeholder="Alice, Bob, OKR, churn, Salesforce, Zendesk" />
+            <label>Hints / Terminology (optional)</label>
+            <input name="hints" placeholder="e.g., Alice, Bob, OKR, Salesforce, Zendesk" />
+            <small style="display:block;margin-top:4px;color:#6b7280;">Comma-separated names, acronyms, or jargon</small>
           </div>
         </div>
 
-        <label>Audio/Video file (.mp3/.m4a/.wav/.mp4)</label>
+        <label style="margin-top:12px;">Audio/Video file (.mp3/.m4a/.wav/.mp4)</label>
         <input type="file" name="file" accept="audio/*,video/mp4" required />
         <br/><br/>
-        <button type="submit">Upload & Show Progress</button>
+        <button type="submit">🚀 Upload & Process</button>
       </form>
     </div>
 
-    <p class="muted">Tip: If you're testing on localhost (http), set <code>COOKIE_SECURE=0</code>. On Railway (https), keep <code>COOKIE_SECURE=1</code>.</p>
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;padding:16px;border-radius:8px;margin-top:20px;">
+      <h3 style="margin:0 0 8px 0;font-size:16px;color:#374151;">✨ Features Available:</h3>
+      <ul style="margin:0;padding-left:20px;color:#6b7280;font-size:14px;">
+        <li>AI-powered transcription using AssemblyAI/Whisper</li>
+        <li>Support for 19+ languages with auto-detection</li>
+        <li>Custom terminology recognition for industry-specific terms</li>
+        <li>Automatic summarization with key decisions and action items</li>
+        <li>Email delivery of professional meeting summaries</li>
+      </ul>
+    </div>
     </body></html>
     """
 @app.get("/progress", response_class=HTMLResponse)
