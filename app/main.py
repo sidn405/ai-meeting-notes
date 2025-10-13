@@ -2092,67 +2092,624 @@ async function upload() {
 </body></html>
     """
     
+# Replace the _page() function and all info page routes in main.py
+
+def _page(title: str, body_html: str) -> HTMLResponse:
+    """Modern styled page template matching homepage"""
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{title} – AI Meeting Notes</title>
+  <style>
+    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f7fafc;
+      color: #1a202c;
+      line-height: 1.7;
+    }}
+    
+    /* Header */
+    header {{
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      padding: 20px 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      margin-bottom: 40px;
+    }}
+    
+    nav {{
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }}
+    
+    .logo {{
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-decoration: none;
+    }}
+    
+    .back-btn {{
+      background: #e5e7eb;
+      color: #374151;
+      padding: 10px 20px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.2s;
+    }}
+    
+    .back-btn:hover {{
+      background: #d1d5db;
+      transform: translateY(-1px);
+    }}
+    
+    /* Content */
+    .container {{
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 20px 80px;
+    }}
+    
+    .page-header {{
+      text-align: center;
+      margin-bottom: 48px;
+    }}
+    
+    h1 {{
+      font-size: 42px;
+      color: #1a202c;
+      margin-bottom: 12px;
+    }}
+    
+    .subtitle {{
+      color: #718096;
+      font-size: 18px;
+    }}
+    
+    .content-card {{
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }}
+    
+    .content-card h2 {{
+      font-size: 28px;
+      color: #1a202c;
+      margin: 32px 0 16px 0;
+    }}
+    
+    .content-card h2:first-child {{
+      margin-top: 0;
+    }}
+    
+    .content-card h3 {{
+      font-size: 22px;
+      color: #2d3748;
+      margin: 24px 0 12px 0;
+    }}
+    
+    .content-card p {{
+      color: #4a5568;
+      margin-bottom: 16px;
+      line-height: 1.8;
+    }}
+    
+    .content-card ul, .content-card ol {{
+      margin: 16px 0;
+      padding-left: 24px;
+      color: #4a5568;
+    }}
+    
+    .content-card li {{
+      margin-bottom: 10px;
+      line-height: 1.7;
+    }}
+    
+    .content-card a {{
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }}
+    
+    .content-card a:hover {{
+      text-decoration: underline;
+    }}
+    
+    .content-card strong {{
+      color: #1a202c;
+      font-weight: 700;
+    }}
+    
+    .highlight-box {{
+      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+      border-left: 4px solid #667eea;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 24px 0;
+    }}
+    
+    .contact-box {{
+      background: #f7fafc;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 24px;
+      margin: 32px 0;
+    }}
+    
+    .contact-box h3 {{
+      margin: 0 0 16px 0;
+      color: #1a202c;
+    }}
+    
+    .contact-item {{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 12px 0;
+      color: #4a5568;
+    }}
+    
+    .contact-item strong {{
+      min-width: 100px;
+      color: #2d3748;
+    }}
+    
+    @media (max-width: 768px) {{
+      h1 {{ font-size: 32px; }}
+      .content-card {{ padding: 24px; }}
+    }}
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/" class="logo">🎙️ AI Meeting Notes</a>
+      <a href="/" class="back-btn">← Back to Home</a>
+    </nav>
+  </header>
+  
+  <div class="container">
+    <div class="page-header">
+      <h1>{title}</h1>
+    </div>
+    <div class="content-card">
+      {body_html}
+    </div>
+  </div>
+</body>
+</html>"""
+    return HTMLResponse(html, media_type="text/html; charset=utf-8")
+
+
+# Support Page
 @app.get("/support", response_class=HTMLResponse)
 def support_page():
     body = """
-    <p>Need help? We’re here.</p>
+    <p>We're here to help! Whether you have questions about activation, uploads, or features, our support team is ready to assist.</p>
+    
+    <div class="contact-box">
+      <h3>📧 Contact Us</h3>
+      <div class="contact-item">
+        <strong>Email:</strong>
+        <a href="mailto:support@yourdomain.com">support@yourdomain.com</a>
+      </div>
+      <div class="contact-item">
+        <strong>Response:</strong>
+        <span>Within 24 hours on business days</span>
+      </div>
+    </div>
+    
+    <h2>Frequently Asked Questions</h2>
+    
+    <h3>How do I activate my license?</h3>
+    <p>After purchasing, you'll receive a license key via email. Go to <a href="/activate">/activate</a>, enter your key, and you're ready to start uploading meetings!</p>
+    
+    <h3>What file formats are supported?</h3>
+    <p>We support .mp3, .m4a, .wav for audio, and .mp4 for video files. Maximum file size depends on your tier (50MB for Starter, 200MB for Professional, 500MB for Business).</p>
+    
+    <h3>How accurate is the transcription?</h3>
+    <p>Our AI-powered transcription uses state-of-the-art models (AssemblyAI/Whisper) with 90%+ accuracy. You can improve accuracy by providing custom terminology and hints relevant to your industry.</p>
+    
+    <h3>Can I edit transcripts after generation?</h3>
+    <p>Currently, transcripts are delivered as-is from our AI. You can download them and edit manually. We're working on an inline editor for future releases.</p>
+    
+    <h3>What languages are supported?</h3>
+    <p>We support 19+ languages including English, Spanish, French, German, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, Korean, Arabic, Hindi, Turkish, and more. Auto-detection is also available.</p>
+    
+    <h3>How does email delivery work?</h3>
+    <p>When you provide an email address during upload, we'll automatically send a professionally formatted summary once processing completes. You can also manually send summaries from the progress page.</p>
+    
+    <h3>What if my meeting fails to process?</h3>
+    <p>Check your <a href="/meetings">meeting history</a>. Failed meetings show an error message. You can retry processing with one click. If issues persist, contact support with the meeting ID.</p>
+    
+    <div class="highlight-box">
+      <strong>💡 Pro Tip:</strong> For best results, use high-quality audio recordings with minimal background noise. Provide custom terminology for technical terms or names specific to your business.
+    </div>
+    
+    <h2>Response Times</h2>
     <ul>
-      <li>Email: <a href="mailto:support@yourdomain.com">support@yourdomain.com</a></li>
-      <li>Docs: <a href="/upload-test">Getting Started</a></li>
-      <li>FAQ: Activation, uploads, email delivery.</li>
+      <li><strong>Starter Plan:</strong> 24-48 hours response time</li>
+      <li><strong>Professional Plan:</strong> 12-24 hours response time</li>
+      <li><strong>Business Plan:</strong> Priority support with 4-8 hours response time</li>
     </ul>
-    <h3>Response Times</h3>
-    <p>Mon–Fri, 9am–5pm (UTC-5). Priority support for Business tier.</p>
+    
+    <p>Business hours: Monday–Friday, 9am–5pm EST</p>
     """
-    return _page("Contact Support", body)
+    return _page("Support & Help", body)
 
+
+# Privacy Policy
 @app.get("/privacy", response_class=HTMLResponse)
 def privacy_page():
     body = """
-    <p>We collect only what’s needed to provide the service: account email, license tier, usage metadata (counts/limits), and files you upload for transcription.</p>
-    <p><strong>Data use:</strong> Processing transcripts/summaries, email delivery, reliability improvements. We do not sell personal data.</p>
-    <p><strong>Retention:</strong> Uploads may be auto-deleted after processing (configurable); logs retained for security/compliance.</p>
-    <p><strong>Security:</strong> TLS in transit, least-privilege access, audit logging.</p>
-    <p>Questions: <a href="mailto:privacy@yourdomain.com">privacy@yourdomain.com</a></p>
+    <p class="subtitle">Last updated: January 2025</p>
+    
+    <h2>Information We Collect</h2>
+    <p>We collect only what's necessary to provide the service:</p>
+    <ul>
+      <li><strong>Account Information:</strong> Email address, license tier, and activation date</li>
+      <li><strong>Usage Data:</strong> Meeting counts, file sizes, processing timestamps</li>
+      <li><strong>Content:</strong> Audio/video files and transcripts you upload</li>
+      <li><strong>Technical Data:</strong> IP address, browser type, device info for security and reliability</li>
+    </ul>
+    
+    <h2>How We Use Your Information</h2>
+    <p>Your data is used exclusively to:</p>
+    <ul>
+      <li>Process transcriptions and generate meeting summaries</li>
+      <li>Send email notifications with your meeting summaries</li>
+      <li>Enforce license limits and prevent abuse</li>
+      <li>Improve service reliability and performance</li>
+      <li>Provide customer support</li>
+    </ul>
+    
+    <div class="highlight-box">
+      <strong>🔒 We never sell your data.</strong> Your meeting content and personal information are never shared with third parties for marketing or advertising purposes.
+    </div>
+    
+    <h2>Data Storage & Security</h2>
+    <ul>
+      <li><strong>Encryption:</strong> All data transmitted to our servers uses TLS/SSL encryption</li>
+      <li><strong>Storage:</strong> Files are stored securely with access controls and encryption at rest</li>
+      <li><strong>Retention:</strong> Uploaded files may be deleted after processing (configurable). Transcripts and summaries are retained until you delete them</li>
+      <li><strong>Backups:</strong> Regular backups for disaster recovery, retained for 30 days</li>
+    </ul>
+    
+    <h2>Third-Party Services</h2>
+    <p>We use trusted third-party services to provide our features:</p>
+    <ul>
+      <li><strong>AssemblyAI:</strong> For audio transcription (subject to their privacy policy)</li>
+      <li><strong>OpenAI:</strong> For AI summarization (subject to their privacy policy)</li>
+      <li><strong>Resend:</strong> For email delivery (subject to their privacy policy)</li>
+    </ul>
+    
+    <h2>Your Rights</h2>
+    <p>You have the right to:</p>
+    <ul>
+      <li>Access all your data</li>
+      <li>Request data deletion</li>
+      <li>Export your transcripts and summaries</li>
+      <li>Opt-out of email communications</li>
+      <li>Request correction of inaccurate information</li>
+    </ul>
+    
+    <h2>GDPR & CCPA Compliance</h2>
+    <p>We comply with GDPR (European Union) and CCPA (California) data protection requirements. If you're a resident of these jurisdictions, you have additional rights including data portability and the right to be forgotten.</p>
+    
+    <h2>Cookies</h2>
+    <p>We use minimal cookies for:</p>
+    <ul>
+      <li>Authentication (secure HttpOnly cookies)</li>
+      <li>Session management</li>
+      <li>Remembering your preferences</li>
+    </ul>
+    
+    <h2>Changes to This Policy</h2>
+    <p>We may update this policy occasionally. Significant changes will be communicated via email. Continued use after changes constitutes acceptance.</p>
+    
+    <div class="contact-box">
+      <h3>Questions About Privacy?</h3>
+      <p>Contact our Data Protection Officer: <a href="mailto:privacy@yourdomain.com">privacy@yourdomain.com</a></p>
+    </div>
     """
     return _page("Privacy Policy", body)
 
+
+# Terms of Service
 @app.get("/terms", response_class=HTMLResponse)
 def terms_page():
     body = """
-    <p>By using AI Meeting Notes you agree to: (1) lawful use; (2) no infringement in uploaded content; (3) reasonable rate limits.</p>
-    <p><strong>License:</strong> Non-transferable, single-user unless stated otherwise.</p>
-    <p><strong>Availability:</strong> Provided “as is”. We strive for high uptime but do not guarantee uninterrupted access.</p>
-    <p><strong>Liability:</strong> To the maximum extent permitted by law, our liability is limited to the amount you paid.</p>
+    <p class="subtitle">Last updated: January 2025</p>
+    
+    <h2>Agreement to Terms</h2>
+    <p>By accessing and using AI Meeting Notes, you agree to be bound by these Terms of Service. If you don't agree, please do not use the service.</p>
+    
+    <h2>License Grant</h2>
+    <p>Upon purchase and activation, we grant you a <strong>non-exclusive, non-transferable, revocable license</strong> to use AI Meeting Notes according to your purchased tier.</p>
+    
+    <h3>License Types:</h3>
+    <ul>
+      <li><strong>Starter:</strong> Single user, 10 meetings/month</li>
+      <li><strong>Professional:</strong> Single user, 50 meetings/month, priority processing</li>
+      <li><strong>Business:</strong> Single user or team (contact for multi-user), unlimited meetings</li>
+    </ul>
+    
+    <div class="highlight-box">
+      <strong>⚠️ Important:</strong> Licenses are non-transferable. Each license is tied to the email address used at purchase. Account sharing violates these terms and may result in license revocation.
+    </div>
+    
+    <h2>Acceptable Use</h2>
+    <p>You agree to use the service only for lawful purposes. You must NOT:</p>
+    <ul>
+      <li>Upload content you don't have rights to</li>
+      <li>Use the service to process illegal content</li>
+      <li>Attempt to reverse engineer, decompile, or hack the service</li>
+      <li>Abuse rate limits or attempt to bypass restrictions</li>
+      <li>Resell or redistribute our service</li>
+      <li>Share your license key with others</li>
+    </ul>
+    
+    <h2>Service Availability</h2>
+    <p>We strive for 99.9% uptime but the service is provided <strong>"as is"</strong> without guarantees of:</p>
+    <ul>
+      <li>Uninterrupted access</li>
+      <li>Error-free operation</li>
+      <li>Complete data accuracy</li>
+    </ul>
+    <p>We reserve the right to perform maintenance, updates, and improvements that may temporarily affect availability.</p>
+    
+    <h2>Intellectual Property</h2>
+    <p><strong>Your Content:</strong> You retain all rights to content you upload. We only use it to provide the service (transcription, summarization).</p>
+    <p><strong>Our Service:</strong> All aspects of AI Meeting Notes (code, design, algorithms, branding) are our intellectual property.</p>
+    
+    <h2>Limitation of Liability</h2>
+    <p>To the maximum extent permitted by law:</p>
+    <ul>
+      <li>Our total liability is limited to the amount you paid for your license</li>
+      <li>We're not liable for indirect, incidental, or consequential damages</li>
+      <li>We're not responsible for third-party service failures (AssemblyAI, OpenAI, Resend)</li>
+    </ul>
+    
+    <h2>Account Termination</h2>
+    <p>We may suspend or terminate your access if you:</p>
+    <ul>
+      <li>Violate these terms</li>
+      <li>Engage in fraudulent activity</li>
+      <li>Abuse the service or harm other users</li>
+      <li>Fail to pay (if subscription-based features are added)</li>
+    </ul>
+    
+    <h2>Changes to Terms</h2>
+    <p>We may modify these terms with notice. Continued use after changes means acceptance. If you don't agree to new terms, stop using the service.</p>
+    
+    <h2>Governing Law</h2>
+    <p>These terms are governed by the laws of [Your Jurisdiction]. Disputes will be resolved in courts located in [Your Location].</p>
+    
+    <div class="contact-box">
+      <h3>Questions About Terms?</h3>
+      <p>Contact legal: <a href="mailto:legal@yourdomain.com">legal@yourdomain.com</a></p>
+    </div>
     """
     return _page("Terms of Service", body)
 
+
+# Refund Policy
 @app.get("/refunds", response_class=HTMLResponse)
 def refunds_page():
     body = """
-    <p><strong>All sales are final for digital products.</strong> If you were charged twice or received a defective/empty download, contact us within 7 days and we’ll correct access or issue a credit at our discretion.</p>
-    <p>Billing: <a href="mailto:billing@yourdomain.com">billing@yourdomain.com</a></p>
+    <h2>One-Time Purchase Policy</h2>
+    <p>AI Meeting Notes is a digital product sold as a <strong>one-time lifetime license</strong>. All sales are final.</p>
+    
+    <h2>When Refunds Are Available</h2>
+    <p>We offer refunds only in these specific circumstances:</p>
+    
+    <h3>✅ Eligible for Refund:</h3>
+    <ul>
+      <li><strong>Duplicate Purchase:</strong> If you were accidentally charged twice for the same license</li>
+      <li><strong>Technical Issues:</strong> If the service is completely non-functional and we cannot resolve the issue within 14 days</li>
+      <li><strong>License Activation Failure:</strong> If your license key doesn't activate and we cannot provide a working replacement</li>
+      <li><strong>Major Service Outage:</strong> If the service is down for more than 7 consecutive days</li>
+    </ul>
+    
+    <h3>❌ Not Eligible for Refund:</h3>
+    <ul>
+      <li>Change of mind after purchase</li>
+      <li>Purchased wrong tier (but we can help you upgrade)</li>
+      <li>Didn't use the service</li>
+      <li>Minor bugs or temporary service disruptions</li>
+      <li>Dissatisfaction with AI accuracy (which depends on audio quality)</li>
+      <li>After 30 days from purchase</li>
+    </ul>
+    
+    <div class="highlight-box">
+      <strong>💡 Before Purchasing:</strong> We recommend testing with a small sample meeting first. If you have questions about features or capabilities, contact support before buying.
+    </div>
+    
+    <h2>Refund Process</h2>
+    <p>If you believe you qualify for a refund:</p>
+    <ol>
+      <li>Contact <a href="mailto:billing@yourdomain.com">billing@yourdomain.com</a> within 30 days of purchase</li>
+      <li>Provide your order number and license key</li>
+      <li>Explain the issue in detail</li>
+      <li>We'll investigate and respond within 3-5 business days</li>
+    </ol>
+    
+    <p>Approved refunds are processed back to the original payment method within 7-10 business days.</p>
+    
+    <h2>Alternative Solutions</h2>
+    <p>Before requesting a refund, consider these options:</p>
+    <ul>
+      <li><strong>Technical Support:</strong> Most issues can be resolved with help from our team</li>
+      <li><strong>Tier Upgrade:</strong> If you need more features, we can upgrade your license (pay the difference)</li>
+      <li><strong>Account Credit:</strong> In some cases, we may offer account credits instead of refunds</li>
+    </ul>
+    
+    <h2>Chargebacks</h2>
+    <p><strong>Please contact us before filing a chargeback.</strong> Chargebacks cost us significant fees and damage merchant relationships. We're committed to resolving issues fairly and will work with you to find a solution.</p>
+    
+    <p>If you file a chargeback without contacting us first, your license will be immediately revoked and you may be banned from future purchases.</p>
+    
+    <div class="contact-box">
+      <h3>Billing Questions?</h3>
+      <p>Email: <a href="mailto:billing@yourdomain.com">billing@yourdomain.com</a></p>
+      <p>Include your order number for faster processing.</p>
+    </div>
     """
     return _page("Refund Policy", body)
 
+
+# About Us
 @app.get("/about", response_class=HTMLResponse)
 def about_page():
     body = """
-    <p>AI Meeting Notes helps professionals capture transcripts and actionable summaries from meetings in minutes. Built by a small team focused on privacy, accuracy, and speed.</p>
-    <p>We support 19+ languages and deliver polished email summaries.</p>
+    <h2>Our Mission</h2>
+    <p>AI Meeting Notes was created to solve a universal problem: <strong>important details get lost in meetings</strong>. Whether it's a critical client request, a key decision, or an action item, manual note-taking is error-prone and distracting.</p>
+    
+    <p>We believe professionals should be <strong>fully present in conversations</strong>, not frantically scribbling notes. Our AI-powered platform captures every detail automatically, letting you focus on what matters.</p>
+    
+    <h2>What We Do</h2>
+    <p>AI Meeting Notes provides:</p>
+    <ul>
+      <li><strong>Accurate Transcriptions:</strong> State-of-the-art AI converts audio/video to text in minutes</li>
+      <li><strong>Smart Summaries:</strong> Automatically extract executive summaries, key decisions, and action items</li>
+      <li><strong>Multi-Language Support:</strong> Process meetings in 19+ languages with custom terminology</li>
+      <li><strong>Professional Delivery:</strong> Beautiful email summaries that look great in your inbox</li>
+    </ul>
+    
+    <div class="highlight-box">
+      <strong>🎯 Our Promise:</strong> Privacy-first, accurate, and fast. We never share your data and process meetings in minutes, not hours.
+    </div>
+    
+    <h2>Who We Serve</h2>
+    <p>Our platform is perfect for:</p>
+    <ul>
+      <li><strong>Sales Teams:</strong> Never miss a client request or follow-up action</li>
+      <li><strong>Consultants:</strong> Document client meetings professionally</li>
+      <li><strong>Startups:</strong> Keep your team aligned with clear meeting notes</li>
+      <li><strong>Researchers:</strong> Transcribe interviews and focus groups accurately</li>
+    </ul>
+    
+    <h2>Why Choose Us?</h2>
+    <ul>
+      <li><strong>One-Time Purchase:</strong> No subscriptions, no recurring charges. Buy once, use forever.</li>
+      <li><strong>Privacy-First:</strong> Your data is encrypted and never sold. We're GDPR & CCPA compliant.</li>
+      <li><strong>Fast Processing:</strong> Get results in minutes with our optimized pipeline</li>
+      <li><strong>Great Support:</strong> Real humans ready to help with any questions</li>
+    </ul>
+    
+    <h2>The Technology</h2>
+    <p>We use cutting-edge AI models from trusted providers:</p>
+    <ul>
+      <li><strong>AssemblyAI & Whisper:</strong> Industry-leading speech-to-text with 90%+ accuracy</li>
+      <li><strong>OpenAI GPT-4:</strong> Advanced language models for intelligent summarization</li>
+      <li><strong>Custom Pipeline:</strong> Optimized processing for speed and reliability</li>
+    </ul>
+    
+    <h2>Our Team</h2>
+    <p>We're a small, focused team of engineers and designers passionate about productivity and AI. We built AI Meeting Notes because we needed it ourselves—and we think you'll love it too.</p>
+    
+    <div class="contact-box">
+      <h3>Get in Touch</h3>
+      <p>Questions or feedback? We'd love to hear from you!</p>
+      <p>Email: <a href="mailto:hello@yourdomain.com">hello@yourdomain.com</a></p>
+    </div>
     """
     return _page("About Us", body)
 
+
+# Contact
 @app.get("/contact", response_class=HTMLResponse)
 def company_contact_page():
     body = """
-    <p>General: <a href="mailto:hello@yourdomain.com">hello@yourdomain.com</a></p>
-    <p>Press: <a href="mailto:press@yourdomain.com">press@yourdomain.com</a></p>
-    <p>Partnerships: <a href="mailto:partners@yourdomain.com">partners@yourdomain.com</a></p>
+    <h2>We're Here to Help</h2>
+    <p>Have a question, suggestion, or partnership inquiry? Choose the best contact method below:</p>
+    
+    <div class="contact-box">
+      <h3>📧 General Inquiries</h3>
+      <p>For general questions about our product or company:</p>
+      <p><a href="mailto:hello@yourdomain.com">hello@yourdomain.com</a></p>
+    </div>
+    
+    <div class="contact-box">
+      <h3>🛠️ Technical Support</h3>
+      <p>Need help with activation, uploads, or troubleshooting?</p>
+      <p><a href="mailto:support@yourdomain.com">support@yourdomain.com</a></p>
+      <p><a href="/support">Visit Support Center →</a></p>
+    </div>
+    
+    <div class="contact-box">
+      <h3>💳 Billing & Licensing</h3>
+      <p>Questions about purchases, refunds, or upgrades?</p>
+      <p><a href="mailto:billing@yourdomain.com">billing@yourdomain.com</a></p>
+    </div>
+    
+    <div class="contact-box">
+      <h3>🤝 Partnerships</h3>
+      <p>Interested in partnerships, integrations, or enterprise deals?</p>
+      <p><a href="mailto:partners@yourdomain.com">partners@yourdomain.com</a></p>
+    </div>
+    
+    <div class="contact-box">
+      <h3>📰 Press & Media</h3>
+      <p>Media inquiries, interviews, or press releases:</p>
+      <p><a href="mailto:press@yourdomain.com">press@yourdomain.com</a></p>
+    </div>
+    
+    <h2>Office Hours</h2>
+    <p><strong>Monday – Friday:</strong> 9:00 AM – 5:00 PM EST<br>
+    <strong>Weekend:</strong> Limited support (emergency issues only)</p>
+    
+    <h2>Social Media</h2>
+    <p>Follow us for product updates, tips, and announcements:</p>
+    <ul>
+      <li><strong>Twitter:</strong> @aimeetingnotes</li>
+      <li><strong>LinkedIn:</strong> AI Meeting Notes</li>
+    </ul>
+    
+    <div class="highlight-box">
+      <strong>💡 Quick Tip:</strong> For faster support, include your license key and a detailed description of your issue when contacting us.
+    </div>
     """
-    return _page("Contact", body)
+    return _page("Contact Us", body)
 
+
+# Blog (Placeholder)
 @app.get("/blog", response_class=HTMLResponse)
 def blog_stub():
-    body = "<p>Blog coming soon: productivity tips, AI note-taking, product updates.</p>"
+    body = """
+    <h2>Coming Soon</h2>
+    <p>We're working on a blog with:</p>
+    <ul>
+      <li><strong>Productivity Tips:</strong> Best practices for meeting management</li>
+      <li><strong>AI Insights:</strong> How our technology works and future improvements</li>
+      <li><strong>Product Updates:</strong> New features and announcements</li>
+      <li><strong>Use Cases:</strong> Real stories from our users</li>
+    </ul>
+    
+    <div class="highlight-box">
+      <strong>📬 Stay Updated:</strong> Want to be notified when we launch the blog? Email <a href="mailto:hello@yourdomain.com">hello@yourdomain.com</a> with "Blog Updates" in the subject.
+    </div>
+    
+    <h2>In the Meantime...</h2>
+    <p>Check out these resources:</p>
+    <ul>
+      <li><a href="/support">Support Center</a> - FAQs and troubleshooting</li>
+      <li><a href="/about">About Us</a> - Learn about our mission and technology</li>
+      <li><a href="/upload-test">Get Started</a> - Try the service now!</li>
+    </ul>
+    """
     return _page("Blog", body)
