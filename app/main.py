@@ -1103,9 +1103,15 @@ Action Items
 def on_startup():
     init_db()
 
-@app.get("/")
-def index():
-    return {"ok": True, "app": "AI Meeting Notes", "routes": ["/health", "/meetings/upload", "/meetings/from-text", "/meetings/{id}"]}
+@app.get("/", response_class=HTMLResponse)
+def homepage():
+    """Main landing page"""
+    html_path = Path("templates/index.html")
+    if html_path.exists():
+        return html_path.read_text(encoding="utf-8")
+    else:
+        # Fallback if file doesn't exist
+        return {"ok": True, "app": "AI Meeting Notes", "message": "Homepage not found"}
 
 @app.get("/meetings", response_class=HTMLResponse)
 def meetings_list_page(request: Request):
