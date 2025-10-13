@@ -2351,6 +2351,376 @@ def support_page():
     """
     return _page("Support & Help", body)
 
+# Add this route to main.py
+
+@app.get("/docs", response_class=HTMLResponse)
+def documentation_page():
+    body = """
+    <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 24px; border-radius: 12px; margin-bottom: 32px;">
+      <h2 style="margin-top: 0;">Welcome to AI Meeting Notes Documentation</h2>
+      <p style="margin-bottom: 0;">Everything you need to know to get the most out of your meeting transcriptions and summaries.</p>
+    </div>
+    
+    <nav style="background: #f7fafc; padding: 20px; border-radius: 12px; margin-bottom: 32px;">
+      <h3 style="margin-top: 0; font-size: 16px; color: #667eea;">Quick Navigation</h3>
+      <ul style="columns: 2; gap: 20px; list-style: none; padding: 0;">
+        <li><a href="#getting-started">Getting Started</a></li>
+        <li><a href="#activation">License Activation</a></li>
+        <li><a href="#uploading">Uploading Meetings</a></li>
+        <li><a href="#transcription">Understanding Transcription</a></li>
+        <li><a href="#summarization">Understanding Summaries</a></li>
+        <li><a href="#languages">Multi-Language Support</a></li>
+        <li><a href="#results">Reading Your Results</a></li>
+        <li><a href="#email">Email Delivery</a></li>
+        <li><a href="#history">Meeting History</a></li>
+        <li><a href="#best-practices">Best Practices</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+        <li><a href="#api">API Access</a></li>
+      </ul>
+    </nav>
+    
+    <h2 id="getting-started">🚀 Getting Started</h2>
+    <p>Welcome! Here's how to get up and running in 3 simple steps:</p>
+    
+    <ol>
+      <li><strong>Purchase a License:</strong> Choose your tier from the <a href="/#pricing">pricing page</a></li>
+      <li><strong>Activate:</strong> Go to <a href="/activate">/activate</a> and enter your license key</li>
+      <li><strong>Upload:</strong> Navigate to <a href="/upload-test">/upload-test</a> and start transcribing!</li>
+    </ol>
+    
+    <div class="highlight-box">
+      <strong>🎬 First Time?</strong> Try uploading a short 2-3 minute meeting first to see how it works!
+    </div>
+    
+    <h2 id="activation">🔑 License Activation</h2>
+    
+    <h3>Step 1: Purchase Your License</h3>
+    <p>Visit our <a href="/#pricing">pricing page</a> and select your tier:</p>
+    <ul>
+      <li><strong>Starter:</strong> $29 one-time – 10 meetings/month, 50MB files</li>
+      <li><strong>Professional:</strong> $79 one-time – 50 meetings/month, 200MB files, priority processing</li>
+      <li><strong>Business:</strong> $149 one-time – Unlimited meetings, 500MB files, API access</li>
+    </ul>
+    
+    <h3>Step 2: Receive Your License Key</h3>
+    <p>After purchase, you'll receive an email with your license key in this format:</p>
+    <p style="font-family: Monaco, monospace; background: #f7fafc; padding: 12px; border-radius: 6px;">STA-XXXX-XXXX-XXXX-XXXX</p>
+    
+    <h3>Step 3: Activate</h3>
+    <ol>
+      <li>Go to <a href="/activate">/activate</a></li>
+      <li>Enter your license key</li>
+      <li>Click "Activate License"</li>
+      <li>You'll be redirected to the upload page!</li>
+    </ol>
+    
+    <div class="highlight-box">
+      <strong>💡 Lost Your Key?</strong> Check your email (including spam folder). Still can't find it? Contact <a href="mailto:support@yourdomain.com">support@yourdomain.com</a>
+    </div>
+    
+    <h2 id="uploading">📤 Uploading Meetings</h2>
+    
+    <h3>Two Ways to Upload</h3>
+    
+    <h4>Option 1: Upload Audio/Video Files</h4>
+    <p>Perfect for recorded meetings, calls, or interviews.</p>
+    <ul>
+      <li><strong>Supported Formats:</strong> .mp3, .m4a, .wav, .mp4</li>
+      <li><strong>File Size Limits:</strong> 50MB (Starter), 200MB (Professional), 500MB (Business)</li>
+      <li><strong>Processing Time:</strong> ~1 minute per 10 minutes of audio</li>
+    </ul>
+    
+    <h4>Option 2: Paste Existing Transcripts</h4>
+    <p>Already have a transcript? Skip transcription and go straight to AI summarization.</p>
+    <ul>
+      <li>No file size limits</li>
+      <li>Instant processing</li>
+      <li>Perfect for manually transcribed meetings</li>
+    </ul>
+    
+    <h3>Required Fields</h3>
+    <ul>
+      <li><strong>Title:</strong> Give your meeting a descriptive name (e.g., "Q4 Planning with Sales Team")</li>
+      <li><strong>File/Transcript:</strong> Upload audio/video OR paste text transcript</li>
+    </ul>
+    
+    <h3>Optional Fields</h3>
+    <ul>
+      <li><strong>Email:</strong> Receive results via email when processing completes</li>
+      <li><strong>Language:</strong> Select from 19+ languages or use auto-detect</li>
+      <li><strong>Hints/Terminology:</strong> Comma-separated custom terms (names, acronyms, jargon)</li>
+    </ul>
+    
+    <h2 id="transcription">🎯 Understanding Transcription</h2>
+    
+    <h3>How It Works</h3>
+    <ol>
+      <li>Your audio is uploaded securely via TLS encryption</li>
+      <li>We use AssemblyAI/Whisper AI for speech-to-text</li>
+      <li>Custom terminology improves accuracy for your industry</li>
+      <li>Transcript is saved and ready for download or summarization</li>
+    </ol>
+    
+    <h3>Expected Accuracy</h3>
+    <ul>
+      <li><strong>High-quality audio:</strong> 90-95% accuracy</li>
+      <li><strong>Standard quality:</strong> 85-90% accuracy</li>
+      <li><strong>Poor quality/background noise:</strong> 70-80% accuracy</li>
+    </ul>
+    
+    <h3>After Transcription</h3>
+    <p>Once transcription completes, you'll see a prompt:</p>
+    <ul>
+      <li><strong>"Generate Summary"</strong> – Run AI analysis for key insights</li>
+      <li><strong>"Maybe Later"</strong> – Keep transcript only, skip summarization</li>
+    </ul>
+    
+    <h2 id="summarization">✨ Understanding Summaries</h2>
+    
+    <h3>What's Included</h3>
+    <p>Our AI-powered summaries extract:</p>
+    
+    <h4>1. Executive Summary</h4>
+    <p>A concise overview of the entire meeting in 2-4 sentences. Perfect for sharing with stakeholders who need the big picture.</p>
+    
+    <h4>2. Key Decisions</h4>
+    <p>Important conclusions or agreements made during the meeting. Examples:</p>
+    <ul>
+      <li>"Approved $50k budget for Q2 marketing campaign"</li>
+      <li>"Decided to postpone product launch to March"</li>
+      <li>"Agreed on weekly check-ins every Monday at 10am"</li>
+    </ul>
+    
+    <h4>3. Action Items</h4>
+    <p>Tasks assigned during the meeting with:</p>
+    <ul>
+      <li><strong>Owner:</strong> Who is responsible</li>
+      <li><strong>Task:</strong> What needs to be done</li>
+      <li><strong>Due Date:</strong> When it's due (if mentioned)</li>
+      <li><strong>Priority:</strong> High, Medium, or Low</li>
+    </ul>
+    
+    <h3>AI Processing</h3>
+    <p>We use OpenAI GPT-4 with specialized prompts to:</p>
+    <ul>
+      <li>Identify the most important information</li>
+      <li>Extract actionable items</li>
+      <li>Organize content logically</li>
+      <li>Stay faithful to the original transcript (no hallucinations)</li>
+    </ul>
+    
+    <h2 id="languages">🌍 Multi-Language Support</h2>
+    
+    <h3>Supported Languages</h3>
+    <p>We support 19+ languages:</p>
+    <ul style="columns: 2; gap: 20px;">
+      <li>English</li>
+      <li>Spanish (Español)</li>
+      <li>French (Français)</li>
+      <li>German (Deutsch)</li>
+      <li>Italian (Italiano)</li>
+      <li>Portuguese (Português)</li>
+      <li>Dutch (Nederlands)</li>
+      <li>Polish (Polski)</li>
+      <li>Russian (Русский)</li>
+      <li>Japanese (日本語)</li>
+      <li>Chinese (中文)</li>
+      <li>Korean (한국어)</li>
+      <li>Arabic (العربية)</li>
+      <li>Hindi (हिन्दी)</li>
+      <li>Turkish (Türkçe)</li>
+      <li>Swedish (Svenska)</li>
+      <li>Danish (Dansk)</li>
+      <li>Norwegian (Norsk)</li>
+      <li>Finnish (Suomi)</li>
+    </ul>
+    
+    <h3>Auto-Detection</h3>
+    <p>Not sure what language your meeting is in? Select "Auto-detect" and our AI will identify it automatically.</p>
+    
+    <h3>Custom Terminology</h3>
+    <p>Improve accuracy by providing industry-specific terms:</p>
+    <ul>
+      <li><strong>Names:</strong> Alice Chen, Robert Martinez, Sarah Johnson</li>
+      <li><strong>Companies:</strong> Salesforce, Zendesk, HubSpot</li>
+      <li><strong>Acronyms:</strong> OKR, KPI, API, CRM, SaaS</li>
+      <li><strong>Jargon:</strong> churn rate, LTV, CAC, MRR</li>
+    </ul>
+    
+    <h2 id="results">📊 Reading Your Results</h2>
+    
+    <h3>Progress Page</h3>
+    <p>After upload, you'll see a real-time progress page showing:</p>
+    <ul>
+      <li><strong>Status:</strong> Queued → Processing → Delivered (or Failed)</li>
+      <li><strong>Progress Bar:</strong> Visual indication of completion</li>
+      <li><strong>Current Step:</strong> What's happening now</li>
+    </ul>
+    
+    <h3>Viewing Results</h3>
+    <p>Once complete, you'll see:</p>
+    <ul>
+      <li><strong>Transcript:</strong> Full text of your meeting (scrollable)</li>
+      <li><strong>Executive Summary:</strong> High-level overview</li>
+      <li><strong>Key Decisions:</strong> Bullet-pointed list</li>
+      <li><strong>Action Items:</strong> Formatted table with owners and priorities</li>
+    </ul>
+    
+    <h3>Download Options</h3>
+    <ul>
+      <li><strong>Download Transcript:</strong> Plain text .txt file</li>
+      <li><strong>Download Summary:</strong> Structured JSON file</li>
+    </ul>
+    
+    <h2 id="email">📧 Email Delivery</h2>
+    
+    <h3>Automatic Email</h3>
+    <p>Add an email address during upload to receive automatic notifications when processing completes.</p>
+    
+    <h3>Manual Email</h3>
+    <p>From the progress page, you can send summaries to any email address anytime.</p>
+    
+    <h3>Email Format</h3>
+    <p>Professional HTML emails include:</p>
+    <ul>
+      <li>Meeting title and date</li>
+      <li>Executive summary</li>
+      <li>Key decisions (formatted list)</li>
+      <li>Action items (formatted table)</li>
+      <li>Download links for full transcript and summary</li>
+    </ul>
+    
+    <h2 id="history">📚 Meeting History</h2>
+    
+    <h3>Viewing Past Meetings</h3>
+    <p>Access all your meetings at <a href="/meetings">/meetings</a>. Features:</p>
+    <ul>
+      <li><strong>Filter by Status:</strong> All, Delivered, Processing, Failed, Queued</li>
+      <li><strong>Search:</strong> Find meetings by title</li>
+      <li><strong>Stats Dashboard:</strong> See total meetings and status breakdown</li>
+      <li><strong>Quick Actions:</strong> View, retry failed meetings, or delete</li>
+    </ul>
+    
+    <h3>Auto-Refresh</h3>
+    <p>The meetings page auto-refreshes every 5 seconds while you have processing meetings.</p>
+    
+    <h2 id="best-practices">💡 Best Practices</h2>
+    
+    <h3>For Best Transcription Quality</h3>
+    <ul>
+      <li>✅ Use high-quality audio (at least 128kbps for mp3)</li>
+      <li>✅ Minimize background noise</li>
+      <li>✅ Use clear, audible speech</li>
+      <li>✅ Avoid overlapping speakers when possible</li>
+      <li>✅ Provide custom terminology for technical terms</li>
+      <li>❌ Don't upload extremely long recordings (over 2 hours)</li>
+      <li>❌ Avoid heavily compressed or distorted audio</li>
+    </ul>
+    
+    <h3>For Best Summaries</h3>
+    <ul>
+      <li>✅ Clear meeting structure helps AI identify sections</li>
+      <li>✅ Explicit decisions ("We decided to...") are easier to extract</li>
+      <li>✅ Action items with owners and deadlines are captured accurately</li>
+      <li>❌ Avoid rambling conversations without clear conclusions</li>
+    </ul>
+    
+    <h3>Organizing Meetings</h3>
+    <ul>
+      <li>Use descriptive titles: "Q4 Budget Review" not "Meeting"</li>
+      <li>Include dates or iteration numbers: "Weekly Standup #47"</li>
+      <li>Use consistent naming for recurring meetings</li>
+    </ul>
+    
+    <h2 id="troubleshooting">🔧 Troubleshooting</h2>
+    
+    <h3>Upload Fails</h3>
+    <p><strong>Problem:</strong> File won't upload</p>
+    <p><strong>Solutions:</strong></p>
+    <ul>
+      <li>Check file size is within your tier limit</li>
+      <li>Verify file format (.mp3, .m4a, .wav, .mp4 only)</li>
+      <li>Try a different browser</li>
+      <li>Check your internet connection</li>
+    </ul>
+    
+    <h3>Transcription Fails</h3>
+    <p><strong>Problem:</strong> Meeting status shows "Failed"</p>
+    <p><strong>Solutions:</strong></p>
+    <ul>
+      <li>Check if audio file is corrupted</li>
+      <li>Ensure audio actually contains speech</li>
+      <li>Try re-uploading with a different language setting</li>
+      <li>Click "Retry" button in meeting history</li>
+      <li>Contact support if issue persists</li>
+    </ul>
+    
+    <h3>Poor Transcription Quality</h3>
+    <p><strong>Problem:</strong> Transcript has many errors</p>
+    <p><strong>Solutions:</strong></p>
+    <ul>
+      <li>Add custom terminology for names and technical terms</li>
+      <li>Specify the correct language (don't rely on auto-detect)</li>
+      <li>Use higher-quality audio source</li>
+      <li>Reduce background noise before uploading</li>
+    </ul>
+    
+    <h3>Email Not Received</h3>
+    <p><strong>Problem:</strong> Didn't get email notification</p>
+    <p><strong>Solutions:</strong></p>
+    <ul>
+      <li>Check spam/junk folder</li>
+      <li>Verify email address was entered correctly</li>
+      <li>Manually send from progress page</li>
+      <li>Whitelist our sender address: no-reply@yourdomain.com</li>
+    </ul>
+    
+    <h3>Quota Exceeded</h3>
+    <p><strong>Problem:</strong> "Monthly limit reached" error</p>
+    <p><strong>Solutions:</strong></p>
+    <ul>
+      <li>Wait until next month (quotas reset monthly)</li>
+      <li>Upgrade to a higher tier</li>
+      <li>Delete old meetings you no longer need</li>
+    </ul>
+    
+    <h2 id="api">🔌 API Access (Business Tier)</h2>
+    
+    <h3>Authentication</h3>
+    <p>Business tier includes API access. Use your license key for authentication:</p>
+    <pre style="background: #f7fafc; padding: 16px; border-radius: 8px; overflow-x: auto;">
+POST /meetings/upload
+Headers:
+  X-API-Key: YOUR-LICENSE-KEY
+  Content-Type: multipart/form-data</pre>
+    
+    <h3>Endpoints</h3>
+    <ul>
+      <li><strong>POST /meetings/upload</strong> - Upload audio/video</li>
+      <li><strong>POST /meetings/from-text</strong> - Submit transcript</li>
+      <li><strong>GET /meetings/{id}</strong> - Get meeting status</li>
+      <li><strong>GET /meetings/{id}/summary</strong> - Get summary JSON</li>
+      <li><strong>GET /meetings/list</strong> - List all meetings</li>
+    </ul>
+    
+    <h3>Testing</h3>
+    <p>Use our <a href="/browser-test">API tester</a> to experiment with API calls directly in your browser.</p>
+    
+    <div class="highlight-box">
+      <strong>📖 Full API Documentation:</strong> Business tier users receive complete API documentation with code examples in Python, JavaScript, and cURL.
+    </div>
+    
+    <h2>Need More Help?</h2>
+    <div class="contact-box">
+      <p><strong>Still have questions?</strong> We're here to help!</p>
+      <ul style="margin: 0; padding-left: 20px;">
+        <li>📧 Email: <a href="mailto:support@yourdomain.com">support@yourdomain.com</a></li>
+        <li>💬 Visit: <a href="/support">Support Center</a></li>
+        <li>📚 Read: <a href="/about">About Us</a></li>
+      </ul>
+    </div>
+    """
+    return _page("Documentation", body)
 
 # Privacy Policy
 @app.get("/privacy", response_class=HTMLResponse)
