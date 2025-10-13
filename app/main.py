@@ -2353,7 +2353,7 @@ def support_page():
 
 # Add this route to main.py
 
-@app.get("/docs", response_class=HTMLResponse)
+@app.get("/documentation", response_class=HTMLResponse)
 def documentation_page():
     body = """
     <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 24px; border-radius: 12px; margin-bottom: 32px;">
