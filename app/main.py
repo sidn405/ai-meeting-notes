@@ -1104,8 +1104,8 @@ def on_startup():
     init_db()
 
 @app.get("/", response_class=HTMLResponse)
-def homepage():
-    """Main landing page"""
+def index():
+    """Homepage - Landing page"""
     html_path = Path("templates/index.html")
     if html_path.exists():
         return html_path.read_text(encoding="utf-8")
