@@ -87,7 +87,7 @@ async def upload_meeting(
     return {
         "id": mid, 
         "status": "queued",
-        "tier": license.tier.value,
+        "tier": license.tier,  # ✅ Just use license.tier directly
         "file_size_mb": round(file_size / (1024 * 1024), 2)
     }
 
