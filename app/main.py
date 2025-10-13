@@ -196,10 +196,26 @@ def activate_page():
 
     input.addEventListener('input', (e) => {
       let value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      if (value.length > 3) {
-        value = value.match(/.{1,4}/g).join('-');
+      
+      // Format: XXX-XXXX-XXXX-XXXX-XXXX (3 chars, then 4 groups of 4)
+      let formatted = '';
+      if (value.length > 0) {
+        formatted = value.substring(0, 3); // First 3 chars
+        if (value.length > 3) {
+          formatted += '-' + value.substring(3, 7); // Next 4
+        }
+        if (value.length > 7) {
+          formatted += '-' + value.substring(7, 11); // Next 4
+        }
+        if (value.length > 11) {
+          formatted += '-' + value.substring(11, 15); // Next 4
+        }
+        if (value.length > 15) {
+          formatted += '-' + value.substring(15, 19); // Last 4
+        }
       }
-      e.target.value = value;
+      
+      e.target.value = formatted;
     });
 
     function showAlert(message, type) {
