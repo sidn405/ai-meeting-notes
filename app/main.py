@@ -21,6 +21,24 @@ app.add_middleware(
 # Include license router
 app.include_router(license.router)
 
+def _page(title: str, body_html: str) -> HTMLResponse:
+    html = f"""<!doctype html><html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title} – AI Meeting Notes</title>
+<style>
+  body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.75;color:#1a202c;background:#f7fafc;margin:0}}
+  .wrap{{max-width:900px;margin:60px auto;padding:0 20px}}
+  h1{{font-size:36px;margin:0 0 10px}}
+  p,li{{color:#4a5568}}
+  a{{color:#667eea}}
+  .card{{background:#fff;border-radius:16px;box-shadow:0 4px 18px rgba(0,0,0,.06);padding:28px;margin-top:20px}}
+</style></head><body>
+<div class="wrap">
+  <h1>{title}</h1>
+  <div class="card">{body_html}</div>
+</div></body></html>"""
+    return HTMLResponse(html, media_type="text/html; charset=utf-8")
+
 @app.get("/activate", response_class=HTMLResponse)
 def activate_page():
     return """
@@ -2019,3 +2037,68 @@ async function upload() {
 </script>
 </body></html>
     """
+    
+@app.get("/support", response_class=HTMLResponse)
+def support_page():
+    body = """
+    <p>Need help? We’re here.</p>
+    <ul>
+      <li>Email: <a href="mailto:support@yourdomain.com">support@yourdomain.com</a></li>
+      <li>Docs: <a href="/upload-test">Getting Started</a></li>
+      <li>FAQ: Activation, uploads, email delivery.</li>
+    </ul>
+    <h3>Response Times</h3>
+    <p>Mon–Fri, 9am–5pm (UTC-5). Priority support for Business tier.</p>
+    """
+    return _page("Contact Support", body)
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_page():
+    body = """
+    <p>We collect only what’s needed to provide the service: account email, license tier, usage metadata (counts/limits), and files you upload for transcription.</p>
+    <p><strong>Data use:</strong> Processing transcripts/summaries, email delivery, reliability improvements. We do not sell personal data.</p>
+    <p><strong>Retention:</strong> Uploads may be auto-deleted after processing (configurable); logs retained for security/compliance.</p>
+    <p><strong>Security:</strong> TLS in transit, least-privilege access, audit logging.</p>
+    <p>Questions: <a href="mailto:privacy@yourdomain.com">privacy@yourdomain.com</a></p>
+    """
+    return _page("Privacy Policy", body)
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms_page():
+    body = """
+    <p>By using AI Meeting Notes you agree to: (1) lawful use; (2) no infringement in uploaded content; (3) reasonable rate limits.</p>
+    <p><strong>License:</strong> Non-transferable, single-user unless stated otherwise.</p>
+    <p><strong>Availability:</strong> Provided “as is”. We strive for high uptime but do not guarantee uninterrupted access.</p>
+    <p><strong>Liability:</strong> To the maximum extent permitted by law, our liability is limited to the amount you paid.</p>
+    """
+    return _page("Terms of Service", body)
+
+@app.get("/refunds", response_class=HTMLResponse)
+def refunds_page():
+    body = """
+    <p><strong>All sales are final for digital products.</strong> If you were charged twice or received a defective/empty download, contact us within 7 days and we’ll correct access or issue a credit at our discretion.</p>
+    <p>Billing: <a href="mailto:billing@yourdomain.com">billing@yourdomain.com</a></p>
+    """
+    return _page("Refund Policy", body)
+
+@app.get("/about", response_class=HTMLResponse)
+def about_page():
+    body = """
+    <p>AI Meeting Notes helps professionals capture transcripts and actionable summaries from meetings in minutes. Built by a small team focused on privacy, accuracy, and speed.</p>
+    <p>We support 19+ languages and deliver polished email summaries.</p>
+    """
+    return _page("About Us", body)
+
+@app.get("/contact", response_class=HTMLResponse)
+def company_contact_page():
+    body = """
+    <p>General: <a href="mailto:hello@yourdomain.com">hello@yourdomain.com</a></p>
+    <p>Press: <a href="mailto:press@yourdomain.com">press@yourdomain.com</a></p>
+    <p>Partnerships: <a href="mailto:partners@yourdomain.com">partners@yourdomain.com</a></p>
+    """
+    return _page("Contact", body)
+
+@app.get("/blog", response_class=HTMLResponse)
+def blog_stub():
+    body = "<p>Blog coming soon: productivity tips, AI note-taking, product updates.</p>"
+    return _page("Blog", body)
