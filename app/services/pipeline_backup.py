@@ -241,7 +241,7 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
 
         base_dir = Path(transcript_path).parent if transcript_path else (DATA_DIR / "summaries")
         base_dir.mkdir(parents=True, exist_ok=True)
-        spath = str((base_dir / "summary.json").resolve())
+        spath = str((base_dir / f"summary_{meeting_id}.json").resolve())
         Path(spath).write_text(json.dumps(summary_json, indent=2), encoding="utf-8")
 
         with get_session() as s:
@@ -251,12 +251,14 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
             s.commit()
 
         _set_progress(meeting_id, 90, step="Emailing (if configured)")
-        _email_with_resend_by_id(m, summary_json, spath)
         
+        # Email using stored data, not the detached object
+        if email_to:
+            _email_with_resend_by_id(meeting_id, summary_json, spath, email_to)
+
         _set_progress(meeting_id, 100, step="Done", status="delivered")
 
     except Exception as e:
-        _set_progress(meeting_id, 100, step=f"Error", status=f"failed: {e}")
+        _set_progress(meeting_id, 100, step=f"Error: {str(e)}", status="failed")
         raise
-
 

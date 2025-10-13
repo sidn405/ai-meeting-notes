@@ -1,6 +1,6 @@
 # app/services/pipeline.py
 from __future__ import annotations
-import re
+
 import json
 import os
 import time
@@ -11,7 +11,7 @@ import httpx
 from openai import OpenAI
 from sqlmodel import select
 from sqlalchemy import text as sql_text
-
+import re
 from ..db import get_session, DATA_DIR
 from ..models import Meeting
 from ..utils.storage import save_text
@@ -261,8 +261,6 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
     except Exception as e:
         _set_progress(meeting_id, 100, step=f"Error: {str(e)}", status="failed")
         raise
-
-#  ---------- Transcription code ----------
 
 def process_meeting_transcribe_only(meeting_id: int, *, language: str | None = None, hints: str | None = None) -> None:
     """

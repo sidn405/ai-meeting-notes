@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlmodel import select
 from ..db import get_session, DATA_DIR
 from ..models import Meeting
-from ..services.pipeline import process_meeting, send_summary_email, process_meeting_transcribe_only, summarize_existing_transcript
+from ..services.pipeline import process_meeting, send_summary_email, process_meeting_transcribe_only
 import json, re, os
 
 # CHANGED: Import license system
@@ -439,11 +439,8 @@ async def summarize_existing_meeting(
         if m.summary_path and Path(m.summary_path).exists():
             raise HTTPException(400, "Meeting already summarized")
     
-    # Import the summarization function
-    from ..services.pipeline import summarize_existing_transcript
-    
     # Queue summarization
-    background_tasks.add_task(summarize_existing_transcript, meeting_id)
+    #background_tasks.add_task(summarize_existing_transcript, meeting_id)
     
     return {
         "id": meeting_id,
