@@ -276,206 +276,666 @@ def activate_page():
 def upload_test(request: Request):
     logged_in = COOKIE_NAME in request.cookies
 
-    login_box = """
-      <div class="box">
-        <h2>Login</h2>
-        <form action="/auth/web-login" method="post">
-          <label>Username</label>
-          <input name="username" value="admin" required />
-          <label>Password</label>
-          <input name="password" type="password" required />
-          <input type="hidden" name="next_path" value="/upload-test" />
-          <br/><br/><button type="submit">Login</button>
-        </form>
-        <small>After login, the server sets an <b>HttpOnly</b> cookie. Your browser will include it automatically on the forms below.</small>
-      </div>
-    """
-
-    logout_box = """
-      <div class="box">
-        <h2>Authenticated</h2>
-        <p style="margin:4px 0 12px 0;color:#16a34a">✅ You are logged in. You can submit the forms below.</p>
-        <form action="/auth/logout" method="post" style="display:inline">
-          <input type="hidden" name="next_path" value="/upload-test" />
-          <button type="submit">Logout</button>
-        </form>
-      </div>
-    """
-
-    auth_section = logout_box if logged_in else login_box
-
     return f"""
     <!doctype html>
-    <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>AI Meeting Notes – Test</title>
-    <style>
-      body{{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:40px;max-width:960px}}
-      input,textarea,select{{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px}}
-      label{{display:block;margin:10px 0 4px;font-weight:500;color:#374151}}
-      .row{{display:grid;grid-template-columns:1fr 1fr;gap:16px}}
-      .box{{padding:16px;border:1px solid #ddd;border-radius:10px;margin-bottom:28px;background:white}}
-      button{{padding:10px 16px;border-radius:10px;background:#111;color:#fff;border:none;cursor:pointer;font-weight:500}}
-      button:hover{{background:#333}}
-      small{{color:#555}}
-      .muted{{color:#555;font-size:14px}}
-      .feature-badge{{display:inline-block;background:#e0e7ff;color:#3730a3;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:600;margin-bottom:8px}}
-      
-      /* License Widget Styles */
-      .license-widget {{
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 24px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      }}
-      .license-loading {{ text-align: center; opacity: 0.8; }}
-      .license-content {{ display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center; }}
-      .license-info h3 {{ margin: 0 0 8px 0; font-size: 18px; font-weight: 600; }}
-      .license-tier {{
-        display: inline-block;
-        background: rgba(255,255,255,0.2);
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 13px;
-        font-weight: 600;
-        margin-bottom: 12px;
-      }}
-      .license-stats {{ display: flex; gap: 24px; font-size: 14px; opacity: 0.95; }}
-      .license-stat {{ display: flex; flex-direction: column; }}
-      .stat-label {{ opacity: 0.8; font-size: 12px; margin-bottom: 4px; }}
-      .stat-value {{ font-size: 18px; font-weight: 700; }}
-      .license-actions {{ display: flex; flex-direction: column; gap: 8px; }}
-      .license-btn {{
-        background: rgba(255,255,255,0.2);
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 6px;
-        font-size: 13px;
-        cursor: pointer;
-        transition: all 0.2s;
-        white-space: nowrap;
-      }}
-      .license-btn:hover {{ background: rgba(255,255,255,0.3); }}
-      .quota-bar {{
-        background: rgba(255,255,255,0.2);
-        border-radius: 10px;
-        height: 8px;
-        overflow: hidden;
-        margin-top: 8px;
-      }}
-      .quota-fill {{
-        background: rgba(255,255,255,0.9);
-        height: 100%;
-        transition: width 0.3s;
-      }}
-      .quota-warning {{ background: #fbbf24; }}
-      .quota-danger {{ background: #ef4444; }}
-      .license-error {{
-        background: #fee2e2;
-        color: #991b1b;
-        padding: 16px;
-        border-radius: 8px;
-        border: 1px solid #fca5a5;
-      }}
-    </style>
-    <script>
-      async function loadLicenseInfo() {{
-        const widget = document.getElementById('licenseWidget');
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>Upload Meeting - AI Meeting Notes</title>
+      <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         
-        try {{
-          const response = await fetch('/license/info', {{
-            credentials: 'include'
-          }});
-          
-          const data = await response.json();
-          
-          if (!data.valid) {{
-            widget.innerHTML = `
-              <div class="license-error">
-                <strong>⚠️ No Active License</strong><br>
-                ${{data.error || 'Please activate your license to continue.'}}<br>
-                <a href="/activate" style="color: #991b1b; text-decoration: underline; margin-top: 8px; display: inline-block;">
-                  Activate License →
-                </a>
-              </div>
-            `;
-            return;
+        body {{
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          background: #f7fafc;
+          color: #1a202c;
+          line-height: 1.6;
+        }}
+        
+        /* Header */
+        header {{
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          padding: 20px 0;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+          margin-bottom: 40px;
+        }}
+        
+        nav {{
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 0 20px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }}
+        
+        .logo {{
+          font-size: 24px;
+          font-weight: 700;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          background-clip: text;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }}
+        
+        .nav-links {{
+          display: flex;
+          gap: 20px;
+          align-items: center;
+        }}
+        
+        .container {{
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 0 20px 60px;
+        }}
+        
+        .page-header {{
+          text-align: center;
+          margin-bottom: 48px;
+        }}
+        
+        .page-header h1 {{
+          font-size: 42px;
+          margin-bottom: 12px;
+          color: #1a202c;
+        }}
+        
+        .page-header p {{
+          font-size: 18px;
+          color: #718096;
+        }}
+        
+        /* Cards */
+        .card {{
+          background: white;
+          border-radius: 16px;
+          padding: 32px;
+          margin-bottom: 32px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+          transition: all 0.3s;
+        }}
+        
+        .card:hover {{
+          box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+        }}
+        
+        .card-header {{
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 24px;
+          padding-bottom: 16px;
+          border-bottom: 2px solid #f7fafc;
+        }}
+        
+        .card-header h2 {{
+          font-size: 24px;
+          color: #1a202c;
+          margin: 0;
+        }}
+        
+        .feature-badges {{
+          display: flex;
+          gap: 8px;
+        }}
+        
+        .feature-badge {{
+          display: inline-block;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          padding: 6px 14px;
+          border-radius: 20px;
+          font-size: 12px;
+          font-weight: 600;
+        }}
+        
+        .subtitle {{
+          color: #718096;
+          font-size: 15px;
+          margin-bottom: 24px;
+        }}
+        
+        /* License Widget */
+        .license-widget {{
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          border-radius: 16px;
+          padding: 28px;
+          margin-bottom: 32px;
+          box-shadow: 0 8px 24px rgba(102, 126, 234, 0.25);
+        }}
+        
+        .license-content {{
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 24px;
+          align-items: center;
+        }}
+        
+        .license-info h3 {{
+          margin: 0 0 8px 0;
+          font-size: 20px;
+          font-weight: 600;
+        }}
+        
+        .license-tier {{
+          display: inline-block;
+          background: rgba(255,255,255,0.2);
+          padding: 4px 14px;
+          border-radius: 20px;
+          font-size: 13px;
+          font-weight: 600;
+          margin-bottom: 16px;
+        }}
+        
+        .license-stats {{
+          display: flex;
+          gap: 28px;
+          font-size: 14px;
+        }}
+        
+        .license-stat {{
+          display: flex;
+          flex-direction: column;
+        }}
+        
+        .stat-label {{
+          opacity: 0.85;
+          font-size: 12px;
+          margin-bottom: 4px;
+        }}
+        
+        .stat-value {{
+          font-size: 22px;
+          font-weight: 700;
+        }}
+        
+        .license-actions {{
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }}
+        
+        .license-btn {{
+          background: rgba(255,255,255,0.2);
+          color: white;
+          border: none;
+          padding: 10px 18px;
+          border-radius: 8px;
+          font-size: 14px;
+          cursor: pointer;
+          transition: all 0.2s;
+          white-space: nowrap;
+          font-weight: 500;
+        }}
+        
+        .license-btn:hover {{
+          background: rgba(255,255,255,0.3);
+          transform: translateY(-1px);
+        }}
+        
+        .quota-bar {{
+          background: rgba(255,255,255,0.2);
+          border-radius: 10px;
+          height: 8px;
+          overflow: hidden;
+          margin-top: 12px;
+        }}
+        
+        .quota-fill {{
+          background: rgba(255,255,255,0.9);
+          height: 100%;
+          transition: width 0.3s;
+        }}
+        
+        .quota-warning {{ background: #fbbf24; }}
+        .quota-danger {{ background: #ef4444; }}
+        
+        .license-error {{
+          background: #fee2e2;
+          color: #991b1b;
+          padding: 20px;
+          border-radius: 12px;
+          border: 1px solid #fca5a5;
+        }}
+        
+        /* Forms */
+        .form-group {{
+          margin-bottom: 20px;
+        }}
+        
+        .form-row {{
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+        }}
+        
+        label {{
+          display: block;
+          font-weight: 600;
+          margin-bottom: 8px;
+          color: #2d3748;
+          font-size: 14px;
+        }}
+        
+        input[type="text"],
+        input[type="email"],
+        textarea,
+        select {{
+          width: 100%;
+          padding: 12px 16px;
+          border: 2px solid #e2e8f0;
+          border-radius: 10px;
+          font-size: 15px;
+          transition: all 0.2s;
+          font-family: inherit;
+        }}
+        
+        input[type="file"] {{
+          width: 100%;
+          padding: 12px;
+          border: 2px dashed #e2e8f0;
+          border-radius: 10px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }}
+        
+        input:focus,
+        textarea:focus,
+        select:focus {{
+          outline: none;
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }}
+        
+        input[type="file"]:hover {{
+          border-color: #667eea;
+          background: #f7fafc;
+        }}
+        
+        textarea {{
+          resize: vertical;
+          min-height: 120px;
+        }}
+        
+        .help-text {{
+          font-size: 13px;
+          color: #718096;
+          margin-top: 6px;
+        }}
+        
+        /* Buttons */
+        .btn-group {{
+          display: flex;
+          gap: 12px;
+          margin-top: 24px;
+        }}
+        
+        .btn {{
+          padding: 14px 28px;
+          border-radius: 10px;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s;
+          border: none;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }}
+        
+        .btn-primary {{
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          flex: 1;
+        }}
+        
+        .btn-primary:hover {{
+          transform: translateY(-2px);
+          box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }}
+        
+        .btn-secondary {{
+          background: white;
+          color: #667eea;
+          border: 2px solid #667eea;
+          flex: 1;
+        }}
+        
+        .btn-secondary:hover {{
+          background: #667eea;
+          color: white;
+        }}
+        
+        .btn-link {{
+          background: #e5e7eb;
+          color: #374151;
+          padding: 10px 20px;
+          text-decoration: none;
+        }}
+        
+        .btn-link:hover {{
+          background: #d1d5db;
+        }}
+        
+        /* Auth Box */
+        .auth-box {{
+          background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+          border: 2px solid #e2e8f0;
+          border-radius: 16px;
+          padding: 24px;
+          margin-bottom: 32px;
+          text-align: center;
+        }}
+        
+        .auth-box.authenticated {{
+          background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+          border-color: #6ee7b7;
+        }}
+        
+        .auth-status {{
+          font-size: 16px;
+          font-weight: 600;
+          margin-bottom: 12px;
+        }}
+        
+        .features-list {{
+          background: #f9fafb;
+          border: 1px solid #e5e7eb;
+          padding: 24px;
+          border-radius: 12px;
+          margin-top: 32px;
+        }}
+        
+        .features-list h3 {{
+          margin: 0 0 12px 0;
+          font-size: 18px;
+          color: #374151;
+        }}
+        
+        .features-list ul {{
+          margin: 0;
+          padding-left: 20px;
+          color: #6b7280;
+          font-size: 14px;
+          line-height: 1.8;
+        }}
+        
+        @media (max-width: 768px) {{
+          .form-row {{
+            grid-template-columns: 1fr;
           }}
           
-          const quotaPercent = data.meetings_limit > 0 
-            ? (data.meetings_used / data.meetings_limit * 100) 
-            : 0;
+          .license-content {{
+            grid-template-columns: 1fr;
+          }}
           
-          let quotaClass = '';
-          if (quotaPercent >= 90) quotaClass = 'quota-danger';
-          else if (quotaPercent >= 75) quotaClass = 'quota-warning';
+          .btn-group {{
+            flex-direction: column;
+          }}
           
-          const remaining = data.meetings_limit - data.meetings_used;
+          .nav-links {{
+            display: none;
+          }}
+        }}
+      </style>
+    </head>
+    <body>
+      <!-- Header -->
+      <header>
+        <nav>
+          <div class="logo">🎙️ AI Meeting Notes</div>
+          <div class="nav-links">
+            <a href="/" class="btn-link">Home</a>
+            <a href="/meetings" class="btn-link">Meetings</a>
+            {"<a href='/activate' class='btn btn-secondary' style='padding:8px 20px;font-size:14px;'>Activate License</a>" if not logged_in else ""}
+          </div>
+        </nav>
+      </header>
+
+      <div class="container">
+        <div class="page-header">
+          <h1>Upload Your Meeting</h1>
+          <p>AI-powered transcription and summarization in minutes</p>
+        </div>
+
+        <!-- Auth Status -->
+        {"<div class='auth-box authenticated'><div class='auth-status'>✅ You are logged in and ready to upload</div><form action='/auth/logout' method='post' style='display:inline'><input type='hidden' name='next_path' value='/upload-test' /><button type='submit' class='btn-link'>Logout</button></form></div>" if logged_in else "<div class='auth-box'><div class='auth-status'>🔒 Please log in to continue</div><p style='color:#718096;margin-bottom:16px;'>You need to be authenticated to upload meetings</p><a href='/login' class='btn btn-primary' style='padding:12px 24px;'>Login Now</a></div>"}
+
+        <!-- License Widget -->
+        <div class="license-widget" id="licenseWidget">
+          <div style="text-align:center;opacity:0.8;">Loading license info...</div>
+        </div>
+
+        <!-- From Transcript Form -->
+        <div class="card">
+          <div class="card-header">
+            <h2>From Transcript (No Audio)</h2>
+            <div class="feature-badges">
+              <span class="feature-badge">🎯 AI-Powered</span>
+            </div>
+          </div>
+          <p class="subtitle">Already have a transcript? Skip transcription and go straight to AI summarization.</p>
           
-          widget.innerHTML = `
-            <div class="license-content">
-              <div class="license-info">
-                <h3>👋 ${{data.email}}</h3>
-                <span class="license-tier">${{data.tier_name}} Plan</span>
-                
-                <div class="license-stats">
-                  <div class="license-stat">
-                    <span class="stat-label">Meetings This Month</span>
-                    <span class="stat-value">${{data.meetings_used}} / ${{data.meetings_limit === 999999 ? '∞' : data.meetings_limit}}</span>
-                  </div>
-                  <div class="license-stat">
-                    <span class="stat-label">Max File Size</span>
-                    <span class="stat-value">${{data.max_file_size_mb}}MB</span>
-                  </div>
-                  ${{data.meetings_limit < 999999 ? `
+          <form id="textForm">
+            <div class="form-group">
+              <label>Meeting Title</label>
+              <input type="text" name="title" required placeholder="e.g., Weekly Team Standup" />
+            </div>
+
+            <div class="form-group">
+              <label>Transcript</label>
+              <textarea name="transcript" rows="10" placeholder="Paste your transcript here..." required></textarea>
+              <div class="help-text">Paste the full meeting transcript for AI analysis</div>
+            </div>
+
+            <div class="form-group">
+              <label>Email results to (optional)</label>
+              <input type="email" name="email_to" placeholder="you@company.com" />
+            </div>
+
+            <div class="btn-group">
+              <button type="button" class="btn btn-secondary" onclick="submitTranscriptForm('transcribe')">
+                📝 Transcribe Only
+              </button>
+              <button type="button" class="btn btn-primary" onclick="submitTranscriptForm('summarize')">
+                ✨ Full Summarization
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Upload Audio/Video Form -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Upload Meeting (Audio/Video)</h2>
+            <div class="feature-badges">
+              <span class="feature-badge">🎯 AI-Powered</span>
+              <span class="feature-badge">🌍 Multi-Language</span>
+            </div>
+          </div>
+          <p class="subtitle">Upload audio or video files for automatic transcription and AI summarization.</p>
+          
+          <form id="uploadForm" enctype="multipart/form-data">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Meeting Title</label>
+                <input type="text" name="title" required placeholder="e.g., Sales Call with Acme Corp" />
+              </div>
+              <div class="form-group">
+                <label>Email results to (optional)</label>
+                <input type="email" name="email_to" placeholder="you@company.com" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Language 🌍</label>
+                <select name="language" id="languageSelect">
+                  <option value="">Auto-detect</option>
+                  <option value="en" selected>English</option>
+                  <option value="es">Spanish (Español)</option>
+                  <option value="fr">French (Français)</option>
+                  <option value="de">German (Deutsch)</option>
+                  <option value="it">Italian (Italiano)</option>
+                  <option value="pt">Portuguese (Português)</option>
+                  <option value="nl">Dutch (Nederlands)</option>
+                  <option value="pl">Polish (Polski)</option>
+                  <option value="ru">Russian (Русский)</option>
+                  <option value="ja">Japanese (日本語)</option>
+                  <option value="zh">Chinese (中文)</option>
+                  <option value="ko">Korean (한국어)</option>
+                  <option value="ar">Arabic (العربية)</option>
+                  <option value="hi">Hindi (हिन्दी)</option>
+                  <option value="tr">Turkish (Türkçe)</option>
+                  <option value="sv">Swedish (Svenska)</option>
+                  <option value="da">Danish (Dansk)</option>
+                  <option value="no">Norwegian (Norsk)</option>
+                  <option value="fi">Finnish (Suomi)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Hints / Terminology (optional)</label>
+                <input type="text" name="hints" placeholder="e.g., Alice, Bob, OKR, Salesforce" />
+                <div class="help-text">Comma-separated names, acronyms, or industry jargon</div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Audio/Video File</label>
+              <input type="file" name="file" accept="audio/*,video/mp4" required />
+              <div class="help-text">Supported formats: .mp3, .m4a, .wav, .mp4</div>
+            </div>
+
+            <div class="btn-group">
+              <button type="button" class="btn btn-secondary" onclick="submitUploadForm('transcribe')">
+                📝 Transcribe Only
+              </button>
+              <button type="button" class="btn btn-primary" onclick="submitUploadForm('summarize')">
+                🚀 Transcribe & Summarize
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Features List -->
+        <div class="features-list">
+          <h3>✨ Features Available:</h3>
+          <ul>
+            <li>AI-powered transcription using AssemblyAI/Whisper</li>
+            <li>Support for 19+ languages with auto-detection</li>
+            <li>Custom terminology recognition for industry-specific terms</li>
+            <li>Automatic summarization with key decisions and action items</li>
+            <li>Email delivery of professional meeting summaries</li>
+          </ul>
+        </div>
+      </div>
+
+      <script>
+        // License widget loading
+        async function loadLicenseInfo() {{
+          const widget = document.getElementById('licenseWidget');
+          
+          try {{
+            const response = await fetch('/license/info', {{
+              credentials: 'include'
+            }});
+            
+            const data = await response.json();
+            
+            if (!data.valid) {{
+              widget.innerHTML = `
+                <div class="license-error">
+                  <strong>⚠️ No Active License</strong><br>
+                  ${{data.error || 'Please activate your license to continue.'}}<br>
+                  <a href="/activate" style="color: #991b1b; text-decoration: underline; margin-top: 8px; display: inline-block;">
+                    Activate License →
+                  </a>
+                </div>
+              `;
+              return;
+            }}
+            
+            const quotaPercent = data.meetings_limit > 0 
+              ? (data.meetings_used / data.meetings_limit * 100) 
+              : 0;
+            
+            let quotaClass = '';
+            if (quotaPercent >= 90) quotaClass = 'quota-danger';
+            else if (quotaPercent >= 75) quotaClass = 'quota-warning';
+            
+            const remaining = data.meetings_limit - data.meetings_used;
+            
+            widget.innerHTML = `
+              <div class="license-content">
+                <div class="license-info">
+                  <h3>👋 ${{data.email}}</h3>
+                  <span class="license-tier">${{data.tier_name}} Plan</span>
+                  
+                  <div class="license-stats">
                     <div class="license-stat">
-                      <span class="stat-label">Remaining</span>
-                      <span class="stat-value">${{remaining}}</span>
+                      <span class="stat-label">Meetings This Month</span>
+                      <span class="stat-value">${{data.meetings_used}} / ${{data.meetings_limit === 999999 ? '∞' : data.meetings_limit}}</span>
+                    </div>
+                    <div class="license-stat">
+                      <span class="stat-label">Max File Size</span>
+                      <span class="stat-value">${{data.max_file_size_mb}}MB</span>
+                    </div>
+                    ${{data.meetings_limit < 999999 ? `
+                      <div class="license-stat">
+                        <span class="stat-label">Remaining</span>
+                        <span class="stat-value">${{remaining}}</span>
+                      </div>
+                    ` : ''}}
+                  </div>
+                  
+                  ${{data.meetings_limit < 999999 ? `
+                    <div class="quota-bar">
+                      <div class="quota-fill ${{quotaClass}}" style="width: ${{Math.min(quotaPercent, 100)}}%"></div>
                     </div>
                   ` : ''}}
                 </div>
                 
-                ${{data.meetings_limit < 999999 ? `
-                  <div class="quota-bar">
-                    <div class="quota-fill ${{quotaClass}}" style="width: ${{Math.min(quotaPercent, 100)}}%"></div>
-                  </div>
-                ` : ''}}
+                <div class="license-actions">
+                  <button class="license-btn" onclick="copyLicenseKey()">📋 Copy Key</button>
+                  <button class="license-btn" onclick="window.location.href='https://gumroad.com/your-product'">
+                    ⬆️ Upgrade
+                  </button>
+                </div>
               </div>
-              
-              <div class="license-actions">
-                <button class="license-btn" onclick="copyLicenseKey()">📋 Copy Key</button>
-                <button class="license-btn" onclick="window.location.href='https://gumroad.com/your-product'">
-                  ⬆️ Upgrade
-                </button>
+            `;
+            
+            window.currentLicenseKey = data.license_key;
+            
+          }} catch (error) {{
+            console.error('Failed to load license info:', error);
+            widget.innerHTML = `
+              <div class="license-error">
+                Failed to load license information. Please refresh the page.
               </div>
-            </div>
-          `;
-          
-          window.currentLicenseKey = data.license_key;
-          
-        }} catch (error) {{
-          console.error('Failed to load license info:', error);
-          widget.innerHTML = `
-            <div class="license-error">
-              Failed to load license information. Please refresh the page.
-            </div>
-          `;
+            `;
+          }}
         }}
-      }}
 
-      function copyLicenseKey() {{
-        if (window.currentLicenseKey) {{
-          navigator.clipboard.writeText(window.currentLicenseKey);
-          alert('License key copied to clipboard!');
+        function copyLicenseKey() {{
+          if (window.currentLicenseKey) {{
+            navigator.clipboard.writeText(window.currentLicenseKey);
+            alert('License key copied to clipboard!');
+          }}
         }}
-      }}
 
-      function handleFormSubmit(form, endpoint) {{
-        form.addEventListener('submit', async (e) => {{
-          e.preventDefault();
+        // Transcript form submission
+        async function submitTranscriptForm(mode) {{
+          const form = document.getElementById('textForm');
           const formData = new FormData(form);
+          
+          const endpoint = mode === 'transcribe' 
+            ? '/meetings/transcribe-only' 
+            : '/meetings/from-text';
           
           try {{
             const response = await fetch(endpoint, {{
@@ -493,121 +953,43 @@ def upload_test(request: Request):
           }} catch (error) {{
             alert('Error: ' + error.message);
           }}
-        }});
-      }}
-      
-      window.addEventListener('DOMContentLoaded', () => {{
-        loadLicenseInfo();
-        const textForm = document.getElementById('textForm');
-        const uploadForm = document.getElementById('uploadForm');
+        }}
+
+        // Upload form submission
+        async function submitUploadForm(mode) {{
+          const form = document.getElementById('uploadForm');
+          const formData = new FormData(form);
+          
+          // Add mode parameter
+          formData.append('mode', mode);
+          
+          const endpoint = mode === 'transcribe' 
+            ? '/meetings/upload-transcribe-only' 
+            : '/meetings/upload';
+          
+          try {{
+            const response = await fetch(endpoint, {{
+              method: 'POST',
+              body: formData,
+              credentials: 'include'
+            }});
+            
+            const result = await response.json();
+            if (result.id) {{
+              window.location.href = `/progress?id=${{result.id}}`;
+            }} else {{
+              alert('Success! Meeting ID: ' + JSON.stringify(result));
+            }}
+          }} catch (error) {{
+            alert('Error: ' + error.message);
+          }}
+        }}
         
-        if (textForm) handleFormSubmit(textForm, '/meetings/from-text');
-        if (uploadForm) handleFormSubmit(uploadForm, '/meetings/upload');
-      }});
-    </script>
-    </head><body>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
-      <h1 style="margin:0;">AI Meeting Notes – Test</h1>
-      <button onclick="window.location.href='/meetings'">View All Meetings</button>
-    </div>
-
-    {auth_section}
-
-    <!-- License Widget -->
-    <div class="license-widget" id="licenseWidget">
-      <div class="license-loading">Loading license info...</div>
-    </div>
-
-    <div class="box">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <h2 style="margin:0;">From Transcript (No Audio)</h2>
-        <span class="feature-badge">🎯 AI-Powered</span>
-      </div>
-      <p class="muted" style="margin-bottom:16px;">This endpoint is protected; after login your browser will include the cookie automatically.</p>
-      <form id="textForm">
-        <label>Title</label>
-        <input name="title" required placeholder="e.g., Weekly Team Standup" />
-        <label>Transcript</label>
-        <textarea name="transcript" rows="10" placeholder="Paste transcript here…" required></textarea>
-        <label>Email results to (optional)</label>
-        <input type="email" name="email_to" placeholder="you@company.com" />
-        <br/>
-        <button type="submit">Summarize & Show Progress</button>
-      </form>
-    </div>
-
-    <div class="box">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <h2 style="margin:0;">Upload Meeting (Audio/Video)</h2>
-        <div>
-          <span class="feature-badge">🎯 AI-Powered</span>
-          <span class="feature-badge">🌍 Multi-Language</span>
-        </div>
-      </div>
-      <p class="muted" style="margin-bottom:16px;">Upload audio or video files for AI transcription and summarization.</p>
-      <form id="uploadForm" enctype="multipart/form-data">
-        <div class="row">
-          <div>
-            <label>Title</label>
-            <input name="title" required placeholder="e.g., Sales Call with Acme Corp" />
-          </div>
-          <div>
-            <label>Email results to (optional)</label>
-            <input type="email" name="email_to" placeholder="you@company.com" />
-          </div>
-        </div>
-
-        <div class="row" style="margin-top:12px;">
-          <div>
-            <label>Language 🌍</label>
-            <select name="language" id="languageSelect">
-              <option value="">Auto-detect</option>
-              <option value="en" selected>English</option>
-              <option value="es">Spanish (Español)</option>
-              <option value="fr">French (Français)</option>
-              <option value="de">German (Deutsch)</option>
-              <option value="it">Italian (Italiano)</option>
-              <option value="pt">Portuguese (Português)</option>
-              <option value="nl">Dutch (Nederlands)</option>
-              <option value="pl">Polish (Polski)</option>
-              <option value="ru">Russian (Русский)</option>
-              <option value="ja">Japanese (日本語)</option>
-              <option value="zh">Chinese (中文)</option>
-              <option value="ko">Korean (한국어)</option>
-              <option value="ar">Arabic (العربية)</option>
-              <option value="hi">Hindi (हिन्दी)</option>
-              <option value="tr">Turkish (Türkçe)</option>
-              <option value="sv">Swedish (Svenska)</option>
-              <option value="da">Danish (Dansk)</option>
-              <option value="no">Norwegian (Norsk)</option>
-              <option value="fi">Finnish (Suomi)</option>
-            </select>
-          </div>
-          <div>
-            <label>Hints / Terminology (optional)</label>
-            <input name="hints" placeholder="e.g., Alice, Bob, OKR, Salesforce, Zendesk" />
-            <small style="display:block;margin-top:4px;color:#6b7280;">Comma-separated names, acronyms, or jargon</small>
-          </div>
-        </div>
-
-        <label style="margin-top:12px;">Audio/Video file (.mp3/.m4a/.wav/.mp4)</label>
-        <input type="file" name="file" accept="audio/*,video/mp4" required />
-        <br/><br/>
-        <button type="submit">🚀 Upload & Process</button>
-      </form>
-    </div>
-
-    <div style="background:#f9fafb;border:1px solid #e5e7eb;padding:16px;border-radius:8px;margin-top:20px;">
-      <h3 style="margin:0 0 8px 0;font-size:16px;color:#374151;">✨ Features Available:</h3>
-      <ul style="margin:0;padding-left:20px;color:#6b7280;font-size:14px;">
-        <li>AI-powered transcription using AssemblyAI/Whisper</li>
-        <li>Support for 19+ languages with auto-detection</li>
-        <li>Custom terminology recognition for industry-specific terms</li>
-        <li>Automatic summarization with key decisions and action items</li>
-        <li>Email delivery of professional meeting summaries</li>
-      </ul>
-    </div>
-    </body></html>
+        // Initialize
+        {"loadLicenseInfo();" if logged_in else ""}
+      </script>
+    </body>
+    </html>
     """
 @app.get("/progress", response_class=HTMLResponse)
 def progress_page():
@@ -624,27 +1006,28 @@ def progress_page():
       font-family: system-ui, -apple-system, sans-serif;
       margin: 0;
       padding: 20px;
-      max-width: 900px;
-      margin: 0 auto;
-      background: #f5f5f5;
+      background: #f7fafc;
     }
     .container {
+      max-width: 900px;
+      margin: 0 auto;
       background: white;
-      border-radius: 12px;
-      padding: 24px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
     h1 {
       margin: 0 0 8px 0;
-      font-size: 24px;
+      font-size: 28px;
+      color: #1a202c;
     }
     .status-badge {
       display: inline-block;
-      padding: 4px 12px;
+      padding: 6px 14px;
       border-radius: 20px;
       font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 20px;
+      font-weight: 600;
+      margin-bottom: 24px;
     }
     .status-processing { background: #fef3c7; color: #92400e; }
     .status-delivered { background: #d1fae5; color: #065f46; }
@@ -652,31 +1035,52 @@ def progress_page():
     .status-queued { background: #e0e7ff; color: #3730a3; }
     
     .progress-section {
-      margin: 20px 0;
+      margin: 24px 0;
     }
     .progress-bar-container {
       width: 100%;
-      height: 24px;
+      height: 28px;
       background: #e5e7eb;
-      border-radius: 12px;
+      border-radius: 14px;
       overflow: hidden;
-      margin: 12px 0;
+      margin: 16px 0;
     }
     .progress-bar {
       height: 100%;
-      background: linear-gradient(90deg, #3b82f6, #2563eb);
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       transition: width 0.3s ease;
       display: flex;
       align-items: center;
       justify-content: center;
       color: white;
-      font-size: 12px;
-      font-weight: 600;
+      font-size: 13px;
+      font-weight: 700;
     }
     .step-text {
       color: #6b7280;
-      font-size: 14px;
-      margin-top: 8px;
+      font-size: 15px;
+      margin-top: 12px;
+    }
+    
+    /* Summarize prompt */
+    .summarize-prompt {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 24px;
+      border-radius: 12px;
+      margin: 24px 0;
+      display: none;
+    }
+    .summarize-prompt.visible {
+      display: block;
+    }
+    .summarize-prompt h3 {
+      margin: 0 0 8px 0;
+      font-size: 20px;
+    }
+    .summarize-prompt p {
+      margin: 0 0 16px 0;
+      opacity: 0.95;
     }
     
     .results-section {
@@ -688,20 +1092,32 @@ def progress_page():
     }
     
     .section-title {
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 600;
-      margin: 24px 0 12px 0;
+      margin: 32px 0 16px 0;
       color: #111827;
     }
     
     .summary-box {
       background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 20px;
       margin: 12px 0;
       white-space: pre-wrap;
-      line-height: 1.6;
+      line-height: 1.7;
+    }
+    
+    .transcript-box {
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 12px 0;
+      white-space: pre-wrap;
+      line-height: 1.7;
+      max-height: 400px;
+      overflow-y: auto;
     }
     
     .decisions-list {
@@ -709,11 +1125,11 @@ def progress_page():
       padding: 0;
     }
     .decisions-list li {
-      padding: 10px 16px;
+      padding: 12px 18px;
       background: #fef3c7;
-      border-left: 3px solid #f59e0b;
-      margin: 8px 0;
-      border-radius: 4px;
+      border-left: 4px solid #f59e0b;
+      margin: 10px 0;
+      border-radius: 6px;
     }
     
     .action-items-table {
@@ -723,14 +1139,14 @@ def progress_page():
     }
     .action-items-table th {
       background: #f3f4f6;
-      padding: 10px;
+      padding: 12px;
       text-align: left;
       font-weight: 600;
-      font-size: 13px;
+      font-size: 14px;
       color: #374151;
     }
     .action-items-table td {
-      padding: 10px;
+      padding: 12px;
       border-bottom: 1px solid #e5e7eb;
     }
     .action-items-table tr:last-child td {
@@ -738,37 +1154,37 @@ def progress_page():
     }
     .priority-high { 
       display: inline-block;
-      padding: 2px 8px;
+      padding: 3px 10px;
       background: #fee2e2;
       color: #991b1b;
-      border-radius: 4px;
-      font-size: 11px;
+      border-radius: 6px;
+      font-size: 12px;
       font-weight: 600;
     }
     .priority-medium { 
       display: inline-block;
-      padding: 2px 8px;
+      padding: 3px 10px;
       background: #fef3c7;
       color: #92400e;
-      border-radius: 4px;
-      font-size: 11px;
+      border-radius: 6px;
+      font-size: 12px;
       font-weight: 600;
     }
     .priority-low { 
       display: inline-block;
-      padding: 2px 8px;
+      padding: 3px 10px;
       background: #e0e7ff;
       color: #3730a3;
-      border-radius: 4px;
-      font-size: 11px;
+      border-radius: 6px;
+      font-size: 12px;
       font-weight: 600;
     }
     
     .email-form {
       background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 20px;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 24px;
       margin: 20px 0;
     }
     .form-group {
@@ -776,56 +1192,51 @@ def progress_page():
     }
     .form-group label {
       display: block;
-      margin-bottom: 6px;
-      font-weight: 500;
+      margin-bottom: 8px;
+      font-weight: 600;
       font-size: 14px;
       color: #374151;
     }
     .form-group input {
       width: 100%;
-      padding: 10px;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-size: 14px;
+      padding: 12px;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 15px;
       box-sizing: border-box;
     }
     .form-group input:focus {
       outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-    }
-    
-    .titlebar{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      margin-bottom:16px;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
     
     .btn {
-      padding: 10px 20px;
+      padding: 12px 24px;
       border: none;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 500;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.3s;
     }
     .btn-primary {
-      background: #3b82f6;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
     }
     .btn-primary:hover {
-      background: #2563eb;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
     }
     .btn-secondary {
-      background: #e5e7eb;
-      color: #374151;
-      margin-left: 8px;
+      background: white;
+      color: #667eea;
+      border: 2px solid #667eea;
+      margin-left: 10px;
     }
     .btn-secondary:hover {
-      background: #d1d5db;
+      background: #667eea;
+      color: white;
     }
     
     .download-links {
@@ -833,34 +1244,36 @@ def progress_page():
     }
     .download-links a {
       display: inline-block;
-      padding: 8px 16px;
+      padding: 10px 20px;
       background: #f3f4f6;
       color: #374151;
       text-decoration: none;
-      border-radius: 6px;
-      margin-right: 8px;
+      border-radius: 10px;
+      margin-right: 10px;
       font-size: 14px;
-      transition: background 0.2s;
+      font-weight: 500;
+      transition: all 0.2s;
     }
     .download-links a:hover {
       background: #e5e7eb;
+      transform: translateY(-1px);
     }
     
     .alert {
-      padding: 12px 16px;
-      border-radius: 6px;
+      padding: 14px 18px;
+      border-radius: 10px;
       margin: 12px 0;
       font-size: 14px;
     }
     .alert-success {
       background: #d1fae5;
       color: #065f46;
-      border: 1px solid #6ee7b7;
+      border: 2px solid #6ee7b7;
     }
     .alert-error {
       background: #fee2e2;
       color: #991b1b;
-      border: 1px solid #fca5a5;
+      border: 2px solid #fca5a5;
     }
     
     .spinner {
@@ -868,7 +1281,7 @@ def progress_page():
       width: 14px;
       height: 14px;
       border: 2px solid #f3f4f6;
-      border-top: 2px solid #3b82f6;
+      border-top: 2px solid currentColor;
       border-radius: 50%;
       animation: spin 1s linear infinite;
       margin-right: 8px;
@@ -891,25 +1304,47 @@ def progress_page():
       <div class="step-text" id="stepText">Initializing...</div>
     </div>
     
+    <!-- Summarize Prompt (shown after transcription) -->
+    <div class="summarize-prompt" id="summarizePrompt">
+      <h3>✨ Transcription Complete!</h3>
+      <p>Your transcript is ready. Would you like to generate an AI-powered summary with key decisions and action items?</p>
+      <button class="btn btn-primary" onclick="triggerSummarization()">
+        🚀 Generate Summary
+      </button>
+      <button class="btn btn-secondary" onclick="document.getElementById('summarizePrompt').classList.remove('visible')">
+        Maybe Later
+      </button>
+    </div>
+    
     <div class="results-section" id="resultsSection">
-      <div class="section-title">Executive Summary</div>
-      <div class="summary-box" id="executiveSummary"></div>
       
-      <div class="section-title">Key Decisions</div>
-      <ul class="decisions-list" id="decisionsList"></ul>
+      <!-- Transcript Section (always show if available) -->
+      <div id="transcriptSection" style="display:none;">
+        <div class="section-title">📝 Transcript</div>
+        <div class="transcript-box" id="transcriptText"></div>
+      </div>
       
-      <div class="section-title">Action Items</div>
-      <table class="action-items-table">
-        <thead>
-          <tr>
-            <th>Owner</th>
-            <th>Task</th>
-            <th>Due Date</th>
-            <th>Priority</th>
-          </tr>
-        </thead>
-        <tbody id="actionItemsBody"></tbody>
-      </table>
+      <!-- Summary Section (only show if summarized) -->
+      <div id="summarySection" style="display:none;">
+        <div class="section-title">Executive Summary</div>
+        <div class="summary-box" id="executiveSummary"></div>
+        
+        <div class="section-title">Key Decisions</div>
+        <ul class="decisions-list" id="decisionsList"></ul>
+        
+        <div class="section-title">Action Items</div>
+        <table class="action-items-table">
+          <thead>
+            <tr>
+              <th>Owner</th>
+              <th>Task</th>
+              <th>Due Date</th>
+              <th>Priority</th>
+            </tr>
+          </thead>
+          <tbody id="actionItemsBody"></tbody>
+        </table>
+      </div>
       
       <div class="section-title">Downloads</div>
       <div class="download-links">
@@ -937,6 +1372,8 @@ def progress_page():
   <script>
     const meetingId = new URLSearchParams(window.location.search).get('id');
     let pollInterval = null;
+    let hasTranscript = false;
+    let hasSummary = false;
     
     async function fetchMeetingStatus() {
       try {
@@ -954,9 +1391,20 @@ def progress_page():
             pollInterval = null;
           }
           
-          // Fetch and display results
-          if (meeting.status === 'delivered' && meeting.summary_path) {
+          // Check what we have
+          hasTranscript = !!meeting.transcript_path;
+          hasSummary = !!meeting.summary_path;
+          
+          // Show appropriate content
+          if (hasTranscript) {
+            await fetchTranscript(meeting);
+          }
+          
+          if (hasSummary) {
             await fetchResults(meeting);
+          } else if (hasTranscript && meeting.status === 'delivered') {
+            // Show summarize prompt
+            document.getElementById('summarizePrompt').classList.add('visible');
           }
         }
       } catch (error) {
@@ -965,26 +1413,22 @@ def progress_page():
     }
     
     function updateUI(meeting) {
-      // Update title and status
       document.getElementById('meetingTitle').textContent = meeting.title;
       
       const statusBadge = document.getElementById('statusBadge');
       statusBadge.textContent = meeting.status.toUpperCase();
       statusBadge.className = `status-badge status-${meeting.status}`;
       
-      // Update progress
       const progress = meeting.progress || 0;
       const progressBar = document.getElementById('progressBar');
       progressBar.style.width = `${progress}%`;
       progressBar.textContent = `${progress}%`;
       
-      // Update step text
       const stepText = document.getElementById('stepText');
       if (meeting.step) {
         stepText.innerHTML = `<span class="spinner"></span>${meeting.step}`;
       }
       
-      // Show/hide progress section
       const progressSection = document.getElementById('progressSection');
       if (meeting.status === 'delivered' || meeting.status === 'failed') {
         progressSection.style.display = 'none';
@@ -1003,46 +1447,49 @@ def progress_page():
       }
     }
     
+    async function fetchTranscript(meeting) {
+      try {
+        const response = await fetch(`/meetings/${meetingId}/download/transcript`, {
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          const text = await response.text();
+          document.getElementById('transcriptText').textContent = text;
+          document.getElementById('transcriptSection').style.display = 'block';
+          document.getElementById('resultsSection').classList.add('visible');
+        }
+      } catch (error) {
+        console.error('Error fetching transcript:', error);
+      }
+    }
+    
     async function fetchResults(meeting) {
       try {
         const response = await fetch(`/meetings/${meetingId}/summary`, {
           credentials: 'include'
         });
         
-        console.log('Response status:', response.status);
-        console.log('Response headers:', response.headers.get('content-type'));
-        
-        if (!response.ok) {
-          console.error('Response not OK:', response.status);
-          return;
-        }
+        if (!response.ok) return;
         
         const summary = await response.json();
         displayResults(summary);
         
-        // Pre-fill email if available
         if (meeting.email_to) {
           document.getElementById('emailInput').value = meeting.email_to;
         }
       } catch (error) {
         console.error('Error fetching results:', error);
-        console.error('Error details:', error.message);
-        // Show error in UI
-        document.getElementById('resultsSection').classList.add('visible');
-        document.getElementById('executiveSummary').textContent = 
-          'Error loading summary. Check console for details. Error: ' + error.message;
       }
     }
     
     function displayResults(summary) {
-      // Show results section
       document.getElementById('resultsSection').classList.add('visible');
+      document.getElementById('summarySection').style.display = 'block';
       
-      // Executive summary
       const execSummary = summary.executive_summary || 'No summary available';
       document.getElementById('executiveSummary').textContent = execSummary;
       
-      // Key decisions
       const decisionsList = document.getElementById('decisionsList');
       const decisions = summary.key_decisions || [];
       if (decisions.length === 0) {
@@ -1051,7 +1498,6 @@ def progress_page():
         decisionsList.innerHTML = decisions.map(d => `<li>${d}</li>`).join('');
       }
       
-      // Action items
       const actionItemsBody = document.getElementById('actionItemsBody');
       const actionItems = summary.action_items || [];
       if (actionItems.length === 0) {
@@ -1069,6 +1515,30 @@ def progress_page():
             </tr>
           `;
         }).join('');
+      }
+    }
+    
+    async function triggerSummarization() {
+      const prompt = document.getElementById('summarizePrompt');
+      prompt.innerHTML = '<p style="text-align:center;"><span class="spinner"></span> Generating summary...</p>';
+      
+      try {
+        const response = await fetch(`/meetings/${meetingId}/summarize`, {
+          method: 'POST',
+          credentials: 'include'
+        });
+        
+        if (!response.ok) throw new Error('Failed to start summarization');
+        
+        prompt.classList.remove('visible');
+        document.getElementById('progressSection').style.display = 'block';
+        
+        // Restart polling
+        pollInterval = setInterval(fetchMeetingStatus, 2000);
+        
+      } catch (error) {
+        prompt.innerHTML = '<p style="color:#fee2e2;">Failed to start summarization. Please try again.</p>';
+        console.error('Error starting summarization:', error);
       }
     }
     
@@ -1113,7 +1583,6 @@ def progress_page():
     // Initialize
     if (meetingId) {
       fetchMeetingStatus();
-      // Poll every 2 seconds while processing
       pollInterval = setInterval(fetchMeetingStatus, 2000);
     } else {
       document.body.innerHTML = '<div class="container"><h1>Error: No meeting ID provided</h1></div>';

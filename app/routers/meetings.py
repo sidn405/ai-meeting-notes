@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlmodel import select
 from ..db import get_session, DATA_DIR
 from ..models import Meeting
-from ..services.pipeline import process_meeting, send_summary_email
+from ..services.pipeline import process_meeting, send_summary_email, process_meeting_transcribe_only, summarize_existing_transcript
 import json, re, os
 
 # CHANGED: Import license system
@@ -214,6 +214,122 @@ async def create_from_text_sync(
     """Alias for from-text (already synchronous)"""
     return await create_from_text(title, transcript, email_to, license_info, db)
 
+@router.post("/transcribe-only")
+async def transcribe_only(
+    title: str = Form(...),
+    transcript: str = Form(...),
+    email_to: str | None = Form(None),
+    license_info: tuple = Depends(require_license),
+    db = Depends(get_session),
+):
+    """Save transcript without summarization"""
+    license, tier_config = license_info
+    
+    safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", title.strip()) or "meeting"
+    tpath = DATA_DIR / f"transcribe_only_{safe_stem}.transcript.txt"
+    tpath.write_text(transcript, encoding="utf-8")
+
+    with get_session() as s:
+        m = Meeting(
+            title=title,
+            audio_path=None,
+            email_to=email_to,
+            transcript_path=str(tpath),
+            status="delivered",
+            progress=100,
+            step="Transcript saved"
+        )
+        s.add(m)
+        s.commit()
+        s.refresh(m)
+        mid = m.id
+
+    # Track usage
+    track_meeting_usage(db, license.license_key)
+
+    return {
+        "id": mid, 
+        "status": "delivered",
+        "message": "Transcript saved successfully"
+    }
+
+# TEMPORARY VERSION - transcribe but don't summarize
+@router.post("/upload-transcribe-only")
+async def upload_transcribe_only(
+    background_tasks: BackgroundTasks,
+    title: str = Form(...),
+    email_to: str | None = Form(None),
+    file: UploadFile = File(...),
+    language: str | None = Form(None),
+    hints: str | None = Form(None),
+    license_info: tuple = Depends(require_license),
+    db = Depends(get_session),
+):
+    """Upload and transcribe only (no summarization)"""
+    license, tier_config = license_info
+    
+    # Handle empty string for auto-detect
+    if language == "":
+        language = None
+    if hints:
+        hints = hints.strip() or None
+    
+    # Validate file type
+    ext = Path(file.filename).suffix.lower()
+    if ext not in {".mp3", ".m4a", ".wav", ".mp4"}:
+        raise HTTPException(status_code=400, detail="Unsupported file type. Allowed: .mp3, .m4a, .wav, .mp4")
+
+    # Read file and validate size
+    file_content = await file.read()
+    file_size = len(file_content)
+    
+    if file_size == 0:
+        raise HTTPException(status_code=400, detail="File is empty")
+    
+    # Check file size against tier limit
+    is_valid, error_msg = validate_file_size(file_size, license.tier)
+    if not is_valid:
+        raise HTTPException(status_code=413, detail=error_msg)
+    
+    # Save file
+    audio_path = DATA_DIR / f"{Path(file.filename).stem}.uploaded{ext}"
+    audio_path.write_bytes(file_content)
+
+    # Create meeting record
+    with get_session() as s:
+        m = Meeting(
+            title=title, 
+            audio_path=str(audio_path), 
+            email_to=email_to, 
+            status="queued"
+        )
+        s.add(m)
+        s.commit()
+        s.refresh(m)
+        mid = m.id
+
+    # Track usage
+    track_meeting_usage(db, license.license_key)
+
+    # Import the transcribe-only function
+    from ..services.pipeline import process_meeting_transcribe_only
+    
+    # Queue transcription only (no summarization)
+    background_tasks.add_task(
+        process_meeting_transcribe_only,
+        mid,
+        language=language,
+        hints=hints
+    )
+    
+    return {
+        "id": mid, 
+        "status": "queued",
+        "tier": license.tier,
+        "file_size_mb": round(file_size / (1024 * 1024), 2),
+        "language": language or "auto-detect",
+        "mode": "transcribe_only"
+    }
 
 @router.get("/list")
 def list_meetings():
@@ -306,6 +422,34 @@ def run_meeting(meeting_id: int):
             raise HTTPException(404, "Not found")
         return {"id": m.id, "status": m.status}
 
+@router.post("/{meeting_id}/summarize")
+async def summarize_existing_meeting(
+    meeting_id: int,
+    background_tasks: BackgroundTasks,
+):
+    """Summarize an already-transcribed meeting"""
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m:
+            raise HTTPException(404, "Meeting not found")
+        
+        if not m.transcript_path or not Path(m.transcript_path).exists():
+            raise HTTPException(400, "No transcript available to summarize")
+        
+        if m.summary_path and Path(m.summary_path).exists():
+            raise HTTPException(400, "Meeting already summarized")
+    
+    # Import the summarization function
+    from ..services.pipeline import summarize_existing_transcript
+    
+    # Queue summarization
+    background_tasks.add_task(summarize_existing_transcript, meeting_id)
+    
+    return {
+        "id": meeting_id,
+        "status": "processing",
+        "message": "Summarization queued"
+    }
 
 @router.post("/{meeting_id}/send-email")
 async def send_meeting_email(meeting_id: int, payload: dict):
