@@ -6,7 +6,9 @@ import re, secrets, time
 from typing import Optional
 from fastapi import UploadFile
 from ..db import DATA_DIR  # we created this earlier in app/db.py
+from dotenv import load_dotenv
 
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 S3_BUCKET = os.getenv("S3_BUCKET")
 S3_ENDPOINT = os.getenv("S3_ENDPOINT")
 S3_REGION = os.getenv("S3_REGION", "us-west-002")

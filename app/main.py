@@ -7,8 +7,10 @@ from fastapi.responses import HTMLResponse
 from .services.branding import render_meeting_notes_email_html
 from pathlib import Path
 from .routers import meetings, health, auth, license
-from routers.storage_b2 import router as storage_router
+from app.routers.storage_b2 import router as storage_router
+from dotenv import load_dotenv
 
+load_dotenv()  # ✅ This loads your .env file
 
 os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]
 
@@ -21,7 +23,8 @@ app.add_middleware(
 )
 
 # Include license router
-app.include_router(license.router, storage_router)
+app.include_router(license.router)
+app.include_router(storage_router)
 
 def _page(title: str, body_html: str) -> HTMLResponse:
     html = f"""<!doctype html><html><head>

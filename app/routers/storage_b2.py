@@ -6,14 +6,15 @@ from typing import Optional
 import boto3
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
+from app.utils.storage import s3_client, get_presigned_url, S3_BUCKET
 
 # ---- import your existing pieces ----
-from models import LicenseTier, Meeting, TIER_LIMITS                    # your SQLModel Meeting + tiers
-from services.pipeline import process_meeting                       # your existing pipeline runner
-from auth import get_current_user                          # your existing auth (return user dict or model)
-from meetings import require_license, track_meeting_usage          # (helper you may already have; see fallback below)
+from app.models import LicenseTier, Meeting, TIER_LIMITS                    # your SQLModel Meeting + tiers
+from app.services.pipeline import process_meeting                       # your existing pipeline runner
+#from auth import get_current_user                          # your existing auth (return user dict or model)
+from app.routers.meetings import require_license, track_meeting_usage          # (helper you may already have; see fallback below)
 from sqlmodel import Session, select
-from db import get_session                               # your DB session dependency
+from app.db import get_session                               # your DB session dependency
 
 router = APIRouter(prefix="/storage", tags=["storage"])
 
@@ -27,7 +28,17 @@ def s3_client():
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
     )
 
-BUCKET = os.environ["S3_BUCKET"]
+from dotenv import load_dotenv
+from pathlib import Path
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")  # robust load
+
+def get_bucket() -> str:
+    b = os.getenv("S3_BUCKET")
+    if not b:
+        # Using HTTPException gives you a clear error in the API
+        from fastapi import HTTPException
+        raise HTTPException(500, "S3_BUCKET not set in environment")
+    return b
 
 # ---------- Models ----------
 class PresignUploadIn(BaseModel):
@@ -89,7 +100,7 @@ def presign_upload(
     expires_in = 15 * 60  # 15 minutes
     upload_url = s3.generate_presigned_url(
         ClientMethod="put_object",
-        Params={"Bucket": BUCKET, "Key": key, "ContentType": ctype},
+        Params={"Bucket": S3_BUCKET, "Key": key, "ContentType": ctype},
         ExpiresIn=expires_in,
     )
     return PresignUploadOut(upload_url=upload_url, key=key, expires_in=expires_in)
@@ -125,7 +136,7 @@ def confirm_upload(
     track_meeting_usage(db, license.license_key)
 
     # Create meeting record
-    audio_uri = f"s3://{BUCKET}/{body.key}"
+    audio_uri = f"s3://{S3_BUCKET}/{body.key}"
     meeting = Meeting(
         title=body.title or Path(body.key).name,
         audio_path=audio_uri,
@@ -165,7 +176,7 @@ def presign_download(
     Ensures the license owns this file.
     """
     license, tier_config = license_info
-    s3_uri = f"s3://{BUCKET}/{key}"
+    s3_uri = f"s3://{S3_BUCKET}/{key}"
 
     # Verify ownership — meeting must belong to this license/email
     owned = db.exec(
@@ -178,7 +189,7 @@ def presign_download(
     expires_in = 15 * 60  # 15 minutes
     url = s3.generate_presigned_url(
         ClientMethod="get_object",
-        Params={"Bucket": BUCKET, "Key": key},
+        Params={"Bucket": S3_BUCKET, "Key": key},
         ExpiresIn=expires_in,
     )
     return PresignDownloadOut(url=url, expires_in=expires_in)
