@@ -22,7 +22,7 @@ def create_access_token(sub: str, expires_minutes: Optional[int] = None) -> str:
         "sub": sub,
         "iat": int(_now().timestamp()),
         "exp": int((_now() + timedelta(minutes=exp_mins)).timestamp()),
-        "iss": "ai-meeting-notes",
+        "iss": "Clipnote",
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_alg)
 

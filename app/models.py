@@ -52,25 +52,25 @@ class LicenseUsage(SQLModel, table=True):
 # Tier Limits Configuration
 TIER_LIMITS = {
     LicenseTier.STARTER: {
-        "max_file_size_mb": 50,
-        "meetings_per_month": 10,
-        "price": 29,
+        "max_file_size_mb": 25,
+        "meetings_per_month": 5,
+        "price": 0,
         "name": "Starter",
-        "description": "Perfect for occasional meetings"
+        "description": "Free plan with basic capture"
     },
     LicenseTier.PROFESSIONAL: {
         "max_file_size_mb": 200,
         "meetings_per_month": 50,
-        "price": 79,
+        "price": 69,
         "name": "Professional",
-        "description": "For regular users and consultants"
+        "description": "Power user plan with cloud storage"
     },
     LicenseTier.BUSINESS: {
         "max_file_size_mb": 500,
-        "meetings_per_month": 999999,  # Effectively unlimited
-        "price": 149,
+        "meetings_per_month": 100,  # Was Effectively unlimited
+        "price": 119,
         "name": "Business",
-        "description": "Unlimited meetings for teams"
+        "description": "Team-size volume and cloud storage"
     }
 }
 

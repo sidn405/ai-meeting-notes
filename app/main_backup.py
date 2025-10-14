@@ -10,7 +10,7 @@ from .routers import meetings, health, auth, license
 
 os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]
 
-app = FastAPI(title="AI Meeting Notes")
+app = FastAPI(title="Clipnote")
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,7 +28,7 @@ def activate_page():
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Activate License - AI Meeting Notes</title>
+  <title>Activate License - Clipnote</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -158,7 +158,7 @@ def activate_page():
 <body>
   <div class="container">
     <h1>🎉 Welcome!</h1>
-    <p class="subtitle">Activate your AI Meeting Notes license to get started</p>
+    <p class="subtitle">Activate your Clipnote license to get started</p>
     
     <div id="alertBox"></div>
     
@@ -307,7 +307,7 @@ def upload_test(request: Request):
     return f"""
     <!doctype html>
     <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>AI Meeting Notes – Test</title>
+    <title>Clipnote – Test</title>
     <style>
       body{{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:40px;max-width:960px}}
       input,textarea{{width:100%;padding:8px}} label{{display:block;margin:10px 0 4px}}
@@ -504,7 +504,7 @@ def upload_test(request: Request):
     </script>
     </head><body>
     <div class="titlebar">
-      <h1>AI Meeting Notes – Test</h1>
+      <h1>Clipnote – Test</h1>
       <button><a class="btn btn-secondary" href="/meetings" id="meetingsBtn">Meetings</a></button>
     </div>
 
@@ -1356,7 +1356,7 @@ def browser_test():
 <html>
 <head>
   <meta charset="utf-8">
-  <title>AI Meeting Notes – Browser Test</title>
+  <title>Clipnote – Browser Test</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:32px;max-width:980px}
@@ -1371,7 +1371,7 @@ def browser_test():
   </style>
 </head>
 <body>
-  <h1>AI Meeting Notes – Browser Test</h1>
+  <h1>Clipnote – Browser Test</h1>
 
   <div class="box">
     <h2>Auth</h2>

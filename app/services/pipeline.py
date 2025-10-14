@@ -183,7 +183,7 @@ def _email_with_resend_by_id(meeting_id: int, summary_json: dict, summary_path: 
 
     api = os.getenv("EMAIL_API_KEY")
     from_email = os.getenv("FROM_EMAIL")
-    from_name = os.getenv("FROM_NAME", "AI Meeting Notes")
+    from_name = os.getenv("FROM_NAME", "Clipnote")
     
     if not api or not from_email or not override_to:
         return

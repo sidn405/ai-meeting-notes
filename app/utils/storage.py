@@ -1,10 +1,37 @@
 # app/utils/storage.py
 from __future__ import annotations
 from pathlib import Path
+import os, boto3
 import re, secrets, time
 from typing import Optional
 from fastapi import UploadFile
 from ..db import DATA_DIR  # we created this earlier in app/db.py
+
+S3_BUCKET = os.getenv("S3_BUCKET")
+S3_ENDPOINT = os.getenv("S3_ENDPOINT")
+S3_REGION = os.getenv("S3_REGION", "us-west-002")
+
+def s3_client():
+    return boto3.client(
+        "s3",
+        endpoint_url=S3_ENDPOINT,
+        region_name=S3_REGION,
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    )
+
+def save_bytes_s3(key: str, data: bytes) -> str:
+    s3 = s3_client()
+    s3.put_object(Bucket=S3_BUCKET, Key=key, Body=data)
+    return f"s3://{S3_BUCKET}/{key}"
+
+def get_presigned_url(key: str, expires_in: int = 3600) -> str:
+    s3 = s3_client()
+    return s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": S3_BUCKET, "Key": key},
+        ExpiresIn=expires_in
+    )
 
 # Where we write files
 UPLOADS_DIR = (DATA_DIR / "uploads")

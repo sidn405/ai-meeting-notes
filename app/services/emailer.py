@@ -57,7 +57,7 @@ def _smtp_send(to_email: str, subject: str, body_text: str, body_html: str | Non
 # --- Resend (primary) ---
 RESEND_API_KEY = os.getenv("RESEND_API_KEY") or os.getenv("EMAIL_API_KEY", "")
 FROM_EMAIL = os.getenv("FROM_EMAIL", settings.from_email or "")
-FROM_NAME  = os.getenv("FROM_NAME", "AI Meeting Notes")
+FROM_NAME  = os.getenv("FROM_NAME", "Clipnote")
 EMAIL_SERVICE = os.getenv("EMAIL_SERVICE", "resend").lower()
 
 def _resend_send(to_email: str, subject: str, body_text: str, body_html: str | None, attachments: list[str] | None):

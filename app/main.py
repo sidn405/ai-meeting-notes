@@ -10,7 +10,7 @@ from .routers import meetings, health, auth, license
 
 os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]
 
-app = FastAPI(title="AI Meeting Notes")
+app = FastAPI(title="Clipnote")
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,7 +24,7 @@ app.include_router(license.router)
 def _page(title: str, body_html: str) -> HTMLResponse:
     html = f"""<!doctype html><html><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{title} – AI Meeting Notes</title>
+<title>{title} – Clipnote</title>
 <style>
   body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.75;color:#1a202c;background:#f7fafc;margin:0}}
   .wrap{{max-width:900px;margin:60px auto;padding:0 20px}}
@@ -46,7 +46,7 @@ def activate_page():
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Activate License - AI Meeting Notes</title>
+  <title>Activate License - Clipnote</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -176,7 +176,7 @@ def activate_page():
 <body>
   <div class="container">
     <h1>🎉 Welcome!</h1>
-    <p class="subtitle">Activate your AI Meeting Notes license to get started</p>
+    <p class="subtitle">Activate your Clipnote license to get started</p>
     
     <div id="alertBox"></div>
     
@@ -300,7 +300,7 @@ def upload_test(request: Request):
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
-      <title>Upload Meeting - AI Meeting Notes</title>
+      <title>Upload Meeting - Clipnote</title>
       <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         
@@ -706,7 +706,7 @@ def upload_test(request: Request):
       <!-- Header -->
       <header>
         <nav>
-          <div class="logo">🎙️ AI Meeting Notes</div>
+          <div class="logo">🎙️ Clipnote</div>
           <div class="nav-links">
             <a href="/" class="btn-link">Home</a>
             <a href="/meetings" class="btn-link">Meetings</a>
@@ -1691,7 +1691,7 @@ def login_page():
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Login - AI Meeting Notes</title>
+  <title>Login - Clipnote</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
@@ -1874,7 +1874,7 @@ def login_page():
 <body>
   <div class="container">
     <div class="logo">
-      <div class="logo-text">🎙️ AI Meeting Notes</div>
+      <div class="logo-text">🎙️ Clipnote</div>
       <div class="logo-subtitle">Never miss important details</div>
     </div>
     
@@ -1940,7 +1940,7 @@ def browser_test():
 <html>
 <head>
   <meta charset="utf-8">
-  <title>AI Meeting Notes – Browser Test</title>
+  <title>Clipnote – Browser Test</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:32px;max-width:980px}
@@ -1955,7 +1955,7 @@ def browser_test():
   </style>
 </head>
 <body>
-  <h1>AI Meeting Notes – Browser Test</h1>
+  <h1>Clipnote – Browser Test</h1>
 
   <div class="box">
     <h2>Auth</h2>
@@ -2101,7 +2101,7 @@ def _page(title: str, body_html: str) -> HTMLResponse:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{title} – AI Meeting Notes</title>
+  <title>{title} – Clipnote</title>
   <style>
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
     
@@ -2277,7 +2277,7 @@ def _page(title: str, body_html: str) -> HTMLResponse:
 <body>
   <header>
     <nav>
-      <a href="/" class="logo">🎙️ AI Meeting Notes</a>
+      <a href="/" class="logo">🎙️ Clipnote</a>
       <a href="/" class="back-btn">← Back to Home</a>
     </nav>
   </header>
@@ -2357,7 +2357,7 @@ def support_page():
 def documentation_page():
     body = """
     <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 24px; border-radius: 12px; margin-bottom: 32px;">
-      <h2 style="margin-top: 0;">Welcome to AI Meeting Notes Documentation</h2>
+      <h2 style="margin-top: 0;">Welcome to Clipnote Documentation</h2>
       <p style="margin-bottom: 0;">Everything you need to know to get the most out of your meeting transcriptions and summaries.</p>
     </div>
     
@@ -2806,10 +2806,10 @@ def terms_page():
     <p class="subtitle">Last updated: January 2025</p>
     
     <h2>Agreement to Terms</h2>
-    <p>By accessing and using AI Meeting Notes, you agree to be bound by these Terms of Service. If you don't agree, please do not use the service.</p>
+    <p>By accessing and using Clipnote, you agree to be bound by these Terms of Service. If you don't agree, please do not use the service.</p>
     
     <h2>License Grant</h2>
-    <p>Upon purchase and activation, we grant you a <strong>non-exclusive, non-transferable, revocable license</strong> to use AI Meeting Notes according to your purchased tier.</p>
+    <p>Upon purchase and activation, we grant you a <strong>non-exclusive, non-transferable, revocable license</strong> to use Clipnote according to your purchased tier.</p>
     
     <h3>License Types:</h3>
     <ul>
@@ -2844,7 +2844,7 @@ def terms_page():
     
     <h2>Intellectual Property</h2>
     <p><strong>Your Content:</strong> You retain all rights to content you upload. We only use it to provide the service (transcription, summarization).</p>
-    <p><strong>Our Service:</strong> All aspects of AI Meeting Notes (code, design, algorithms, branding) are our intellectual property.</p>
+    <p><strong>Our Service:</strong> All aspects of Clipnote (code, design, algorithms, branding) are our intellectual property.</p>
     
     <h2>Limitation of Liability</h2>
     <p>To the maximum extent permitted by law:</p>
@@ -2882,7 +2882,7 @@ def terms_page():
 def refunds_page():
     body = """
     <h2>One-Time Purchase Policy</h2>
-    <p>AI Meeting Notes is a digital product sold as a <strong>one-time lifetime license</strong>. All sales are final.</p>
+    <p>Clipnote is a digital product sold as a <strong>one-time lifetime license</strong>. All sales are final.</p>
     
     <h2>When Refunds Are Available</h2>
     <p>We offer refunds only in these specific circumstances:</p>
@@ -2947,12 +2947,12 @@ def refunds_page():
 def about_page():
     body = """
     <h2>Our Mission</h2>
-    <p>AI Meeting Notes was created to solve a universal problem: <strong>important details get lost in meetings</strong>. Whether it's a critical client request, a key decision, or an action item, manual note-taking is error-prone and distracting.</p>
+    <p>Clipnote was created to solve a universal problem: <strong>important details get lost in meetings</strong>. Whether it's a critical client request, a key decision, or an action item, manual note-taking is error-prone and distracting.</p>
     
     <p>We believe professionals should be <strong>fully present in conversations</strong>, not frantically scribbling notes. Our AI-powered platform captures every detail automatically, letting you focus on what matters.</p>
     
     <h2>What We Do</h2>
-    <p>AI Meeting Notes provides:</p>
+    <p>Clipnote provides:</p>
     <ul>
       <li><strong>Accurate Transcriptions:</strong> State-of-the-art AI converts audio/video to text in minutes</li>
       <li><strong>Smart Summaries:</strong> Automatically extract executive summaries, key decisions, and action items</li>
@@ -2990,7 +2990,7 @@ def about_page():
     </ul>
     
     <h2>Our Team</h2>
-    <p>We're a small, focused team of engineers and designers passionate about productivity and AI. We built AI Meeting Notes because we needed it ourselves—and we think you'll love it too.</p>
+    <p>We're a small, focused team of engineers and designers passionate about productivity and AI. We built Clipnote because we needed it ourselves—and we think you'll love it too.</p>
     
     <div class="contact-box">
       <h3>Get in Touch</h3>
@@ -3047,7 +3047,7 @@ def company_contact_page():
     <p>Follow us for product updates, tips, and announcements:</p>
     <ul>
       <li><strong>Twitter:</strong> @aimeetingnotes</li>
-      <li><strong>LinkedIn:</strong> AI Meeting Notes</li>
+      <li><strong>LinkedIn:</strong> Clipnote</li>
     </ul>
     
     <div class="highlight-box">
