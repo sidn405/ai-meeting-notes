@@ -7,6 +7,8 @@ from fastapi.responses import HTMLResponse
 from .services.branding import render_meeting_notes_email_html
 from pathlib import Path
 from .routers import meetings, health, auth, license
+from routers.storage_b2 import router as storage_router
+
 
 os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]
 
@@ -19,7 +21,7 @@ app.add_middleware(
 )
 
 # Include license router
-app.include_router(license.router)
+app.include_router(license.router, storage_router)
 
 def _page(title: str, body_html: str) -> HTMLResponse:
     html = f"""<!doctype html><html><head>
@@ -2397,9 +2399,9 @@ def documentation_page():
     <h3>Step 1: Purchase Your License</h3>
     <p>Visit our <a href="/#pricing">pricing page</a> and select your tier:</p>
     <ul>
-      <li><strong>Starter:</strong> $29 one-time – 10 meetings/month, 50MB files</li>
-      <li><strong>Professional:</strong> $79 one-time – 50 meetings/month, 200MB files, priority processing</li>
-      <li><strong>Business:</strong> $149 one-time – Unlimited meetings, 500MB files, API access</li>
+      <li><strong>Starter:</strong> $0 free – 5 meetings/month, 25MB files</li>
+      <li><strong>Professional:</strong> $69 one-time – 50 meetings/month, 200MB files, priority processing</li>
+      <li><strong>Business:</strong> $119 one-time – 100 meetings/month, 500MB files, API access</li>
     </ul>
     
     <h3>Step 2: Receive Your License Key</h3>
@@ -2426,7 +2428,7 @@ def documentation_page():
     <p>Perfect for recorded meetings, calls, or interviews.</p>
     <ul>
       <li><strong>Supported Formats:</strong> .mp3, .m4a, .wav, .mp4</li>
-      <li><strong>File Size Limits:</strong> 50MB (Starter), 200MB (Professional), 500MB (Business)</li>
+      <li><strong>File Size Limits:</strong> 25MB (Starter), 200MB (Professional), 500MB (Business)</li>
       <li><strong>Processing Time:</strong> ~1 minute per 10 minutes of audio</li>
     </ul>
     
@@ -2813,8 +2815,8 @@ def terms_page():
     
     <h3>License Types:</h3>
     <ul>
-      <li><strong>Starter:</strong> Single user, 10 meetings/month</li>
-      <li><strong>Professional:</strong> Single user, 50 meetings/month, priority processing</li>
+      <li><strong>Starter:</strong> Single user, 5 meetings/month</li>
+      <li><strong>Professional:</strong> Single user, 25 meetings/month, priority processing</li>
       <li><strong>Business:</strong> Single user or team (contact for multi-user), unlimited meetings</li>
     </ul>
     
