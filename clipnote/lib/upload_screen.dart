@@ -1,16 +1,20 @@
 // lib/upload_screen.dart
-import 'dart:convert';
-import 'dart:io';
-import 'package:dio/dio.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
 // ignore_for_file: constant_identifier_names
 
-// Your deployed API base
+import 'dart:convert';
+import 'dart:io' show File, RandomAccessFile; // not used on web
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+
+/// Your deployed API base
 const String API_BASE =
     "https://ai-meeting-notes-production-81d7.up.railway.app";
 
-// Switch to multipart for large files (bytes)
+/// Switch to multipart for large files (desktop/mobile only)
 const int kMultipartThreshold = 80 * 1024 * 1024; // 80 MB
 
 class UploadScreen extends StatefulWidget {
@@ -21,6 +25,8 @@ class UploadScreen extends StatefulWidget {
 
 class _UploadScreenState extends State<UploadScreen> {
   final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 30)));
+  final meetingIdCtrl = TextEditingController(text: "demo-meeting-1");
+
   double progress = 0.0;
   String status = 'Idle';
   String? lastKey;
@@ -28,6 +34,12 @@ class _UploadScreenState extends State<UploadScreen> {
 
   void _setStatus(String s) => setState(() => status = s);
   void _setProgress(double p) => setState(() => progress = p.clamp(0, 1));
+
+  @override
+  void dispose() {
+    meetingIdCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickAndUpload() async {
     setState(() {
@@ -38,7 +50,7 @@ class _UploadScreenState extends State<UploadScreen> {
     });
 
     final result = await FilePicker.platform.pickFiles(
-      withData: false,
+      withData: kIsWeb, // on web we need bytes here
       type: FileType.custom,
       allowedExtensions: ['mp3', 'm4a', 'wav', 'mp4'],
     );
@@ -48,21 +60,70 @@ class _UploadScreenState extends State<UploadScreen> {
     }
 
     final picked = result.files.first;
-    final filePath = picked.path!;
-    final file = File(filePath);
     final filename = picked.name;
     final contentType = _guessMime(filename);
-    final size = await file.length();
 
-    if (size >= kMultipartThreshold) {
+    // Acquire bytes in a platform-friendly way
+    Uint8List? bytes = picked.bytes; // present on web
+    File? file;                       // present on desktop/mobile
+    if (!kIsWeb) {
+      if (picked.path == null) {
+        _toast("No file path; try picking again.");
+        return;
+      }
+      file = File(picked.path!);
+      bytes = await file.readAsBytes();
+    } else {
+      if (bytes == null) {
+        _toast("Browser didn’t provide bytes; try again.");
+        return;
+      }
+    }
+
+    final size = bytes!.lengthInBytes;
+
+    // Web: always do simple upload (browsers handle fixed-length body well)
+    // Desktop/Mobile: use multipart for very large files
+    if (!kIsWeb && size >= kMultipartThreshold && (file != null)) {
       await _uploadMultipart(file, filename, contentType, size);
     } else {
-      await _uploadSimple(file, filename, contentType, size);
+      await _uploadSimple(bytes, filename, contentType, size);
     }
   }
 
+  // ---- SERVER RECORD --------------------------------------------------------
+
+  Future<void> _recordUpload({
+    required String meetingId,
+    required String key,
+    required String filename,
+    required String type, // "audio" | "video"
+    String? contentType,
+    int? sizeBytes,
+    int? durationMs,
+  }) async {
+    try {
+      await dio.post(
+        "$API_BASE/meetings/$meetingId/assets",
+        data: {
+          "s3_key": key,
+          "filename": filename,
+          "type": type,
+          "content_type": contentType,
+          "size_bytes": sizeBytes,
+          "duration_ms": durationMs,
+        },
+        options: Options(headers: {"Content-Type": "application/json"}),
+      );
+    } catch (e) {
+      _toast("Saved file; server record failed: $e");
+    }
+  }
+
+  // ---- SIMPLE UPLOAD (fixed-length body; fixes 411) ------------------------
+
   Future<void> _uploadSimple(
-      File file, String filename, String contentType, int size) async {
+      Uint8List bytes, String filename, String contentType, int size) async {
     try {
       _setStatus("Requesting presigned URL…");
       final presign = await dio.post(
@@ -86,21 +147,28 @@ class _UploadScreenState extends State<UploadScreen> {
       final publicUrl = data["public_url"] as String?;
 
       _setStatus("Uploading…");
-      // For <= 80MB we can safely load into memory
-      int sent = 0;
-      final bytes = await file.readAsBytes();     // load whole file
+
+      // Build headers: include server-specified Content-Type and a fixed Content-Length.
+      final hdrs = <String, String>{
+        ...headers.map((k, v) => MapEntry(k, '$v')),
+      };
+      if (!kIsWeb) {
+        // Browsers set length automatically; setting it manually is disallowed.
+        hdrs['Content-Length'] = bytes.length.toString();
+      }
+
       await dio.put(
         putUrl,
-        data: bytes,                              // not a Stream
+        data: bytes, // fixed-length body (NOT a stream) → avoids 411 on B2
         options: Options(
-            headers: {
-            ...Map<String, String>.from(headers.map((k, v) => MapEntry(k, '$v'))),
-            'Content-Length': bytes.length.toString(),  // <-- required for B2
-            },
-            contentType: headers['Content-Type']?.toString(),
+          headers: hdrs,
+          contentType: headers['Content-Type']?.toString(),
         ),
-        onSendProgress: (sent, total) => _setProgress(sent / (total == -1 ? bytes.length : total)),
-        );
+        onSendProgress: (sent, total) {
+          final denom = total == -1 ? bytes.length : total;
+          _setProgress(sent / (denom > 0 ? denom : bytes.length));
+        },
+      );
 
       setState(() {
         _setProgress(1.0);
@@ -108,13 +176,32 @@ class _UploadScreenState extends State<UploadScreen> {
         lastKey = key;
         lastPublicUrl = publicUrl;
       });
+
+      await _recordUpload(
+        meetingId: meetingIdCtrl.text.trim().isEmpty
+            ? "demo-meeting-1"
+            : meetingIdCtrl.text.trim(),
+        key: key,
+        filename: filename,
+        type: contentType.startsWith('video') ? 'video' : 'audio',
+        contentType: contentType,
+        sizeBytes: size,
+      );
+      _toast("Upload saved • $filename");
     } catch (e) {
       _setStatus("❌ Simple upload error: $e");
     }
   }
 
+  // ---- MULTIPART UPLOAD (desktop/mobile only) ------------------------------
+
   Future<void> _uploadMultipart(
       File file, String filename, String contentType, int size) async {
+    if (kIsWeb) {
+      _toast("Large uploads via browser not supported here. Use desktop/mobile.");
+      return;
+    }
+
     RandomAccessFile? raf;
     try {
       _setStatus("Starting multipart…");
@@ -160,11 +247,11 @@ class _UploadScreenState extends State<UploadScreen> {
 
         _setStatus("Part $partNum uploading…");
         final resp = await dio.put(
-            url,
-            data: bytes,
-            options: Options(headers: {
-                'Content-Length': bytes.length.toString(),    // <-- important
-            }),
+          url,
+          data: bytes, // fixed-length body per part
+          options: Options(headers: {
+            'Content-Length': bytes.length.toString(), // avoids 411 on B2
+          }),
         );
         final eTag =
             (resp.headers["etag"]?.first ?? resp.headers.value("etag") ?? "")
@@ -194,12 +281,26 @@ class _UploadScreenState extends State<UploadScreen> {
         lastKey = key;
         lastPublicUrl = d["public_url"] as String?;
       });
+
+      await _recordUpload(
+        meetingId: meetingIdCtrl.text.trim().isEmpty
+            ? "demo-meeting-1"
+            : meetingIdCtrl.text.trim(),
+        key: key,
+        filename: filename,
+        type: contentType.startsWith('video') ? 'video' : 'audio',
+        contentType: contentType,
+        sizeBytes: size,
+      );
+      _toast("Upload saved • $filename");
     } catch (e) {
       _setStatus("❌ Multipart error: $e");
     } finally {
       await raf?.close();
     }
   }
+
+  // ---- helpers --------------------------------------------------------------
 
   String _guessMime(String name) {
     final n = name.toLowerCase();
@@ -210,6 +311,12 @@ class _UploadScreenState extends State<UploadScreen> {
     return 'application/octet-stream';
   }
 
+  void _toast(String msg) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(content: Text(msg)));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -217,7 +324,16 @@ class _UploadScreenState extends State<UploadScreen> {
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            TextField(
+              controller: meetingIdCtrl,
+              decoration: const InputDecoration(
+                labelText: "Meeting ID",
+                hintText: "e.g., demo-meeting-1",
+              ),
+            ),
+            const SizedBox(height: 16),
             LinearProgressIndicator(value: progress),
             const SizedBox(height: 12),
             Text(status),

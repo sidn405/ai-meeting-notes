@@ -10,6 +10,7 @@ from .routers import meetings, health, auth, license
 from app.routers.storage_b2 import router as storage_router
 from dotenv import load_dotenv
 from app_uploads import router as uploads_router
+from meeting_api import router as meeting_router
 
 load_dotenv()  # ✅ This loads your .env file
 
@@ -27,10 +28,12 @@ app.add_middleware(
     allow_methods=["*"], allow_headers=["*"],
 )
 
+init_db()
 # Include license router
 app.include_router(license.router)
 app.include_router(storage_router)
 app.include_router(uploads_router)
+app.include_router(meeting_router)
 
 def _page(title: str, body_html: str) -> HTMLResponse:
     html = f"""<!doctype html><html><head>
