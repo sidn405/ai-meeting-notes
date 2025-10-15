@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 S3_BUCKET = os.getenv("S3_BUCKET")
 S3_ENDPOINT = os.getenv("S3_ENDPOINT")
-S3_REGION = os.getenv("S3_REGION", "us-west-002")
+S3_REGION = os.getenv("S3_REGION", "us-west-004")
 
 def s3_client():
     return boto3.client(

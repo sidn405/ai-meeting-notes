@@ -24,7 +24,7 @@ def s3_client():
     from botocore.config import Config
     
     endpoint = os.getenv("S3_ENDPOINT")
-    region = os.getenv("S3_REGION", "us-west-002")
+    region = os.getenv("S3_REGION", "us-west-004")
     access_key = os.getenv("AWS_ACCESS_KEY_ID")
     secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
     
