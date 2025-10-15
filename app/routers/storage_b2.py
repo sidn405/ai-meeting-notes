@@ -122,6 +122,11 @@ def confirm_upload(
     """
     license, tier_config = license_info
     tier = license.tier.lower()
+    
+    # 👇 ADD THIS
+    print(f"🔍 DEBUG: Confirming upload for key: {body.key}")
+    print(f"🔍 DEBUG: Bucket: {S3_BUCKET}")
+    print(f"🔍 DEBUG: Audio URI will be: s3://{S3_BUCKET}/{body.key}")
 
     if tier not in ("professional", "business"):
         raise HTTPException(403, "Cloud uploads require Professional or Business plan")
