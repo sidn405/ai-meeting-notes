@@ -1,37 +1,29 @@
-# meeting_api.py
-from fastapi import APIRouter, HTTPException
+# app/meeting_api.py
+from fastapi import APIRouter
 from pydantic import BaseModel
-from sqlalchemy import select
-from db import SessionLocal, Upload
+from typing import Optional, List
+from sqlmodel import select
+
+from app.db import get_session          # ✅ your db.py exports get_session()
+from app.uploads_models import Upload   # ✅ model lives in app/upload_models.py
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])
 
 class CreateAsset(BaseModel):
     s3_key: str
     filename: str
-    type: str = "audio"           # "audio" | "video" | "file"
-    content_type: str | None = None
-    size_bytes: int | None = None
-    duration_ms: int | None = None
+    type: str = "audio"                  # "audio" | "video" | "file"
+    content_type: Optional[str] = None
+    size_bytes: Optional[int] = None
+    duration_ms: Optional[int] = None
 
 @router.post("/{meeting_id}/assets")
 def create_asset(meeting_id: str, body: CreateAsset):
-    with SessionLocal() as db:
+    with get_session() as db:
         # prevent duplicates by key
-        exists = db.scalar(select(Upload).where(Upload.s3_key == body.s3_key))
-        if exists:
-            return {
-                "id": exists.id,
-                "meeting_id": exists.meeting_id,
-                "s3_key": exists.s3_key,
-                "filename": exists.filename,
-                "type": exists.type,
-                "content_type": exists.content_type,
-                "size_bytes": exists.size_bytes,
-                "duration_ms": exists.duration_ms,
-                "created_at": exists.created_at.isoformat(),
-                "duplicate": True,
-            }
+        existing = db.exec(select(Upload).where(Upload.s3_key == body.s3_key)).first()
+        if existing:
+            return {**existing.model_dump(), "duplicate": True}
 
         row = Upload(
             meeting_id=meeting_id,
@@ -45,32 +37,11 @@ def create_asset(meeting_id: str, body: CreateAsset):
         db.add(row)
         db.commit()
         db.refresh(row)
-        return {
-            "id": row.id,
-            "meeting_id": row.meeting_id,
-            "s3_key": row.s3_key,
-            "filename": row.filename,
-            "type": row.type,
-            "content_type": row.content_type,
-            "size_bytes": row.size_bytes,
-            "duration_ms": row.duration_ms,
-            "created_at": row.created_at.isoformat(),
-        }
+        return row
 
-@router.get("/{meeting_id}/assets")
+@router.get("/{meeting_id}/assets", response_model=List[Upload])
 def list_assets(meeting_id: str):
-    with SessionLocal() as db:
-        rows = db.scalars(select(Upload).where(Upload.meeting_id == meeting_id).order_by(Upload.created_at.desc())).all()
-        return [
-            {
-                "id": r.id,
-                "meeting_id": r.meeting_id,
-                "s3_key": r.s3_key,
-                "filename": r.filename,
-                "type": r.type,
-                "content_type": r.content_type,
-                "size_bytes": r.size_bytes,
-                "duration_ms": r.duration_ms,
-                "created_at": r.created_at.isoformat(),
-            } for r in rows
-        ]
+    with get_session() as db:
+        return db.exec(
+            select(Upload).where(Upload.meeting_id == meeting_id).order_by(Upload.created_at.desc())
+        ).all()

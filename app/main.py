@@ -18,10 +18,6 @@ os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]
 
 app = FastAPI(title="Clipnote")
 
-@app.get("/healthz")
-def healthz():
-    return {"ok": True}
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_credentials=True,
@@ -34,6 +30,10 @@ app.include_router(license.router)
 app.include_router(storage_router)
 app.include_router(uploads_router)
 app.include_router(meeting_router)
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
 
 def _page(title: str, body_html: str) -> HTMLResponse:
     html = f"""<!doctype html><html><head>
