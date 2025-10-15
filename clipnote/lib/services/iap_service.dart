@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:in_app_purchase/in_app_purchase.dart';
+import 'in_app_purchase/in_app_purchase.dart';
 import '../utils/constants.dart';
 
 class IAPService {

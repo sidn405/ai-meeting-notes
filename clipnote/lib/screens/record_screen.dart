@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
+import 'flutter/material.dart';
 import '../services/audio_service.dart';
 import 'upload_screen.dart';
 

@@ -1,14 +1,13 @@
-// lib/upload_screen.dart
 // ignore_for_file: constant_identifier_names
 
 import 'dart:convert';
 import 'dart:io' show File, RandomAccessFile; // not used on web
 import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'dio/dio.dart';
+import 'file_picker/file_picker.dart';
+import 'flutter/foundation.dart' show kIsWeb;
+import 'flutter/material.dart';
 
 /// Your deployed API base
 const String API_BASE =
@@ -18,7 +17,10 @@ const String API_BASE =
 const int kMultipartThreshold = 80 * 1024 * 1024; // 80 MB
 
 class UploadScreen extends StatefulWidget {
-  const UploadScreen({super.key});
+  const UploadScreen({super.key, this.audioFile, this.prefillFilename});
+
+  final File? audioFile;          // used on mobile/desktop
+  final String? prefillFilename;  // optional display name
   @override
   State<UploadScreen> createState() => _UploadScreenState();
 }
@@ -44,39 +46,42 @@ class _UploadScreenState extends State<UploadScreen> {
   Future<void> _pickAndUpload() async {
     setState(() {
       progress = 0;
-      status = "Picking file…";
+      status = "Preparing upload…";
       lastKey = null;
       lastPublicUrl = null;
     });
 
-    final result = await FilePicker.platform.pickFiles(
-      withData: kIsWeb, // on web we need bytes here
-      type: FileType.custom,
-      allowedExtensions: ['mp3', 'm4a', 'wav', 'mp4'],
-    );
-    if (result == null || result.files.isEmpty) {
-      _setStatus("Cancelled");
-      return;
-    }
+    Uint8List? bytes;
+    String? filename;
+    String? contentType;
 
-    final picked = result.files.first;
-    final filename = picked.name;
-    final contentType = _guessMime(filename);
-
-    // Acquire bytes in a platform-friendly way
-    Uint8List? bytes = picked.bytes; // present on web
-    File? file;                       // present on desktop/mobile
-    if (!kIsWeb) {
-      if (picked.path == null) {
-        _toast("No file path; try picking again.");
+    // If a file was provided (e.g., from record_screen), use it
+    if (!kIsWeb && widget.audioFile != null) {
+      final f = widget.audioFile!;
+      filename = widget.prefillFilename ?? f.uri.pathSegments.last;
+      bytes = await f.readAsBytes();
+      contentType = _guessMime(filename);
+    } else {
+      // fall back to picker
+      final file = File(picked.path!);
+      bytes = await file.readAsBytes();
+      final result = await FilePicker.platform.pickFiles(
+        withData: kIsWeb,
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'm4a', 'wav', 'mp4'],
+      );
+      if (result == null || result.files.isEmpty) {
+        _setStatus("Cancelled");
         return;
       }
-      file = File(picked.path!);
-      bytes = await file.readAsBytes();
-    } else {
-      if (bytes == null) {
-        _toast("Browser didn’t provide bytes; try again.");
-        return;
+      final picked = result.files.first;
+      filename = picked.name;
+      contentType = _guessMime(filename);
+      if (kIsWeb) {
+        bytes = picked.bytes!;
+      } else {
+        final file = File(picked.path!);
+        bytes = await file.readAsBytes();
       }
     }
 

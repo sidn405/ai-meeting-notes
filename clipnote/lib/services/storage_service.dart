@@ -1,4 +1,4 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import 'shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
 
 class StorageService {

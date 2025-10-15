@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'flutter/material.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});

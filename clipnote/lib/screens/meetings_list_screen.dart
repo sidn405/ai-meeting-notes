@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'flutter/material.dart';
 
 class MeetingsListScreen extends StatelessWidget {
   const MeetingsListScreen({super.key});
