@@ -72,6 +72,34 @@ def _key_for(license_key: str, tier: str, filename: str) -> str:
 
 # ---------- Routes ----------
 
+@router.get("/test-b2-connection")
+def test_b2_connection():
+    """Test if B2 credentials are working"""
+    try:
+        s3 = s3_client()
+        bucket = get_bucket()
+        
+        # Try to list objects in bucket (this tests credentials)
+        response = s3.list_objects_v2(Bucket=bucket, MaxKeys=1)
+        
+        return {
+            "success": True,
+            "bucket": bucket,
+            "endpoint": os.getenv("S3_ENDPOINT"),
+            "region": os.getenv("S3_REGION"),
+            "key_id": os.getenv("AWS_ACCESS_KEY_ID")[:10] + "...",  # Show first 10 chars only
+            "message": "B2 connection successful!"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "bucket": get_bucket(),
+            "endpoint": os.getenv("S3_ENDPOINT"),
+            "region": os.getenv("S3_REGION"),
+            "key_id": os.getenv("AWS_ACCESS_KEY_ID", "NOT_SET")[:10] + "..."
+        }
+
 @router.post("/upload-direct")
 async def upload_direct(
     background: BackgroundTasks,
