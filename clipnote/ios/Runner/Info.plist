@@ -28,6 +28,16 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Clipnote needs access to your microphone to record meetings</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Clipnote needs access to speech recognition for transcription</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Clipnote records video for meeting notes.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Allow access to choose a video to upload.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Allow saving processed clips (optional).</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
