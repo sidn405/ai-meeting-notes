@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
-from app.db import SessionLocal, Upload
+from db import SessionLocal, Upload
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])
 
