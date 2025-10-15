@@ -21,12 +21,28 @@ router = APIRouter(prefix="/storage", tags=["storage"])
 
 # ---------- B2 S3 client ----------
 def s3_client():
+    from botocore.config import Config
+    
+    endpoint = os.getenv("S3_ENDPOINT")
+    region = os.getenv("S3_REGION", "us-west-002")
+    access_key = os.getenv("AWS_ACCESS_KEY_ID")
+    secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+    
+    # B2-specific configuration
+    config = Config(
+        signature_version='s3v4',
+        s3={
+            'addressing_style': 'path'  # B2 requires path-style addressing
+        }
+    )
+    
     return boto3.client(
         "s3",
-        endpoint_url=os.getenv("S3_ENDPOINT"),             # e.g. https://s3.us-west-002.backblazeb2.com
-        region_name=os.getenv("S3_REGION", "us-west-002"), # B2 region
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        endpoint_url=endpoint,
+        region_name=region,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        config=config
     )
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")  # robust load
