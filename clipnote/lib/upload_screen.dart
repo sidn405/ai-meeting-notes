@@ -88,21 +88,19 @@ class _UploadScreenState extends State<UploadScreen> {
       _setStatus("Uploading…");
       // For <= 80MB we can safely load into memory
       int sent = 0;
-      final bytes = await file.readAsBytes();
+      final bytes = await file.readAsBytes();     // load whole file
       await dio.put(
         putUrl,
-        data: Stream.fromIterable([bytes])
-            .map((chunk) {
-              sent += chunk.length;
-              _setProgress(sent / size);
-              return chunk;
-            }),
+        data: bytes,                              // not a Stream
         options: Options(
-          headers:
-              Map<String, String>.from(headers.map((k, v) => MapEntry(k, '$v'))),
-          contentType: headers["Content-Type"]?.toString(),
+            headers: {
+            ...Map<String, String>.from(headers.map((k, v) => MapEntry(k, '$v'))),
+            'Content-Length': bytes.length.toString(),  // <-- required for B2
+            },
+            contentType: headers['Content-Type']?.toString(),
         ),
-      );
+        onSendProgress: (sent, total) => _setProgress(sent / (total == -1 ? bytes.length : total)),
+        );
 
       setState(() {
         _setProgress(1.0);
@@ -162,8 +160,11 @@ class _UploadScreenState extends State<UploadScreen> {
 
         _setStatus("Part $partNum uploading…");
         final resp = await dio.put(
-          url,
-          data: Stream<List<int>>.fromIterable([bytes]),
+            url,
+            data: bytes,
+            options: Options(headers: {
+                'Content-Length': bytes.length.toString(),    // <-- important
+            }),
         );
         final eTag =
             (resp.headers["etag"]?.first ?? resp.headers.value("etag") ?? "")
