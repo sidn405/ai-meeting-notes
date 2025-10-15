@@ -98,41 +98,47 @@ async def upload_direct(
     language: str = Form("en"),
     hints: str = Form(None)
 ):
-    """Server-side upload to B2 (no CORS needed)"""
+    """Mobile app upload - handles all tiers"""
     license, tier_config = license_info
     tier = license.tier.lower()
-
-    if tier not in ("professional", "business"):
-        raise HTTPException(403, "Cloud uploads require Professional or Business plan")
 
     # Read file
     file_content = await file.read()
     file_size = len(file_content)
     
-    # Check size limit
+    # Check size limit (all tiers)
     size_mb = file_size / (1024 * 1024)
     max_mb = TIER_LIMITS[tier]["max_file_size_mb"]
     if size_mb > max_mb:
         raise HTTPException(413, f"File exceeds plan limit of {max_mb} MB")
 
-    # Track usage
+    # Track usage (all tiers)
     track_meeting_usage(db, license.license_key)
 
     # Generate key
     key = _key_for(license.license_key, tier, file.filename)
     
-    # Upload to B2
-    s3 = s3_client()
-    s3.put_object(
-        Bucket=get_bucket(),
-        Key=key,
-        Body=file_content,
-        ContentType=file.content_type or "application/octet-stream"
-    )
+    # ONLY Professional/Business upload to B2
+    audio_uri = None
+    if tier in ("professional", "business"):
+        s3 = s3_client()
+        s3.put_object(
+            Bucket=get_bucket(),
+            Key=key,
+            Body=file_content,
+            ContentType=file.content_type or "application/octet-stream"
+        )
+        bucket = get_bucket()
+        audio_uri = f"s3://{bucket}/{key}"
+    else:
+        # Starter: Save temporarily for processing, will be deleted after
+        temp_dir = Path("temp_audio")
+        temp_dir.mkdir(exist_ok=True)
+        temp_file = temp_dir / f"{key}.{file.filename.split('.')[-1]}"
+        temp_file.write_bytes(file_content)
+        audio_uri = str(temp_file)
 
     # Create meeting record
-    bucket = get_bucket()
-    audio_uri = f"s3://{bucket}/{key}"
     meeting = Meeting(
         title=title,
         audio_path=audio_uri,
@@ -160,7 +166,8 @@ async def upload_direct(
         "ok": True, 
         "meeting_id": meeting.id, 
         "audio_uri": audio_uri,
-        "key": key
+        "tier": tier,
+        "cloud_storage": tier in ("professional", "business")
     }
 
 @router.post("/presign-upload", response_model=PresignUploadOut)

@@ -9,12 +9,17 @@ from pathlib import Path
 from .routers import meetings, health, auth, license
 from app.routers.storage_b2 import router as storage_router
 from dotenv import load_dotenv
+from app_uploads import router as uploads_router
 
 load_dotenv()  # ✅ This loads your .env file
 
 os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]
 
 app = FastAPI(title="Clipnote")
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,6 +30,7 @@ app.add_middleware(
 # Include license router
 app.include_router(license.router)
 app.include_router(storage_router)
+app.include_router(uploads_router)
 
 def _page(title: str, body_html: str) -> HTMLResponse:
     html = f"""<!doctype html><html><head>
