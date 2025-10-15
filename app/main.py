@@ -294,7 +294,319 @@ def activate_page():
 </body>
 </html>
 """
+@app.get("/test-b2-upload", response_class=HTMLResponse)
+def test_b2_upload(request: Request):
+    logged_in = COOKIE_NAME in request.cookies
+    if not logged_in:
+        return """
+        <!doctype html>
+        <meta charset="utf-8">
+        <meta http-equiv="refresh" content="0;url=/login">
+        <title>Login Required</title>
+        <p>Redirecting to <a href="/login">login page</a>...</p>
+        """
+    
+    return """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test B2 Upload - Clipnote</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    
+    h1 {
+      margin-bottom: 8px;
+      color: #1a202c;
+    }
+    
+    .subtitle {
+      color: #718096;
+      margin-bottom: 32px;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #2d3748;
+      font-size: 14px;
+    }
+    
+    input[type="text"], input[type="file"] {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 15px;
+    }
+    
+    input[type="file"] {
+      cursor: pointer;
+    }
+    
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    .btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+    
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    
+    .log {
+      background: #f7fafc;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 20px;
+      margin-top: 24px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    
+    .log-entry {
+      margin-bottom: 8px;
+      padding: 6px;
+      border-radius: 4px;
+    }
+    
+    .log-info { background: #e0f2fe; color: #075985; }
+    .log-success { background: #d1fae5; color: #065f46; }
+    .log-error { background: #fee2e2; color: #991b1b; }
+    
+    .progress {
+      margin: 24px 0;
+      display: none;
+    }
+    
+    .progress.visible {
+      display: block;
+    }
+    
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      width: 0%;
+      transition: width 0.3s;
+    }
+    
+    .progress-text {
+      text-align: center;
+      color: #4b5563;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 Test B2 Upload</h1>
+    <p class="subtitle">Direct upload to Backblaze B2 Cloud Storage</p>
+    
+    <form id="uploadForm">
+      <div class="form-group">
+        <label>Meeting Title</label>
+        <input type="text" id="title" value="B2 Test Meeting" required>
+      </div>
+      
+      <div class="form-group">
+        <label>Audio/Video File</label>
+        <input type="file" id="file" accept="audio/*,video/mp4" required>
+      </div>
+      
+      <button type="submit" class="btn" id="submitBtn">
+        🚀 Upload to B2
+      </button>
+    </form>
+    
+    <div class="progress" id="progress">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-text" id="progressText">Preparing...</div>
+    </div>
+    
+    <div class="log" id="log">
+      <div class="log-entry log-info">Ready to upload. Select a file and click Upload.</div>
+    </div>
+  </div>
 
+  <script>
+    const form = document.getElementById('uploadForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const log = document.getElementById('log');
+    const progress = document.getElementById('progress');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    
+    function addLog(message, type = 'info') {
+      const entry = document.createElement('div');
+      entry.className = `log-entry log-${type}`;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      log.appendChild(entry);
+      log.scrollTop = log.scrollHeight;
+    }
+    
+    function updateProgress(percent, text) {
+      progress.classList.add('visible');
+      progressFill.style.width = percent + '%';
+      progressText.textContent = text;
+    }
+    
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const file = document.getElementById('file').files[0];
+      const title = document.getElementById('title').value;
+      
+      if (!file) {
+        addLog('Please select a file', 'error');
+        return;
+      }
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = '⏳ Uploading...';
+      log.innerHTML = '';
+      
+      try {
+        // Step 1: Get presigned URL
+        addLog('Step 1: Requesting presigned upload URL...', 'info');
+        updateProgress(10, 'Getting upload URL...');
+        
+        const presignResponse = await fetch('/storage/presign-upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            filename: file.name,
+            content_type: file.type || 'application/octet-stream'
+          })
+        });
+        
+        if (!presignResponse.ok) {
+          const error = await presignResponse.json();
+          throw new Error(error.detail || 'Failed to get presigned URL');
+        }
+        
+        const { upload_url, key, expires_in } = await presignResponse.json();
+        addLog(`✅ Got presigned URL (expires in ${expires_in}s)`, 'success');
+        addLog(`   Key: ${key}`, 'info');
+        updateProgress(25, 'Uploading to Backblaze B2...');
+        
+        // Step 2: Upload directly to B2
+        addLog('Step 2: Uploading file to Backblaze B2...', 'info');
+        addLog(`   File: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'info');
+        
+        const uploadResponse = await fetch(upload_url, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          body: file
+        });
+        
+        if (!uploadResponse.ok) {
+          throw new Error(`B2 upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
+        }
+        
+        addLog('✅ File uploaded to B2 successfully!', 'success');
+        updateProgress(75, 'Confirming upload...');
+        
+        // Step 3: Confirm upload
+        addLog('Step 3: Confirming upload with backend...', 'info');
+        
+        const confirmResponse = await fetch('/storage/confirm-upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            key: key,
+            size_bytes: file.size,
+            title: title,
+            language: 'en'
+          })
+        });
+        
+        if (!confirmResponse.ok) {
+          const error = await confirmResponse.json();
+          throw new Error(error.detail || 'Failed to confirm upload');
+        }
+        
+        const result = await confirmResponse.json();
+        addLog('✅ Upload confirmed!', 'success');
+        addLog(`   Meeting ID: ${result.meeting_id}`, 'success');
+        addLog(`   Audio URI: ${result.audio_uri}`, 'success');
+        updateProgress(100, '✅ Complete!');
+        
+        addLog('', 'info');
+        addLog('🎉 SUCCESS! Check your B2 bucket and /meetings page', 'success');
+        
+        setTimeout(() => {
+          if (confirm('Upload successful! Go to meeting progress page?')) {
+            window.location.href = `/progress?id=${result.meeting_id}`;
+          }
+        }, 1000);
+        
+      } catch (error) {
+        addLog(`❌ Error: ${error.message}`, 'error');
+        updateProgress(0, 'Failed');
+        submitBtn.disabled = false;
+        submitBtn.textContent = '🚀 Upload to B2';
+      }
+    });
+  </script>
+</body>
+</html>
+    """
 @app.get("/upload-test", response_class=HTMLResponse)
 def upload_test(request: Request):
     logged_in = COOKIE_NAME in request.cookies
