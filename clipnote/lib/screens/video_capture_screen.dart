@@ -4,11 +4,11 @@
 
 import 'dart:convert';
 import 'dart:typed_data';
-import 'dio/dio.dart';
-import 'flutter/foundation.dart' show kIsWeb;
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'image_picker/image_picker.dart';
-import 'permission_handler/permission_handler.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 const String API_BASE = "https://ai-meeting-notes-production-81d7.up.railway.app";
 

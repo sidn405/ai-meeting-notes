@@ -2,9 +2,9 @@
 import 'dart:io' show File, Platform, RandomAccessFile;
 import 'dart:typed_data';
 import 'dart:convert';
-import 'dio/dio.dart';
-import 'file_picker/file_picker.dart';
-import 'image_picker/image_picker.dart';
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 
 class MediaService {
   MediaService(this.apiBase, Dio? client) : dio = client ?? Dio();

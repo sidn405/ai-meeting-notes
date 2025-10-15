@@ -4,9 +4,9 @@ import 'dart:convert';
 import 'dart:io' show File, RandomAccessFile; // not used on web
 import 'dart:typed_data';
 
-import 'dio/dio.dart';
-import 'file_picker/file_picker.dart';
-import 'flutter/foundation.dart' show kIsWeb;
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 /// Your deployed API base
@@ -62,9 +62,7 @@ class _UploadScreenState extends State<UploadScreen> {
       bytes = await f.readAsBytes();
       contentType = _guessMime(filename);
     } else {
-      // fall back to picker
-      final file = File(picked.path!);
-      bytes = await file.readAsBytes();
+      // --- PICKER BRANCH (declare variables BEFORE use) ---
       final result = await FilePicker.platform.pickFiles(
         withData: kIsWeb,
         type: FileType.custom,
@@ -74,73 +72,29 @@ class _UploadScreenState extends State<UploadScreen> {
         _setStatus("Cancelled");
         return;
       }
-      final picked = result.files.first;
+
+      final picked = result.files.first;         // <-- declared BEFORE usage
       filename = picked.name;
       contentType = _guessMime(filename);
+
       if (kIsWeb) {
         bytes = picked.bytes!;
       } else {
-        final file = File(picked.path!);
-        bytes = await file.readAsBytes();
+        final fileLocal = File(picked.path!);    // <-- use a declared variable
+        bytes = await fileLocal.readAsBytes();
       }
     }
 
     final size = bytes!.lengthInBytes;
 
-    // Web: always do simple upload (browsers handle fixed-length body well)
-    // Desktop/Mobile: use multipart for very large files
-    if (!kIsWeb && size >= kMultipartThreshold && (file != null)) {
-      await _uploadMultipart(file, filename, contentType, size);
-    } else {
-      await _uploadSimple(bytes, filename, contentType, size);
-    }
-  }
-
-  // ---- SERVER RECORD --------------------------------------------------------
-
-  Future<void> _recordUpload({
-    required String meetingId,
-    required String key,
-    required String filename,
-    required String type, // "audio" | "video"
-    String? contentType,
-    int? sizeBytes,
-    int? durationMs,
-  }) async {
-    try {
-      await dio.post(
-        "$API_BASE/meetings/$meetingId/assets",
-        data: {
-          "s3_key": key,
-          "filename": filename,
-          "type": type,
-          "content_type": contentType,
-          "size_bytes": sizeBytes,
-          "duration_ms": durationMs,
-        },
-        options: Options(headers: {"Content-Type": "application/json"}),
-      );
-    } catch (e) {
-      _toast("Saved file; server record failed: $e");
-    }
-  }
-
-  // ---- SIMPLE UPLOAD (fixed-length body; fixes 411) ------------------------
-
-  Future<void> _uploadSimple(
-      Uint8List bytes, String filename, String contentType, int size) async {
+    // SIMPLE UPLOAD (fixed-length body; set Content-Length on non-web)
     try {
       _setStatus("Requesting presigned URL…");
       final presign = await dio.post(
         "$API_BASE/uploads/presign",
-        data: {
-          "filename": filename,
-          "content_type": contentType,
-          "folder": "raw"
-        },
+        data: {"filename": filename, "content_type": contentType, "folder": "raw"},
         options: Options(headers: {"Content-Type": "application/json"}),
       );
-
       if (presign.statusCode != 200) {
         throw Exception('Presign failed: ${presign.statusCode} ${presign.data}');
       }
@@ -152,26 +106,18 @@ class _UploadScreenState extends State<UploadScreen> {
       final publicUrl = data["public_url"] as String?;
 
       _setStatus("Uploading…");
-
-      // Build headers: include server-specified Content-Type and a fixed Content-Length.
-      final hdrs = <String, String>{
-        ...headers.map((k, v) => MapEntry(k, '$v')),
-      };
+      final hdrs = <String, String>{...headers.map((k, v) => MapEntry(k, '$v'))};
       if (!kIsWeb) {
-        // Browsers set length automatically; setting it manually is disallowed.
         hdrs['Content-Length'] = bytes.length.toString();
       }
 
       await dio.put(
         putUrl,
-        data: bytes, // fixed-length body (NOT a stream) → avoids 411 on B2
-        options: Options(
-          headers: hdrs,
-          contentType: headers['Content-Type']?.toString(),
-        ),
+        data: bytes, // not a stream
+        options: Options(headers: hdrs, contentType: headers['Content-Type']?.toString()),
         onSendProgress: (sent, total) {
-          final denom = total == -1 ? bytes.length : total;
-          _setProgress(sent / (denom > 0 ? denom : bytes.length));
+          final denom = total == -1 ? bytes!.length : total;
+          _setProgress(sent / (denom > 0 ? denom : bytes!.length));
         },
       );
 
@@ -182,21 +128,23 @@ class _UploadScreenState extends State<UploadScreen> {
         lastPublicUrl = publicUrl;
       });
 
-      await _recordUpload(
-        meetingId: meetingIdCtrl.text.trim().isEmpty
-            ? "demo-meeting-1"
-            : meetingIdCtrl.text.trim(),
-        key: key,
-        filename: filename,
-        type: contentType.startsWith('video') ? 'video' : 'audio',
-        contentType: contentType,
-        sizeBytes: size,
+      await dio.post(
+        "$API_BASE/meetings/${meetingIdCtrl.text.trim().isEmpty ? "demo-meeting-1" : meetingIdCtrl.text.trim()}/assets",
+        data: {
+          "s3_key": key,
+          "filename": filename,
+          "type": contentType!.startsWith('video') ? 'video' : 'audio',
+          "content_type": contentType,
+          "size_bytes": size,
+        },
+        options: Options(headers: {"Content-Type": "application/json"}),
       );
       _toast("Upload saved • $filename");
     } catch (e) {
       _setStatus("❌ Simple upload error: $e");
     }
   }
+
 
   // ---- MULTIPART UPLOAD (desktop/mobile only) ------------------------------
 

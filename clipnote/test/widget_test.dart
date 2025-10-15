@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:clipnote/upload_screen.dart';
+import 'package:clipnote/screens/upload_screen.dart';
+
 
 void main() {
   testWidgets('Upload screen renders', (WidgetTester tester) async {
