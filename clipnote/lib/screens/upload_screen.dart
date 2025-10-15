@@ -87,6 +87,39 @@ class _UploadScreenState extends State<UploadScreen> {
 
     final size = bytes!.lengthInBytes;
 
+    // Post-upload: save a DB record for this asset
+    Future<void> _recordUpload({
+      required String meetingId,
+      required String key,
+      required String filename,
+      required String type, // "audio" | "video"
+      String? contentType,
+      int? sizeBytes,
+      int? durationMs,
+    }) async {
+      try {
+        await dio.post(
+          "$API_BASE/meetings/$meetingId/assets",
+          data: {
+            "s3_key": key,
+            "filename": filename,
+            "type": type,
+            "content_type": contentType,
+            "size_bytes": sizeBytes,
+            "duration_ms": durationMs,
+          },
+          options: Options(headers: {"Content-Type": "application/json"}),
+        );
+      } catch (e) {
+        final m = ScaffoldMessenger.of(context);
+        m.hideCurrentSnackBar();
+        m.showSnackBar(
+          SnackBar(content: Text("Saved file; server record failed: $e")),
+        );
+      }
+    }
+
+
     // SIMPLE UPLOAD (fixed-length body; set Content-Length on non-web)
     try {
       _setStatus("Requesting presigned URL…");
