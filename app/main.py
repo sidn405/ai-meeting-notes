@@ -520,81 +520,42 @@ def test_b2_upload(request: Request):
       log.innerHTML = '';
       
       try {
-        // Step 1: Get presigned URL
-        addLog('Step 1: Requesting presigned upload URL...', 'info');
-        updateProgress(10, 'Getting upload URL...');
+        addLog('Uploading file to B2 (via server)...', 'info');
+        addLog(`File: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'info');
+        updateProgress(30, 'Uploading to server...');
         
-        const presignResponse = await fetch('/storage/presign-upload', {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('title', title);
+        formData.append('language', 'en');
+        
+        const response = await fetch('/storage/upload-direct', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({
-            filename: file.name,
-            content_type: file.type || 'application/octet-stream'
-          })
+          body: formData
         });
         
-        if (!presignResponse.ok) {
-          const error = await presignResponse.json();
-          throw new Error(error.detail || 'Failed to get presigned URL');
+        updateProgress(70, 'Processing...');
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || 'Upload failed');
         }
         
-        const { upload_url, key, expires_in } = await presignResponse.json();
-        addLog(`✅ Got presigned URL (expires in ${expires_in}s)`, 'success');
-        addLog(`   Key: ${key}`, 'info');
-        updateProgress(25, 'Uploading to Backblaze B2...');
-        
-        // Step 2: Upload directly to B2
-        addLog('Step 2: Uploading file to Backblaze B2...', 'info');
-        addLog(`   File: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'info');
-        
-        const uploadResponse = await fetch(upload_url, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type || 'application/octet-stream' },
-          body: file
-        });
-        
-        if (!uploadResponse.ok) {
-          throw new Error(`B2 upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
-        }
-        
-        addLog('✅ File uploaded to B2 successfully!', 'success');
-        updateProgress(75, 'Confirming upload...');
-        
-        // Step 3: Confirm upload
-        addLog('Step 3: Confirming upload with backend...', 'info');
-        
-        const confirmResponse = await fetch('/storage/confirm-upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            key: key,
-            size_bytes: file.size,
-            title: title,
-            language: 'en'
-          })
-        });
-        
-        if (!confirmResponse.ok) {
-          const error = await confirmResponse.json();
-          throw new Error(error.detail || 'Failed to confirm upload');
-        }
-        
-        const result = await confirmResponse.json();
-        addLog('✅ Upload confirmed!', 'success');
-        addLog(`   Meeting ID: ${result.meeting_id}`, 'success');
-        addLog(`   Audio URI: ${result.audio_uri}`, 'success');
+        const result = await response.json();
         updateProgress(100, '✅ Complete!');
         
+        addLog('✅ Upload successful!', 'success');
+        addLog(`Meeting ID: ${result.meeting_id}`, 'success');
+        addLog(`Audio URI: ${result.audio_uri}`, 'success');
+        addLog(`B2 Key: ${result.key}`, 'info');
         addLog('', 'info');
-        addLog('🎉 SUCCESS! Check your B2 bucket and /meetings page', 'success');
+        addLog('🎉 File is now in your B2 bucket!', 'success');
+        addLog('🔄 Processing started...', 'info');
         
         setTimeout(() => {
-          if (confirm('Upload successful! Go to meeting progress page?')) {
-            window.location.href = `/progress?id=${result.meeting_id}`;
-          }
-        }, 1000);
+          window.location.href = `/progress?id=${result.meeting_id}`;
+        }, 2000);
         
       } catch (error) {
         addLog(`❌ Error: ${error.message}`, 'error');

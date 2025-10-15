@@ -1,0 +1,14 @@
+{
+  "corsRuleName": "allowClipnoteUploads",
+  "allowedOrigins": [
+    "https://ai-meeting-notes-production-81d7.up.railway.app"
+  ],
+  "allowedOperations": [
+    "s3_put"
+  ],
+  "allowedHeaders": [
+    "*"
+  ],
+  "exposeHeaders": [],
+  "maxAgeSeconds": 3600
+}
