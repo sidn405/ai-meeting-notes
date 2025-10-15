@@ -537,12 +537,22 @@ def test_b2_upload(request: Request):
         
         updateProgress(70, 'Processing...');
         
+        // Get response text first to debug
+        const responseText = await response.text();
+        
         if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.detail || 'Upload failed');
+          // Try to parse as JSON, fallback to text
+          let errorMsg;
+          try {
+            const errorJson = JSON.parse(responseText);
+            errorMsg = errorJson.detail || 'Upload failed';
+          } catch {
+            errorMsg = responseText.substring(0, 200); // Show first 200 chars
+          }
+          throw new Error(errorMsg);
         }
         
-        const result = await response.json();
+        const result = JSON.parse(responseText);
         updateProgress(100, '✅ Complete!');
         
         addLog('✅ Upload successful!', 'success');

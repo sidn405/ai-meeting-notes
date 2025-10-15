@@ -7,7 +7,7 @@ import boto3
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from app.utils.storage import s3_client, get_presigned_url, S3_BUCKET
-
+from dotenv import load_dotenv
 # ---- import your existing pieces ----
 from app.models import LicenseTier, Meeting, TIER_LIMITS                    # your SQLModel Meeting + tiers
 from app.services.pipeline import process_meeting                       # your existing pipeline runner
@@ -29,8 +29,6 @@ def s3_client():
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
     )
 
-from dotenv import load_dotenv
-from pathlib import Path
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")  # robust load
 
 def get_bucket() -> str:
