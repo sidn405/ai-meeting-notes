@@ -11,6 +11,8 @@ from app.routers.storage_b2 import router as storage_router
 from dotenv import load_dotenv
 from app.app_uploads import router as uploads_router
 from app.meeting_api import router as meeting_router
+import warnings
+warnings.filterwarnings("ignore", message="Field .* has conflict with protected namespace 'model_'")
 
 load_dotenv()  # ✅ This loads your .env file
 
