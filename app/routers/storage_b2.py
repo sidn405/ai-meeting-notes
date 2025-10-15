@@ -88,6 +88,81 @@ def _key_for(license_key: str, tier: str, filename: str) -> str:
 
 # ---------- Routes ----------
 
+@router.post("/upload-direct")
+async def upload_direct(
+    background: BackgroundTasks,
+    license_info: tuple = Depends(require_license),
+    db: Session = Depends(get_session),
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    language: str = Form("en"),
+    hints: str = Form(None)
+):
+    """Server-side upload to B2 (no CORS needed)"""
+    license, tier_config = license_info
+    tier = license.tier.lower()
+
+    if tier not in ("professional", "business"):
+        raise HTTPException(403, "Cloud uploads require Professional or Business plan")
+
+    # Read file
+    file_content = await file.read()
+    file_size = len(file_content)
+    
+    # Check size limit
+    size_mb = file_size / (1024 * 1024)
+    max_mb = TIER_LIMITS[tier]["max_file_size_mb"]
+    if size_mb > max_mb:
+        raise HTTPException(413, f"File exceeds plan limit of {max_mb} MB")
+
+    # Track usage
+    track_meeting_usage(db, license.license_key)
+
+    # Generate key
+    key = _key_for(license.license_key, tier, file.filename)
+    
+    # Upload to B2
+    s3 = s3_client()
+    s3.put_object(
+        Bucket=get_bucket(),
+        Key=key,
+        Body=file_content,
+        ContentType=file.content_type or "application/octet-stream"
+    )
+
+    # Create meeting record
+    bucket = get_bucket()
+    audio_uri = f"s3://{bucket}/{key}"
+    meeting = Meeting(
+        title=title,
+        audio_path=audio_uri,
+        email_to=license.email,
+        status="queued",
+        progress=0,
+        step="queued"
+    )
+    db.add(meeting)
+    db.commit()
+    db.refresh(meeting)
+
+    # Trigger processing
+    try:
+        background.add_task(
+            process_meeting,
+            meeting_id=meeting.id,
+            language=language,
+            hints=hints
+        )
+    except TypeError:
+        background.add_task(process_meeting, meeting.id)
+
+    return {
+        "ok": True, 
+        "meeting_id": meeting.id, 
+        "audio_uri": audio_uri,
+        "key": key
+    }
+
 @router.post("/presign-upload", response_model=PresignUploadOut)
 def presign_upload(
     body: PresignUploadIn,
@@ -137,11 +212,6 @@ def confirm_upload(
     """
     license, tier_config = license_info
     tier = license.tier.lower()
-    
-    # 👇 ADD THIS
-    print(f"🔍 DEBUG: Confirming upload for key: {body.key}")
-    print(f"🔍 DEBUG: Bucket: {S3_BUCKET}")
-    print(f"🔍 DEBUG: Audio URI will be: s3://{S3_BUCKET}/{body.key}")
 
     if tier not in ("professional", "business"):
         raise HTTPException(403, "Cloud uploads require Professional or Business plan")
