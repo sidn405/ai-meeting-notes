@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dio/dio.dart';
+import 'package:dio/dio.dart';
 import '../utils/constants.dart';
 
 class ApiService {

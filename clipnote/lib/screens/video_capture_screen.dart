@@ -6,7 +6,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dio/dio.dart';
 import 'flutter/foundation.dart' show kIsWeb;
-import 'flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'image_picker/image_picker.dart';
 import 'permission_handler/permission_handler.dart';
 

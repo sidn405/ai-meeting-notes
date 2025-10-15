@@ -7,7 +7,7 @@ import 'dart:typed_data';
 import 'dio/dio.dart';
 import 'file_picker/file_picker.dart';
 import 'flutter/foundation.dart' show kIsWeb;
-import 'flutter/material.dart';
+import 'package:flutter/material.dart';
 
 /// Your deployed API base
 const String API_BASE =
