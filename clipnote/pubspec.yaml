@@ -39,7 +39,6 @@ dependencies:
   shared_preferences: ^2.2.2
   
   
-  
   # Audio Player (for playback)
   audioplayers: ^5.2.1
   
