@@ -36,7 +36,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
     });
 
     try {
-      final response = await _apiService.activateLicense(licenseKey);
+      //final response = await _apiService.activateLicense(licenseKey);
       
       // Save license key
       await StorageService.saveLicenseKey(licenseKey);

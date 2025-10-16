@@ -13,7 +13,7 @@ class RecordScreen extends StatefulWidget {
 class _RecordScreenState extends State<RecordScreen> {
   final AudioService _audioService = AudioService();
   bool _isRecording = false;
-  Duration _recordingDuration = Duration.zero;
+  //Duration _recordingDuration = Duration.zero;
 
   @override
   void dispose() {
