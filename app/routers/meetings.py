@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlmodel import select
 from ..db import get_session, DATA_DIR
 from ..models import Meeting
-from ..services.pipeline import process_meeting, send_summary_email, process_meeting_transcribe_only
+from ..services.pipeline import process_meeting, send_summary_email, process_meeting_transcribe_summarize
 import json, re, os
 
 # CHANGED: Import license system
