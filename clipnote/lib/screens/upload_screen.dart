@@ -1,279 +1,158 @@
-import 'dart:io';
+// lib/services/api_service.dart
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
-import '../utils/constants.dart';
-
-class PresignedUpload {
-  final String putUrl;
-  final String key;
-  final String publicUrl;
-  final Map<String, String> headers;
-
-  PresignedUpload({
-    required this.putUrl,
-    required this.key,
-    required this.publicUrl,
-    required this.headers,
-  });
-
-  factory PresignedUpload.fromJson(Map<String, dynamic> json) {
-    return PresignedUpload(
-      putUrl: json['put_url'] as String,
-      key: json['key'] as String,
-      publicUrl: json['public_url'] as String,
-      headers: Map<String, String>.from(json['headers'] ?? {}),
-    );
-  }
-}
 
 class ApiService {
-  // Singleton pattern
-  ApiService._();
+  ApiService._() {
+    // Attach an interceptor that only adds auth headers to OUR API, not S3/B2.
+    _dio.interceptors.add(
+      InterceptorsWrapper(onRequest: (options, handler) {
+        if (_shouldAuth(options.uri)) {
+          if (_apiKey != null && _apiKey!.isNotEmpty) {
+            options.headers['X-API-Key'] = _apiKey!;
+          }
+          // If your backend wants license in a HEADER instead, uncomment:
+          // if (_licenseKey != null && _licenseKey!.isNotEmpty) {
+          //   options.headers['X-License-Key'] = _licenseKey!;
+          // }
+        }
+        handler.next(options);
+      }),
+    );
+  }
+
   static final ApiService instance = ApiService._();
 
-  final Dio _dio = Dio();
-  String? _licenseKey;
+  /// Your API base (same as the app uses everywhere)
+  static const String baseUrl =
+      "https://ai-meeting-notes-production-81d7.up.railway.app";
 
-  // Constructor-like initialization
-  void initialize() {
-    _dio.options.baseUrl = AppConstants.baseUrl;
-    _dio.options.connectTimeout = const Duration(seconds: 30);
-    _dio.options.receiveTimeout = const Duration(seconds: 30);
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 60),
+    ),
+  );
+
+  String? _apiKey;     // value for X-API-Key
+  String? _licenseKey; // optional
+
+  /// Call this once (e.g., on app start or after user enters keys)
+  void configureAuth({required String apiKey, String? licenseKey}) {
+    _apiKey = apiKey;
+    _licenseKey = licenseKey;
   }
 
-  void setLicenseKey(String key) {
-    _licenseKey = key;
+  bool _shouldAuth(Uri uri) {
+    // Only attach X-API-Key to requests going to YOUR API host.
+    // S3/B2 presigned URLs MUST NOT receive your custom headers.
+    return uri.host == Uri.parse(baseUrl).host;
   }
 
-  Map<String, String> _getHeaders() {
-    return {
-      if (_licenseKey != null) 'X-API-Key': _licenseKey!,
-      'Content-Type': 'application/json',
-    };
-  }
-
-  // ========== NEW METHODS FOR UPLOAD_SCREEN ==========
-
-  // Request presigned upload URL
-  Future<PresignedUpload> presignUpload({
+  // ---------- Upload presign ----------
+  Future<({String putUrl, String key, String? publicUrl, Map<String, String> headers})>
+      presignUpload({
     required String filename,
     required String contentType,
+    String folder = "raw",
   }) async {
-    try {
-      final response = await _dio.post(
-        '/api/presign', // Adjust this endpoint to match your backend
-        data: {
-          'filename': filename,
-          'content_type': contentType,
-        },
-        options: Options(headers: _getHeaders()),
-      );
-      return PresignedUpload.fromJson(response.data);
-    } catch (e) {
-      throw _handleError(e);
-    }
+    final r = await _dio.post(
+      "$baseUrl/uploads/presign",
+      data: {
+        "filename": filename,
+        "content_type": contentType,
+        "folder": folder,
+      },
+      options: Options(headers: {"Content-Type": "application/json"}),
+    );
+    final data = r.data is Map ? r.data : jsonDecode(r.data as String);
+    return (
+      putUrl: data["url"] as String,
+      key: data["key"] as String,
+      publicUrl: data["public_url"] as String?,
+      headers: Map<String, dynamic>.from(data["headers"] ?? {})
+          .map((k, v) => MapEntry(k, "$v")),
+    );
   }
 
-  // Upload bytes to presigned URL
+  // ---------- Upload actual bytes to S3/B2 ----------
   Future<void> putBytes({
     required String putUrl,
     required Uint8List bytes,
     required Map<String, String> headers,
   }) async {
-    try {
-      await _dio.put(
-        putUrl,
-        data: bytes,
-        options: Options(
-          headers: headers,
-          contentType: headers['Content-Type'],
-        ),
-      );
-    } catch (e) {
-      throw _handleError(e);
-    }
+    // DO NOT add X-API-Key here; this is a presigned S3/B2 URL.
+    final hdrs = Map<String, String>.from(headers);
+    hdrs.putIfAbsent('Content-Length', () => bytes.length.toString());
+    await _dio.put(
+      putUrl,
+      data: bytes, // fixed-length body (Backblaze-friendly)
+      options: Options(
+        headers: hdrs,
+        contentType: headers['Content-Type'],
+      ),
+    );
   }
 
-  // Record asset in database
+  // ---------- Record asset in DB (protected) ----------
   Future<void> recordAsset({
     required String meetingId,
     required String s3Key,
     required String filename,
-    required String type,
-    required String contentType,
-    required int sizeBytes,
+    required String type, // "audio" | "video"
+    String? contentType,
+    int? sizeBytes,
+    int? durationMs,
   }) async {
-    try {
-      await _dio.post(
-        '/api/record-asset', // Adjust this endpoint to match your backend
-        data: {
-          'meeting_id': meetingId,
-          's3_key': s3Key,
-          'filename': filename,
-          'type': type,
-          'content_type': contentType,
-          'size_bytes': sizeBytes,
-        },
-        options: Options(headers: _getHeaders()),
-      );
-    } catch (e) {
-      throw _handleError(e);
-    }
+    await _dio.post(
+      "$baseUrl/meetings/$meetingId/assets",
+      data: {
+        "s3_key": s3Key,
+        "filename": filename,
+        "type": type,
+        "content_type": contentType,
+        "size_bytes": sizeBytes,
+        "duration_ms": durationMs,
+        // If your backend requires license in BODY, keep this:
+        if (_licenseKey != null && _licenseKey!.isNotEmpty) "license_key": _licenseKey,
+      },
+      options: Options(headers: {"Content-Type": "application/json"}),
+    );
   }
 
-  // Start processing (transcribe/summarize)
+  // ---------- Start processing (protected) ----------
+  // If your real route is /meetings/{id}/upload_sync, change it here.
   Future<void> startProcessing({
     required String meetingId,
     required String s3Key,
     required bool summarize,
   }) async {
-    try {
-      await _dio.post(
-        '/api/process', // Adjust this endpoint to match your backend
-        data: {
-          'meeting_id': meetingId,
-          's3_key': s3Key,
-          'summarize': summarize,
-        },
-        options: Options(headers: _getHeaders()),
-      );
-    } catch (e) {
-      throw _handleError(e);
-    }
+    await _dio.post(
+      "$baseUrl/meetings/$meetingId/process",
+      data: {
+        "s3_key": s3Key,
+        "mode": summarize ? "transcribe_summarize" : "transcribe_only",
+        if (_licenseKey != null && _licenseKey!.isNotEmpty) "license_key": _licenseKey,
+      },
+      options: Options(headers: {"Content-Type": "application/json"}),
+    );
   }
 
-  // Submit transcript directly (no audio)
+  // ---------- Transcript-only (protected) ----------
   Future<void> submitTranscript({
     required String meetingId,
     required String transcript,
     required bool summarize,
   }) async {
-    try {
-      await _dio.post(
-        '/api/submit-transcript', // Adjust this endpoint to match your backend
-        data: {
-          'meeting_id': meetingId,
-          'transcript': transcript,
-          'summarize': summarize,
-        },
-        options: Options(headers: _getHeaders()),
-      );
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  // ========== EXISTING METHODS ==========
-
-  // Activate License
-  Future<Map<String, dynamic>> activateLicense(String licenseKey) async {
-    try {
-      final response = await _dio.post(
-        AppConstants.licenseActivateEndpoint,
-        data: {'license_key': licenseKey},
-      );
-      return response.data;
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  // Get License Info
-  Future<Map<String, dynamic>> getLicenseInfo() async {
-    try {
-      final response = await _dio.get(
-        AppConstants.licenseInfoEndpoint,
-        options: Options(headers: _getHeaders()),
-      );
-      return response.data;
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  // Upload Audio File
-  Future<Map<String, dynamic>> uploadAudio({
-    required File audioFile,
-    required String title,
-    String language = 'en',
-    String? hints,
-  }) async {
-    try {
-      final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(
-          audioFile.path,
-          filename: audioFile.path.split('/').last,
-        ),
-        'title': title,
-        'language': language,
-        if (hints != null) 'hints': hints,
-      });
-
-      final response = await _dio.post(
-        AppConstants.uploadEndpoint,
-        data: formData,
-        options: Options(headers: _getHeaders()),
-        onSendProgress: (sent, total) {
-          print('Upload progress: ${(sent / total * 100).toStringAsFixed(0)}%');
-        },
-      );
-
-      return response.data;
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  // Get Meeting Status
-  Future<Map<String, dynamic>> getMeetingStatus(int meetingId) async {
-    try {
-      final response = await _dio.get(
-        '${AppConstants.meetingEndpoint}/$meetingId',
-        options: Options(headers: _getHeaders()),
-      );
-      return response.data;
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  // Get Meeting Summary
-  Future<Map<String, dynamic>> getMeetingSummary(int meetingId) async {
-    try {
-      final response = await _dio.get(
-        '${AppConstants.meetingEndpoint}/$meetingId/summary',
-        options: Options(headers: _getHeaders()),
-      );
-      return response.data;
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  // Get Meeting List
-  Future<List<dynamic>> getMeetingsList() async {
-    try {
-      final response = await _dio.get(
-        '${AppConstants.meetingEndpoint}/list',
-        options: Options(headers: _getHeaders()),
-      );
-      return response.data;
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  String _handleError(dynamic error) {
-    if (error is DioException) {
-      if (error.response != null) {
-        final data = error.response?.data;
-        if (data is Map && data.containsKey('detail')) {
-          return data['detail'].toString();
-        }
-        return 'Server error: ${error.response?.statusCode}';
-      }
-      return 'Network error: ${error.message}';
-    }
-    return error.toString();
+    await _dio.post(
+      "$baseUrl/meetings/$meetingId/transcripts",
+      data: {
+        "transcript": transcript,
+        "mode": summarize ? "transcribe_summarize" : "transcribe_only",
+        if (_licenseKey != null && _licenseKey!.isNotEmpty) "license_key": _licenseKey,
+      },
+      options: Options(headers: {"Content-Type": "application/json"}),
+    );
   }
 }

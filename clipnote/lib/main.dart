@@ -56,7 +56,7 @@ class _SplashScreenState extends State<SplashScreen> {
     if (mounted) {
       if (licenseKey != null) {
         // Initialize API with license key
-        ApiService.instance.initialize();
+        final apiService = ApiService();
         apiService.setLicenseKey(licenseKey);
         
         Navigator.of(context).pushReplacement(
