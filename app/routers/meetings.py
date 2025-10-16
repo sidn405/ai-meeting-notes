@@ -253,9 +253,9 @@ async def transcribe_only(
         "message": "Transcript saved successfully"
     }
 
-# TEMPORARY VERSION - transcribe but don't summarize
-@router.post("/upload-transcribe-only")
-async def upload_transcribe_only(
+# FULL VERSION - transcribe and summarize
+@router.post("/upload-transcribe-summarize")
+async def upload_transcribe_summarize(
     background_tasks: BackgroundTasks,
     title: str = Form(...),
     email_to: str | None = Form(None),
@@ -265,7 +265,7 @@ async def upload_transcribe_only(
     license_info: tuple = Depends(require_license),
     db = Depends(get_session),
 ):
-    """Upload and transcribe only (no summarization)"""
+    """Upload and transcribe (with summarization)"""
     license, tier_config = license_info
     
     # Handle empty string for auto-detect
@@ -312,11 +312,11 @@ async def upload_transcribe_only(
     track_meeting_usage(db, license.license_key)
 
     # Import the transcribe-only function
-    from ..services.pipeline import process_meeting_transcribe_only
+    from ..services.pipeline import process_meeting_transcribe_summarize
     
-    # Queue transcription only (no summarization)
+    # Queue transcription (with summarization)
     background_tasks.add_task(
-        process_meeting_transcribe_only,
+        process_meeting_transcribe_summarize,
         mid,
         language=language,
         hints=hints

@@ -323,8 +323,8 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
         _set_progress(meeting_id, 100, step=f"Error: {str(e)}", status="failed")
         raise
 
-def process_meeting_transcribe_only(meeting_id: int, *, language: str | None = None, hints: str | None = None) -> None:
-    """Process meeting for transcription only (no summarization)"""
+def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | None = None, hints: str | None = None) -> None:
+    """Process meeting for transcription (with summarization)"""
     _set_progress(meeting_id, 5, step="Starting transcription", status="processing")
 
     with get_session() as s:
@@ -369,7 +369,7 @@ def process_meeting_transcribe_only(meeting_id: int, *, language: str | None = N
                 s.add(mm)
                 s.commit()
             
-            _set_progress(meeting_id, 100, step="Transcription complete. Ready to summarize.", status="delivered")
+            _set_progress(meeting_id, 100, step="Transcription and summary complete.", status="delivered")
         else:
             raise RuntimeError("No audio file found for transcription.")
 

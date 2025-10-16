@@ -997,7 +997,7 @@ def upload_test(request: Request):
           formData.append('mode', mode);
           
           const endpoint = mode === 'transcribe' 
-            ? '/meetings/upload-transcribe-only' 
+            ? '/meetings/upload-transcribe-summarize' 
             : '/meetings/upload';
           
           try {{
