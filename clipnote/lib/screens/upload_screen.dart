@@ -1,158 +1,389 @@
-// lib/services/api_service.dart
-import 'dart:convert';
+// lib/screens/upload_screen.dart
 import 'dart:typed_data';
-import 'package:dio/dio.dart';
+import 'dart:io' show File;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:clipnote/services/api_service.dart';
 
-class ApiService {
-  ApiService._() {
-    // Attach an interceptor that only adds auth headers to OUR API, not S3/B2.
-    _dio.interceptors.add(
-      InterceptorsWrapper(onRequest: (options, handler) {
-        if (_shouldAuth(options.uri)) {
-          if (_apiKey != null && _apiKey!.isNotEmpty) {
-            options.headers['X-API-Key'] = _apiKey!;
-          }
-          // If your backend wants license in a HEADER instead, uncomment:
-          // if (_licenseKey != null && _licenseKey!.isNotEmpty) {
-          //   options.headers['X-License-Key'] = _licenseKey!;
-          // }
-        }
-        handler.next(options);
-      }),
-    );
+class UploadScreen extends StatefulWidget {
+  const UploadScreen({super.key, this.audioFile, this.prefillFilename});
+  final File? audioFile;          // optional file from RecordScreen
+  final String? prefillFilename;  // optional display name
+
+  @override
+  State<UploadScreen> createState() => _UploadScreenState();
+}
+
+class _UploadScreenState extends State<UploadScreen> {
+  final api = ApiService();
+
+  final meetingIdCtrl = TextEditingController(text: "demo-meeting-1");
+  final s3KeyCtrl = TextEditingController();
+  final transcriptCtrl = TextEditingController();
+
+  double progress = 0;
+  String status = "Idle";
+  String? lastKey;
+  String? lastPublicUrl;
+  bool showTranscriptBox = false;
+
+  @override
+  void dispose() {
+    meetingIdCtrl.dispose();
+    s3KeyCtrl.dispose();
+    transcriptCtrl.dispose();
+    super.dispose();
   }
 
-  static final ApiService instance = ApiService._();
+  // ---------- helpers ----------
+  void _setStatus(String s) => setState(() => status = s);
+  void _setProgress(double p) => setState(() => progress = p.clamp(0, 1));
 
-  /// Your API base (same as the app uses everywhere)
-  static const String baseUrl =
-      "https://ai-meeting-notes-production-81d7.up.railway.app";
-
-  final Dio _dio = Dio(
-    BaseOptions(
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 60),
-    ),
-  );
-
-  String? _apiKey;     // value for X-API-Key
-  String? _licenseKey; // optional
-
-  /// Call this once (e.g., on app start or after user enters keys)
-  void configureAuth({required String apiKey, String? licenseKey}) {
-    _apiKey = apiKey;
-    _licenseKey = licenseKey;
+  String _guessMime(String name) {
+    final n = name.toLowerCase();
+    if (n.endsWith('.mp3')) return 'audio/mpeg';
+    if (n.endsWith('.m4a')) return 'audio/mp4';
+    if (n.endsWith('.wav')) return 'audio/wav';
+    if (n.endsWith('.mp4')) return 'video/mp4';
+    return 'application/octet-stream';
   }
 
-  bool _shouldAuth(Uri uri) {
-    // Only attach X-API-Key to requests going to YOUR API host.
-    // S3/B2 presigned URLs MUST NOT receive your custom headers.
-    return uri.host == Uri.parse(baseUrl).host;
+  String _meetingId() {
+    final v = meetingIdCtrl.text.trim();
+    return v.isEmpty ? "demo-meeting-1" : v;
   }
 
-  // ---------- Upload presign ----------
-  Future<({String putUrl, String key, String? publicUrl, Map<String, String> headers})>
-      presignUpload({
-    required String filename,
-    required String contentType,
-    String folder = "raw",
-  }) async {
-    final r = await _dio.post(
-      "$baseUrl/uploads/presign",
-      data: {
-        "filename": filename,
-        "content_type": contentType,
-        "folder": folder,
-      },
-      options: Options(headers: {"Content-Type": "application/json"}),
-    );
-    final data = r.data is Map ? r.data : jsonDecode(r.data as String);
-    return (
-      putUrl: data["url"] as String,
-      key: data["key"] as String,
-      publicUrl: data["public_url"] as String?,
-      headers: Map<String, dynamic>.from(data["headers"] ?? {})
-          .map((k, v) => MapEntry(k, "$v")),
-    );
+  void _toast(String msg) {
+    final m = ScaffoldMessenger.of(context);
+    m.hideCurrentSnackBar();
+    m.showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  // ---------- Upload actual bytes to S3/B2 ----------
-  Future<void> putBytes({
-    required String putUrl,
-    required Uint8List bytes,
-    required Map<String, String> headers,
-  }) async {
-    // DO NOT add X-API-Key here; this is a presigned S3/B2 URL.
-    final hdrs = Map<String, String>.from(headers);
-    hdrs.putIfAbsent('Content-Length', () => bytes.length.toString());
-    await _dio.put(
-      putUrl,
-      data: bytes, // fixed-length body (Backblaze-friendly)
-      options: Options(
-        headers: hdrs,
-        contentType: headers['Content-Type'],
+  // ---------- flows ----------
+  Future<void> _pickAndUpload() async {
+    setState(() {
+      progress = 0;
+      status = "Preparing upload…";
+      lastKey = null;
+      lastPublicUrl = null;
+    });
+
+    Uint8List? bytes;
+    String? filename;
+    String? contentType;
+
+    if (!kIsWeb && widget.audioFile != null) {
+      // File provided by RecordScreen
+      final f = widget.audioFile!;
+      filename = widget.prefillFilename ?? f.uri.pathSegments.last;
+      bytes = await f.readAsBytes();
+      contentType = _guessMime(filename);
+    } else {
+      // Pick from device
+      final result = await FilePicker.platform.pickFiles(
+        withData: kIsWeb,
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'm4a', 'wav', 'mp4'],
+      );
+      if (result == null || result.files.isEmpty) {
+        _setStatus("Cancelled");
+        return;
+      }
+      final picked = result.files.first;
+      filename = picked.name;
+      contentType = _guessMime(filename);
+      if (kIsWeb) {
+        bytes = picked.bytes!;
+      } else {
+        final fileLocal = File(picked.path!);
+        bytes = await fileLocal.readAsBytes();
+      }
+    }
+
+    final dataBytes = bytes!;
+    final size = dataBytes.length;
+
+    try {
+      _setStatus("Requesting presigned URL…");
+      final signed = await api.presignUpload(
+        filename: filename!,
+        contentType: contentType!,
+      );
+
+      _setStatus("Uploading…");
+      await api.putBytes(
+        putUrl: signed.putUrl,
+        bytes: dataBytes,
+        headers: signed.headers,
+      );
+
+      setState(() {
+        progress = 1;
+        status = "✅ Uploaded";
+        lastKey = signed.key;
+        lastPublicUrl = signed.publicUrl;
+      });
+
+      await api.recordAsset(
+        meetingId: _meetingId(),
+        s3Key: signed.key,
+        filename: filename,
+        type: contentType.startsWith('video') ? 'video' : 'audio',
+        contentType: contentType,
+        sizeBytes: size,
+      );
+
+      _toast("Upload saved • $filename");
+    } catch (e) {
+      _setStatus("❌ Upload error: $e");
+    }
+  }
+
+  Future<void> _process({required bool summarize}) async {
+    final key = lastKey ?? s3KeyCtrl.text.trim();
+    if (key.isEmpty) {
+      _toast("Paste an S3 key or upload a file first.");
+      return;
+    }
+    try {
+      _setStatus(summarize ? "Starting transcribe + summarize…" : "Starting transcription…");
+      await api.startProcessing(
+        meetingId: _meetingId(),
+        s3Key: key,
+        summarize: summarize,
+      );
+      _toast("Processing started");
+      _setStatus("Processing started");
+    } catch (e) {
+      _setStatus("❌ Failed to start processing: $e");
+    }
+  }
+
+  Future<void> _submitTranscript({required bool summarize}) async {
+    final txt = transcriptCtrl.text.trim();
+    if (txt.isEmpty) {
+      _toast("Paste or type a transcript first.");
+      return;
+    }
+    try {
+      _setStatus(summarize ? "Submitting transcript + summarize…" : "Submitting transcript…");
+      await api.submitTranscript(
+        meetingId: _meetingId(),
+        transcript: txt,
+        summarize: summarize,
+      );
+      _toast("Transcript submitted");
+      _setStatus("Transcript submitted");
+    } catch (e) {
+      _setStatus("❌ Transcript submit failed: $e");
+    }
+  }
+
+  // ---------- UI ----------
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    Widget card(Widget child) => Container(
+          decoration: BoxDecoration(
+            color: cs.surface.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: cs.shadow.withOpacity(0.06),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              )
+            ],
+            border: Border.all(color: cs.outlineVariant, width: 1),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: child,
+        );
+
+    final hasProcessKey =
+        (lastKey?.isNotEmpty ?? false) || s3KeyCtrl.text.trim().isNotEmpty;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Uploads"),
+        elevation: 0,
       ),
-    );
-  }
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Header
+            card(Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  "Clipnote Uploads",
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Pick a file to upload, or paste an S3 key. Then transcribe or summarize.",
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: meetingIdCtrl,
+                  decoration: const InputDecoration(
+                    labelText: "Meeting ID",
+                    hintText: "e.g., demo-meeting-1",
+                  ),
+                ),
+                const SizedBox(height: 12),
+                LinearProgressIndicator(value: progress),
+                const SizedBox(height: 6),
+                Text(status),
+              ],
+            )),
 
-  // ---------- Record asset in DB (protected) ----------
-  Future<void> recordAsset({
-    required String meetingId,
-    required String s3Key,
-    required String filename,
-    required String type, // "audio" | "video"
-    String? contentType,
-    int? sizeBytes,
-    int? durationMs,
-  }) async {
-    await _dio.post(
-      "$baseUrl/meetings/$meetingId/assets",
-      data: {
-        "s3_key": s3Key,
-        "filename": filename,
-        "type": type,
-        "content_type": contentType,
-        "size_bytes": sizeBytes,
-        "duration_ms": durationMs,
-        // If your backend requires license in BODY, keep this:
-        if (_licenseKey != null && _licenseKey!.isNotEmpty) "license_key": _licenseKey,
-      },
-      options: Options(headers: {"Content-Type": "application/json"}),
-    );
-  }
+            const SizedBox(height: 16),
 
-  // ---------- Start processing (protected) ----------
-  // If your real route is /meetings/{id}/upload_sync, change it here.
-  Future<void> startProcessing({
-    required String meetingId,
-    required String s3Key,
-    required bool summarize,
-  }) async {
-    await _dio.post(
-      "$baseUrl/meetings/$meetingId/process",
-      data: {
-        "s3_key": s3Key,
-        "mode": summarize ? "transcribe_summarize" : "transcribe_only",
-        if (_licenseKey != null && _licenseKey!.isNotEmpty) "license_key": _licenseKey,
-      },
-      options: Options(headers: {"Content-Type": "application/json"}),
-    );
-  }
+            // Upload from device
+            card(Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  "Upload from device",
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: _pickAndUpload,
+                  icon: const Icon(Icons.upload_file),
+                  label: const Text("Pick & Upload"),
+                ),
+                if (lastKey != null) ...[
+                  const SizedBox(height: 8),
+                  SelectableText(
+                    "Uploaded key: $lastKey",
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  if (lastPublicUrl != null)
+                    SelectableText(
+                      "Public URL: $lastPublicUrl",
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                ],
+              ],
+            )),
 
-  // ---------- Transcript-only (protected) ----------
-  Future<void> submitTranscript({
-    required String meetingId,
-    required String transcript,
-    required bool summarize,
-  }) async {
-    await _dio.post(
-      "$baseUrl/meetings/$meetingId/transcripts",
-      data: {
-        "transcript": transcript,
-        "mode": summarize ? "transcribe_summarize" : "transcribe_only",
-        if (_licenseKey != null && _licenseKey!.isNotEmpty) "license_key": _licenseKey,
-      },
-      options: Options(headers: {"Content-Type": "application/json"}),
+            const SizedBox(height: 16),
+
+            // Use existing key + process
+            card(Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  "Process existing upload",
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: s3KeyCtrl,
+                  decoration: const InputDecoration(
+                    labelText: "Paste S3 key",
+                    hintText: "e.g., raw/123456_file.m4a",
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: hasProcessKey ? () => _process(summarize: false) : null,
+                        child: const Text("Transcribe only"),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton.tonal(
+                        onPressed: hasProcessKey ? () => _process(summarize: true) : null,
+                        child: const Text("Transcribe & Summarize"),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )),
+
+            const SizedBox(height: 16),
+
+            // From transcript (no audio)
+            card(Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      "From transcript (no audio)",
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const Spacer(),
+                    Switch(
+                      value: showTranscriptBox,
+                      onChanged: (v) => setState(() => showTranscriptBox = v),
+                    ),
+                  ],
+                ),
+                AnimatedCrossFade(
+                  duration: const Duration(milliseconds: 180),
+                  crossFadeState: showTranscriptBox
+                      ? CrossFadeState.showFirst
+                      : CrossFadeState.showSecond,
+                  firstChild: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: transcriptCtrl,
+                        minLines: 4,
+                        maxLines: 12,
+                        decoration: const InputDecoration(
+                          labelText: "Paste transcript",
+                          alignLabelWithHint: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => _submitTranscript(summarize: false),
+                              child: const Text("Transcribe only"),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => _submitTranscript(summarize: true),
+                              child: const Text("Transcribe & Summarize"),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  secondChild: const SizedBox.shrink(),
+                ),
+              ],
+            )),
+          ],
+        ),
+      ),
     );
   }
 }

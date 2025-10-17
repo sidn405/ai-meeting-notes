@@ -1,72 +1,48 @@
+// lib/services/audio_service.dart
+// Android/iOS audio recorder using the `record` plugin v5.
+// Exposes start() -> String? filePath, stop() -> String? filePath.
+
 import 'dart:io';
-import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:record/record.dart';
 
 class AudioService {
-  final AudioRecorder _recorder = AudioRecorder();
-  bool _isRecording = false;
-  String? _currentRecordingPath;
+  final AudioRecorder _rec = AudioRecorder();
+  String? _currentPath;
 
-  bool get isRecording => _isRecording;
-  String? get currentRecordingPath => _currentRecordingPath;
+  Future<String?> start() async {
+    final hasPerm = await _rec.hasPermission();
+    if (!hasPerm) return null;
 
-  // Request microphone permission
-  Future<bool> requestPermission() async {
-    final status = await Permission.microphone.request();
-    return status.isGranted;
+    final dir = await getTemporaryDirectory();
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final path = '${dir.path}/clipnote_$ts.m4a';
+
+    const config = RecordConfig(
+      encoder: AudioEncoder.aacLc,
+      bitRate: 128000,
+      sampleRate: 44100,
+      numChannels: 1,
+    );
+
+    await _rec.start(config, path: path);
+    _currentPath = path;
+    return path;
   }
 
-  // Start recording
-  Future<void> startRecording() async {
-    try {
-      if (await _recorder.hasPermission()) {
-        final directory = await getApplicationDocumentsDirectory();
-        final timestamp = DateTime.now().millisecondsSinceEpoch;
-        _currentRecordingPath = '${directory.path}/recording_$timestamp.m4a';
+  Future<String?> stop() async {
+    final isRec = await _rec.isRecording();
+    if (!isRec) return _currentPath;
 
-        await _recorder.start(
-          const RecordConfig(
-            encoder: AudioEncoder.aacLc,
-            bitRate: 128000,
-            sampleRate: 44100,
-          ),
-          path: _currentRecordingPath!,
-        );
-        _isRecording = true;
-      }
-    } catch (e) {
-      print('Error starting recording: $e');
-      rethrow;
-    }
+    await _rec.stop();
+    final p = _currentPath;
+    _currentPath = null;
+    if (p != null && await File(p).exists()) return p;
+    return null;
   }
 
-  // Stop recording
-  Future<String?> stopRecording() async {
-    try {
-      final path = await _recorder.stop();
-      _isRecording = false;
-      return path;
-    } catch (e) {
-      print('Error stopping recording: $e');
-      return null;
-    }
-  }
-
-  // Cancel recording
-  Future<void> cancelRecording() async {
-    await _recorder.cancel();
-    _isRecording = false;
-    if (_currentRecordingPath != null) {
-      final file = File(_currentRecordingPath!);
-      if (await file.exists()) {
-        await file.delete();
-      }
-    }
-    _currentRecordingPath = null;
-  }
-
-  void dispose() {
-    _recorder.dispose();
+  Future<void> dispose() async {
+    final isRec = await _rec.isRecording();
+    if (isRec) await _rec.stop();
   }
 }
