@@ -1,167 +1,306 @@
-import 'dart:async';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
-import 'results_screen.dart';
+import 'progress_screen.dart';
 
-class ProgressScreen extends StatefulWidget {
-  final int meetingId;
-
-  const ProgressScreen({super.key, required this.meetingId});
+class UploadScreen extends StatefulWidget {
+  const UploadScreen({super.key});
 
   @override
-  State<ProgressScreen> createState() => _ProgressScreenState();
+  State<UploadScreen> createState() => _UploadScreenState();
 }
 
-class _ProgressScreenState extends State<ProgressScreen> {
-  final _apiService = ApiService();
-  Timer? _timer;
-  Map<String, dynamic>? _meetingData;
-  String _status = 'queued';
-  int _progress = 0;
-  String _step = 'Initializing...';
+class _UploadScreenState extends State<UploadScreen> {
+  final api = ApiService.I;
 
-  @override
-  void initState() {
-    super.initState();
-    _startPolling();
-  }
+  final _meetingId = TextEditingController(text: 'demo-meeting-1');
+  final _titleCtrl = TextEditingController();
+  final _transcriptCtrl = TextEditingController();
+  bool _busy = false;
+  String? _lastKey;
+  String? _publicUrl;
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _meetingId.dispose();
+    _titleCtrl.dispose();
+    _transcriptCtrl.dispose();
     super.dispose();
   }
 
-  void _startPolling() {
-    _timer = Timer.periodic(const Duration(seconds: 2), (_) {
-      _fetchMeetingStatus();
-    });
-    _fetchMeetingStatus(); // Initial fetch
+  // ---------- UI ----------
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Upload')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        children: [
+          Text('Pick a file to upload', style: t.textTheme.titleLarge),
+          const SizedBox(height: 12),
+
+          // From transcript (no audio)
+          _outlinedButton(
+            context,
+            icon: Icons.description_outlined,
+            label: 'From transcript (no audio)',
+            onPressed: _showTranscriptDialog,
+          ),
+          const SizedBox(height: 16),
+
+          // Choose audio/video & upload
+          _filledButton(
+            context,
+            icon: Icons.upload_rounded,
+            label: 'Choose audio/video & upload',
+            onPressed: _busy ? null : _pickAndUpload,
+          ),
+
+          if (_busy) ...[
+            const SizedBox(height: 16),
+            const LinearProgressIndicator(),
+          ],
+
+          if (_lastKey != null) ...[
+            const SizedBox(height: 20),
+            Text('Uploaded S3 key:', style: t.textTheme.titleMedium),
+            const SizedBox(height: 6),
+            SelectableText(_lastKey!),
+            if (_publicUrl != null) ...[
+              const SizedBox(height: 12),
+              Text('Public URL:', style: t.textTheme.titleMedium),
+              const SizedBox(height: 6),
+              SelectableText(_publicUrl!),
+            ],
+            const SizedBox(height: 16),
+            _filledButton(
+              context,
+              icon: Icons.play_arrow_rounded,
+              label: 'Start processing (transcribe & summarize)',
+              onPressed: () async {
+                if (_lastKey == null) return;
+                await api.startProcessing(
+                  meetingId: _meetingId.text.trim(),
+                  s3key: _lastKey!,
+                  mode: 'transcribe_and_summarize',
+                );
+                if (!mounted) return;
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        ProgressScreen(meetingId: _meetingId.text.trim()),
+                  ),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
-  Future<void> _fetchMeetingStatus() async {
+  // ---------- Actions ----------
+  Future<void> _pickAndUpload() async {
+    setState(() => _busy = true);
     try {
-      final data = await _apiService.getMeetingStatus(widget.meetingId);
-      
-      setState(() {
-        _meetingData = data;
-        _status = data['status'] ?? 'queued';
-        _progress = data['progress'] ?? 0;
-        _step = data['step'] ?? 'Processing...';
-      });
-
-      if (_status == 'delivered' || _status == 'failed') {
-        _timer?.cancel();
-        
-        if (_status == 'delivered' && mounted) {
-          // Navigate to results
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => ResultsScreen(meetingId: widget.meetingId),
-            ),
-          );
-        }
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: false,
+        withData: true,
+        type: FileType.custom,
+        allowedExtensions: const [
+          'm4a',
+          'mp3',
+          'wav',
+          'aac',
+          'mp4',
+          'mov',
+          'mkv',
+          'webm'
+        ],
+      );
+      if (result == null || result.files.single.bytes == null) {
+        setState(() => _busy = false);
+        return;
       }
-    } catch (e) {
-      print('Error fetching meeting status: $e');
+
+      final PlatformFile file = result.files.single;
+      final Uint8List bytes = file.bytes!;
+      final filename = file.name;
+      final contentType = _guessMime(filename);
+
+      final presign = await api.presignUpload(
+        filename: filename,
+        contentType: contentType,
+        folder: 'raw',
+      );
+
+      await api.putBytes(
+        url: presign.url,
+        bytes: bytes,
+        headers: presign.headers ?? const {},
+        method: presign.method ?? 'PUT',
+      );
+
+      await api.recordAsset(
+        meetingId: _meetingId.text.trim(),
+        key: presign.key,
+        publicUrl: presign.publicUrl,
+      );
+
+      setState(() {
+        _lastKey = presign.key;
+        _publicUrl = presign.publicUrl;
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Processing'),
-        backgroundColor: const Color(0xFF667eea),
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+  void _showTranscriptDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (c) {
+        final bottom = MediaQuery.of(c).viewInsets.bottom;
+        return Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, bottom + 16),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Progress circle
-              SizedBox(
-                width: 200,
-                height: 200,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    CircularProgressIndicator(
-                      value: _progress / 100,
-                      strokeWidth: 8,
-                      backgroundColor: Colors.grey.shade300,
-                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF667eea)),
+              TextField(
+                controller: _titleCtrl,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Title (optional)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _transcriptCtrl,
+                maxLines: 8,
+                decoration: const InputDecoration(
+                  labelText: 'Paste transcript text',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.tonal(
+                      onPressed: () async {
+                        await api.submitTranscript(
+                          meetingId: _meetingId.text.trim(),
+                          title: _titleCtrl.text.trim().isEmpty
+                              ? null
+                              : _titleCtrl.text.trim(),
+                          transcript: _transcriptCtrl.text,
+                          summarize: false,
+                        );
+                        if (!mounted) return;
+                        Navigator.pop(c);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ProgressScreen(meetingId: _meetingId.text),
+                          ),
+                        );
+                      },
+                      child: const Text('Transcribe only'),
                     ),
-                    Text(
-                      '$_progress%',
-                      style: const TextStyle(
-                        fontSize: 48,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () async {
+                        await api.submitTranscript(
+                          meetingId: _meetingId.text.trim(),
+                          title: _titleCtrl.text.trim().isEmpty
+                              ? null
+                              : _titleCtrl.text.trim(),
+                          transcript: _transcriptCtrl.text,
+                          summarize: true,
+                        );
+                        if (!mounted) return;
+                        Navigator.pop(c);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ProgressScreen(meetingId: _meetingId.text),
+                          ),
+                        );
+                      },
+                      child: const Text('Transcribe & Summarize'),
                     ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 40),
-
-              // Status badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(
-                  color: _getStatusColor().withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  _status.toUpperCase(),
-                  style: TextStyle(
-                    color: _getStatusColor(),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
                   ),
-                ),
+                ],
               ),
-
-              const SizedBox(height: 16),
-
-              // Current step
-              Text(
-                _step,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 18,
-                  color: Colors.grey,
-                ),
-              ),
-
-              if (_status == 'failed') ...[
-                const SizedBox(height: 40),
-                ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                  ),
-                  child: const Text('Go Back'),
-                ),
-              ],
             ],
           ),
+        );
+      },
+    );
+  }
+
+  // ---------- Helpers ----------
+  String _guessMime(String filename) {
+    final f = filename.toLowerCase();
+    if (f.endsWith('.m4a')) return 'audio/m4a';
+    if (f.endsWith('.mp3')) return 'audio/mpeg';
+    if (f.endsWith('.wav')) return 'audio/wav';
+    if (f.endsWith('.aac')) return 'audio/aac';
+    if (f.endsWith('.mp4')) return 'video/mp4';
+    if (f.endsWith('.mov')) return 'video/quicktime';
+    if (f.endsWith('.mkv')) return 'video/x-matroska';
+    if (f.endsWith('.webm')) return 'video/webm';
+    return 'application/octet-stream';
+  }
+
+  Widget _outlinedButton(BuildContext context,
+      {required IconData icon,
+      required String label,
+      required VoidCallback onPressed}) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 56,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: scheme.primary,
+          side: BorderSide(color: scheme.outlineVariant),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
     );
   }
 
-  Color _getStatusColor() {
-    switch (_status) {
-      case 'delivered':
-        return Colors.green;
-      case 'failed':
-        return Colors.red;
-      case 'processing':
-        return Colors.orange;
-      default:
-        return Colors.blue;
-    }
+  Widget _filledButton(BuildContext context,
+      {required IconData icon,
+      required String label,
+      required VoidCallback? onPressed}) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 56,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: scheme.primary,
+          foregroundColor: scheme.onPrimary,
+          disabledBackgroundColor: scheme.primary.withOpacity(.4),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
   }
 }

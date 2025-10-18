@@ -1,387 +1,304 @@
-// lib/screens/upload_screen.dart
 import 'dart:typed_data';
-import 'dart:io' show File;
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:clipnote/services/api_service.dart';
+import 'package:flutter/material.dart';
+import '../services/api_service.dart';
+import 'progress_screen.dart';
 
 class UploadScreen extends StatefulWidget {
-  const UploadScreen({super.key, this.audioFile, this.prefillFilename});
-  final File? audioFile;          // optional file from RecordScreen
-  final String? prefillFilename;  // optional display name
+  const UploadScreen({super.key});
 
   @override
   State<UploadScreen> createState() => _UploadScreenState();
 }
 
 class _UploadScreenState extends State<UploadScreen> {
-  final api = ApiService();
+  final api = ApiService.I;
 
-  final meetingIdCtrl = TextEditingController(text: "demo-meeting-1");
-  final s3KeyCtrl = TextEditingController();
-  final transcriptCtrl = TextEditingController();
-
-  double progress = 0;
-  String status = "Idle";
-  String? lastKey;
-  String? lastPublicUrl;
-  bool showTranscriptBox = false;
+  final _meetingId = TextEditingController(text: 'demo-meeting-1');
+  final _titleCtrl = TextEditingController();
+  final _transcriptCtrl = TextEditingController();
+  bool _busy = false;
+  String? _lastKey;
+  String? _publicUrl;
 
   @override
   void dispose() {
-    meetingIdCtrl.dispose();
-    s3KeyCtrl.dispose();
-    transcriptCtrl.dispose();
+    _meetingId.dispose();
+    _titleCtrl.dispose();
+    _transcriptCtrl.dispose();
     super.dispose();
-  }
-
-  // ---------- helpers ----------
-  void _setStatus(String s) => setState(() => status = s);
-  void _setProgress(double p) => setState(() => progress = p.clamp(0, 1));
-
-  String _guessMime(String name) {
-    final n = name.toLowerCase();
-    if (n.endsWith('.mp3')) return 'audio/mpeg';
-    if (n.endsWith('.m4a')) return 'audio/mp4';
-    if (n.endsWith('.wav')) return 'audio/wav';
-    if (n.endsWith('.mp4')) return 'video/mp4';
-    return 'application/octet-stream';
-  }
-
-  String _meetingId() {
-    final v = meetingIdCtrl.text.trim();
-    return v.isEmpty ? "demo-meeting-1" : v;
-  }
-
-  void _toast(String msg) {
-    final m = ScaffoldMessenger.of(context);
-    m.hideCurrentSnackBar();
-    m.showSnackBar(SnackBar(content: Text(msg)));
-  }
-
-  // ---------- flows ----------
-  Future<void> _pickAndUpload() async {
-    setState(() {
-      progress = 0;
-      status = "Preparing upload…";
-      lastKey = null;
-      lastPublicUrl = null;
-    });
-
-    Uint8List? bytes;
-    String? filename;
-    String? contentType;
-
-    if (!kIsWeb && widget.audioFile != null) {
-      // File provided by RecordScreen
-      final f = widget.audioFile!;
-      filename = widget.prefillFilename ?? f.uri.pathSegments.last;
-      bytes = await f.readAsBytes();
-      contentType = _guessMime(filename);
-    } else {
-      // Pick from device
-      final result = await FilePicker.platform.pickFiles(
-        withData: kIsWeb,
-        type: FileType.custom,
-        allowedExtensions: ['mp3', 'm4a', 'wav', 'mp4'],
-      );
-      if (result == null || result.files.isEmpty) {
-        _setStatus("Cancelled");
-        return;
-      }
-      final picked = result.files.first;
-      filename = picked.name;
-      contentType = _guessMime(filename);
-      if (kIsWeb) {
-        bytes = picked.bytes!;
-      } else {
-        final fileLocal = File(picked.path!);
-        bytes = await fileLocal.readAsBytes();
-      }
-    }
-
-    final dataBytes = bytes!;
-    final size = dataBytes.length;
-
-    try {
-      _setStatus("Requesting presigned URL…");
-      final signed = await api.presignUpload(
-        filename: filename!,
-        contentType: contentType!,
-      );
-
-      _setStatus("Uploading…");
-      await api.putBytes(
-        putUrl: signed.putUrl,
-        bytes: dataBytes,
-        headers: signed.headers,
-      );
-
-      setState(() {
-        progress = 1;
-        status = "✅ Uploaded";
-        lastKey = signed.key;
-        lastPublicUrl = signed.publicUrl;
-      });
-
-      await api.recordAsset(
-        meetingId: _meetingId(),
-        s3Key: signed.key,
-        filename: filename,
-        type: contentType.startsWith('video') ? 'video' : 'audio',
-        contentType: contentType,
-        sizeBytes: size,
-      );
-
-      _toast("Upload saved • $filename");
-    } catch (e) {
-      _setStatus("❌ Upload error: $e");
-    }
-  }
-
-  Future<void> _process({required bool summarize}) async {
-    final key = lastKey ?? s3KeyCtrl.text.trim();
-    if (key.isEmpty) {
-      _toast("Paste an S3 key or upload a file first.");
-      return;
-    }
-    try {
-      _setStatus(summarize ? "Starting transcribe + summarize…" : "Starting transcription…");
-      await api.startProcessing(
-        meetingId: _meetingId(),
-        s3Key: key,
-        summarize: summarize,
-      );
-      _toast("Processing started");
-      _setStatus("Processing started");
-    } catch (e) {
-      _setStatus("❌ Failed to start processing: $e");
-    }
-  }
-
-  Future<void> _submitTranscript({required bool summarize}) async {
-    final txt = transcriptCtrl.text.trim();
-    if (txt.isEmpty) {
-      _toast("Paste or type a transcript first.");
-      return;
-    }
-    try {
-      _setStatus(summarize ? "Submitting transcript + summarize…" : "Submitting transcript…");
-      await api.submitTranscript(
-        meetingId: _meetingId(),
-        transcript: txt,
-        summarize: summarize,
-      );
-      _toast("Transcript submitted");
-      _setStatus("Transcript submitted");
-    } catch (e) {
-      _setStatus("❌ Transcript submit failed: $e");
-    }
   }
 
   // ---------- UI ----------
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    Widget card(Widget child) => Container(
-          decoration: BoxDecoration(
-            color: cs.surface.withOpacity(0.9),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: cs.shadow.withOpacity(0.06),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              )
-            ],
-            border: Border.all(color: cs.outlineVariant, width: 1),
-          ),
-          padding: const EdgeInsets.all(16),
-          child: child,
-        );
-
-    final hasProcessKey =
-        (lastKey?.isNotEmpty ?? false) || s3KeyCtrl.text.trim().isNotEmpty;
-
+    final t = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Uploads"),
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Header
-            card(Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  "Clipnote Uploads",
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "Pick a file to upload, or paste an S3 key. Then transcribe or summarize.",
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: meetingIdCtrl,
-                  decoration: const InputDecoration(
-                    labelText: "Meeting ID",
-                    hintText: "e.g., demo-meeting-1",
-                  ),
-                ),
-                const SizedBox(height: 12),
-                LinearProgressIndicator(value: progress),
-                const SizedBox(height: 6),
-                Text(status),
-              ],
-            )),
+      appBar: AppBar(title: const Text('Upload')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        children: [
+          Text('Pick a file to upload', style: t.textTheme.titleLarge),
+          const SizedBox(height: 12),
 
+          // From transcript (no audio)
+          _outlinedButton(
+            context,
+            icon: Icons.description_outlined,
+            label: 'From transcript (no audio)',
+            onPressed: _showTranscriptDialog,
+          ),
+          const SizedBox(height: 16),
+
+          // Choose audio/video & upload
+          _filledButton(
+            context,
+            icon: Icons.upload_rounded,
+            label: 'Choose audio/video & upload',
+            onPressed: _busy ? null : _pickAndUpload,
+          ),
+
+          if (_busy) ...[
             const SizedBox(height: 16),
-
-            // Upload from device
-            card(Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  "Upload from device",
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: _pickAndUpload,
-                  icon: const Icon(Icons.upload_file),
-                  label: const Text("Pick & Upload"),
-                ),
-                if (lastKey != null) ...[
-                  const SizedBox(height: 8),
-                  SelectableText(
-                    "Uploaded key: $lastKey",
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  if (lastPublicUrl != null)
-                    SelectableText(
-                      "Public URL: $lastPublicUrl",
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                ],
-              ],
-            )),
-
-            const SizedBox(height: 16),
-
-            // Use existing key + process
-            card(Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  "Process existing upload",
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: s3KeyCtrl,
-                  decoration: const InputDecoration(
-                    labelText: "Paste S3 key",
-                    hintText: "e.g., raw/123456_file.m4a",
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: hasProcessKey ? () => _process(summarize: false) : null,
-                        child: const Text("Transcribe only"),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton.tonal(
-                        onPressed: hasProcessKey ? () => _process(summarize: true) : null,
-                        child: const Text("Transcribe & Summarize"),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            )),
-
-            const SizedBox(height: 16),
-
-            // From transcript (no audio)
-            card(Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      "From transcript (no audio)",
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const Spacer(),
-                    Switch(
-                      value: showTranscriptBox,
-                      onChanged: (v) => setState(() => showTranscriptBox = v),
-                    ),
-                  ],
-                ),
-                AnimatedCrossFade(
-                  duration: const Duration(milliseconds: 180),
-                  crossFadeState: showTranscriptBox
-                      ? CrossFadeState.showFirst
-                      : CrossFadeState.showSecond,
-                  firstChild: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: transcriptCtrl,
-                        minLines: 4,
-                        maxLines: 12,
-                        decoration: const InputDecoration(
-                          labelText: "Paste transcript",
-                          alignLabelWithHint: true,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => _submitTranscript(summarize: false),
-                              child: const Text("Transcribe only"),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => _submitTranscript(summarize: true),
-                              child: const Text("Transcribe & Summarize"),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  secondChild: const SizedBox.shrink(),
-                ),
-              ],
-            )),
+            const LinearProgressIndicator(),
           ],
+
+          if (_lastKey != null) ...[
+            const SizedBox(height: 20),
+            Text('Uploaded S3 key:', style: t.textTheme.titleMedium),
+            const SizedBox(height: 6),
+            SelectableText(_lastKey!),
+            if (_publicUrl != null) ...[
+              const SizedBox(height: 12),
+              Text('Public URL:', style: t.textTheme.titleMedium),
+              const SizedBox(height: 6),
+              SelectableText(_publicUrl!),
+            ],
+            const SizedBox(height: 16),
+            _filledButton(
+              context,
+              icon: Icons.play_arrow_rounded,
+              label: 'Start processing (transcribe & summarize)',
+              onPressed: () async {
+                if (_lastKey == null) return;
+                await api.startProcessing(
+                  meetingId: _meetingId.text.trim(),
+                  s3key: _lastKey!,
+                  mode: 'transcribe_and_summarize',
+                );
+                if (!mounted) return;
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        ProgressScreen(meetingId: _meetingId.text.trim()),
+                  ),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ---------- Actions ----------
+  Future<void> _pickAndUpload() async {
+    setState(() => _busy = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: false,
+        withData: true,
+        type: FileType.custom,
+        allowedExtensions: const [
+          'm4a',
+          'mp3',
+          'wav',
+          'aac',
+          'mp4',
+          'mov',
+          'mkv',
+          'webm'
+        ],
+      );
+      if (result == null || result.files.single.bytes == null) {
+        setState(() => _busy = false);
+        return;
+      }
+
+      final PlatformFile file = result.files.single;
+      final Uint8List bytes = file.bytes!;
+      final filename = file.name;
+      final contentType = _guessMime(filename);
+
+      final presign = await api.presignUpload(
+        filename: filename,
+        contentType: contentType,
+        folder: 'raw',
+      );
+
+      await api.putBytes(
+        url: presign.url,
+        bytes: bytes,
+        headers: presign.headers ?? const {},
+        method: presign.method ?? 'PUT',
+      );
+
+      await api.recordAsset(
+        meetingId: _meetingId.text.trim(),
+        key: presign.key,
+        publicUrl: presign.publicUrl,
+      );
+
+      setState(() {
+        _lastKey = presign.key;
+        _publicUrl = presign.publicUrl;
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _showTranscriptDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (c) {
+        final bottom = MediaQuery.of(c).viewInsets.bottom;
+        return Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, bottom + 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _titleCtrl,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Title (optional)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _transcriptCtrl,
+                maxLines: 8,
+                decoration: const InputDecoration(
+                  labelText: 'Paste transcript text',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.tonal(
+                      onPressed: () async {
+                        await api.submitTranscript(
+                          meetingId: _meetingId.text.trim(),
+                          title: _titleCtrl.text.trim().isEmpty
+                              ? null
+                              : _titleCtrl.text.trim(),
+                          transcript: _transcriptCtrl.text,
+                          summarize: false,
+                        );
+                        if (!mounted) return;
+                        Navigator.pop(c);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ProgressScreen(meetingId: _meetingId.text),
+                          ),
+                        );
+                      },
+                      child: const Text('Transcribe only'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () async {
+                        await api.submitTranscript(
+                          meetingId: _meetingId.text.trim(),
+                          title: _titleCtrl.text.trim().isEmpty
+                              ? null
+                              : _titleCtrl.text.trim(),
+                          transcript: _transcriptCtrl.text,
+                          summarize: true,
+                        );
+                        if (!mounted) return;
+                        Navigator.pop(c);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ProgressScreen(meetingId: _meetingId.text),
+                          ),
+                        );
+                      },
+                      child: const Text('Transcribe & Summarize'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ---------- Helpers ----------
+  String _guessMime(String filename) {
+    final f = filename.toLowerCase();
+    if (f.endsWith('.m4a')) return 'audio/m4a';
+    if (f.endsWith('.mp3')) return 'audio/mpeg';
+    if (f.endsWith('.wav')) return 'audio/wav';
+    if (f.endsWith('.aac')) return 'audio/aac';
+    if (f.endsWith('.mp4')) return 'video/mp4';
+    if (f.endsWith('.mov')) return 'video/quicktime';
+    if (f.endsWith('.mkv')) return 'video/x-matroska';
+    if (f.endsWith('.webm')) return 'video/webm';
+    return 'application/octet-stream';
+  }
+
+  Widget _outlinedButton(BuildContext context,
+      {required IconData icon,
+      required String label,
+      required VoidCallback onPressed}) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 56,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: scheme.primary,
+          side: BorderSide(color: scheme.outlineVariant),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
+  Widget _filledButton(BuildContext context,
+      {required IconData icon,
+      required String label,
+      required VoidCallback? onPressed}) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 56,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: scheme.primary,
+          foregroundColor: scheme.onPrimary,
+          disabledBackgroundColor: scheme.primary.withOpacity(.4),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
       ),
     );

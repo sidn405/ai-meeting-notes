@@ -54,14 +54,7 @@ class _RecordScreenState extends State<RecordScreen> {
 
       // Navigate to UploadScreen with the recorded file
       if (mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => up.UploadScreen(
-              audioFile: File(path),
-              prefillFilename: File(path).uri.pathSegments.last,
-            ),
-          ),
-        );
+        Navigator.of(context).pushNamed('/upload');
       }
     } catch (e) {
       _snack("Failed to stop: $e");

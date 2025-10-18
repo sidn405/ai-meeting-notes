@@ -1,10 +1,9 @@
+// lib/screens/results_screen.dart
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
-import '../models/meeting.dart';
 
 class ResultsScreen extends StatefulWidget {
-  final int meetingId;
-
+  final String meetingId;
   const ResultsScreen({super.key, required this.meetingId});
 
   @override
@@ -12,194 +11,129 @@ class ResultsScreen extends StatefulWidget {
 }
 
 class _ResultsScreenState extends State<ResultsScreen> {
-  final _apiService = ApiService();
-  Summary? _summary;
-  bool _isLoading = true;
+  final _api = ApiService();
+
+  Map<String, dynamic>? _result;
+  String? _error;
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _fetchSummary();
+    _load();
   }
 
-  Future<void> _fetchSummary() async {
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
     try {
-      final data = await _apiService.getMeetingSummary(widget.meetingId);
+      final data = await ApiService.I.getMeetingSummary(widget.meetingId);
+      if (!mounted) return;
       setState(() {
-        _summary = Summary.fromJson(data);
-        _isLoading = false;
+        _result = data;
+        _loading = false;
       });
     } catch (e) {
-      print('Error fetching summary: $e');
-      setState(() => _isLoading = false);
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Meeting Summary'),
-        backgroundColor: const Color(0xFF667eea),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _summary == null
-              ? const Center(child: Text('No summary available'))
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildSection(
-                        'Executive Summary',
-                        _summary!.executiveSummary,
-                        Icons.summarize,
-                      ),
-                      const SizedBox(height: 24),
-                      _buildDecisionsSection(),
-                      const SizedBox(height: 24),
-                      _buildActionItemsSection(),
-                    ],
-                  ),
-                ),
-    );
-  }
-
-  Widget _buildSection(String title, String content, IconData icon) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: const Color(0xFF667eea)),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              content,
-              style: const TextStyle(fontSize: 16, height: 1.5),
-            ),
-          ],
+      appBar: AppBar(title: const Text('Results')),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Error', style: theme.textTheme.titleLarge),
+                        const SizedBox(height: 8),
+                        Text(_error!, style: theme.textTheme.bodyMedium),
+                        const Spacer(),
+                        FilledButton(
+                          onPressed: _load,
+                          child: const Text('Retry'),
+                        )
+                      ],
+                    )
+                  : _buildResult(context),
         ),
       ),
     );
   }
 
-  Widget _buildDecisionsSection() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.check_circle, color: Color(0xFF667eea)),
-                SizedBox(width: 8),
-                Text(
-                  'Key Decisions',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (_summary!.keyDecisions.isEmpty)
-              const Text('No key decisions recorded')
-            else
-              ..._summary!.keyDecisions.map(
-                (decision) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('• ', style: TextStyle(fontSize: 20)),
-                      Expanded(
-                        child: Text(
-                          decision,
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+  Widget _buildResult(BuildContext context) {
+    final data = _result ?? const {};
+    // Adjust keys to whatever your backend returns
+    final transcript = data['transcript'] as String? ?? '';
+    final summary = data['summary'] as Map<String, dynamic>?;
+
+    final execSummary = summary?['executive_summary'] as String? ?? '';
+    final keyDecisions = (summary?['key_decisions'] as List?)?.cast<String>() ?? const [];
+    final actionItems  = (summary?['action_items']  as List?)?.cast<Map>() ?? const [];
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (execSummary.isNotEmpty) ...[
+            Text('Executive Summary', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text(execSummary),
+            const SizedBox(height: 16),
+          ],
+          Text('Key Decisions', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          if (keyDecisions.isEmpty)
+            const Text('None listed.')
+          else
+            ...keyDecisions.map((e) => ListTile(
+                  leading: const Icon(Icons.check_circle_outline),
+                  title: Text(e),
+                )),
+          const SizedBox(height: 16),
+          Text('Action Items', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          if (actionItems.isEmpty)
+            const Text('None listed.')
+          else
+            ...actionItems.map((e) {
+              final m = e.cast<String, dynamic>();
+              final owner = m['owner'] as String? ?? '';
+              final title = m['title'] as String? ?? m['text'] as String? ?? '';
+              final due   = m['due']   as String?; // optional
+              return ListTile(
+                leading: const Icon(Icons.task_alt_outlined),
+                title: Text(title),
+                subtitle: Text([
+                  if (owner.isNotEmpty) 'Owner: $owner',
+                  if (due != null && due.isNotEmpty) 'Due: $due',
+                ].join('   ')),
+              );
+            }),
+          const SizedBox(height: 16),
+          ExpansionTile(
+            title: const Text('Full Transcript'),
+            children: [
+              const SizedBox(height: 8),
+              Text(
+                transcript.isEmpty ? 'Not available.' : transcript,
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
-          ],
-        ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ],
       ),
     );
-  }
-
-  Widget _buildActionItemsSection() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.assignment, color: Color(0xFF667eea)),
-                SizedBox(width: 8),
-                Text(
-                  'Action Items',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (_summary!.actionItems.isEmpty)
-              const Text('No action items')
-            else
-              ..._summary!.actionItems.map(
-                (item) => Card(
-                  color: Colors.grey.shade100,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    title: Text(item.task ?? 'No task'),
-                    subtitle: Text(item.owner ?? 'Unassigned'),
-                    trailing: item.priority != null
-                        ? Chip(
-                            label: Text(item.priority!),
-                            backgroundColor: _getPriorityColor(item.priority!),
-                          )
-                        : null,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Color _getPriorityColor(String priority) {
-    switch (priority.toLowerCase()) {
-      case 'high':
-        return Colors.red.shade200;
-      case 'medium':
-        return Colors.orange.shade200;
-      case 'low':
-        return Colors.blue.shade200;
-      default:
-        return Colors.grey.shade200;
-    }
   }
 }

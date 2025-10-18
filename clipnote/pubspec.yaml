@@ -37,7 +37,9 @@ dependencies:
   permission_handler: ^12.0.1
   image_picker: ^1.1.2   # or camera: ^0.10.x if you prefer full manual camera
   shared_preferences: ^2.2.2
-  
+  in_app_purchase: ^3.2.2
+  # iOS simulator-only testing (safe to include; no-op on Android)
+  in_app_purchase_storekit: ^0.3.6
   
   # Audio Player (for playback)
   audioplayers: ^6.5.1
@@ -45,8 +47,6 @@ dependencies:
   # State Management
   provider: ^6.1.1
   
-  # In-App Purchases
-  in_app_purchase: ^3.1.11
   
   # UI Components
   flutter_spinkit: ^5.2.0

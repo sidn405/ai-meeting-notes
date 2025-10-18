@@ -1,16 +1,11 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
-import 'screens/activation_screen.dart';
-import 'screens/home_screen.dart';
-import 'services/storage_service.dart';
-import 'services/api_service.dart';
 
-//void main() {
-//  runApp(const MaterialApp(
-//    debugShowCheckedModeBanner: false,
-//    home: UploadScreen(),
-//  ));
-//}
-void main() async {
+import 'screens/home_screen.dart';
+import 'screens/activation_screen.dart';
+import 'screens/upload_screen.dart';
+
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const ClipnoteApp());
 }
@@ -22,98 +17,14 @@ class ClipnoteApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Clipnote',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF667eea),
-        ),
-        useMaterial3: true,
-      ),
-      home: const SplashScreen(),
-      debugShowCheckedModeBanner: false,
-    );
-  }
-}
-
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
-
-  @override
-  State<SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends State<SplashScreen> {
-  @override
-  void initState() {
-    super.initState();
-    _checkLicense();
-  }
-
-  Future<void> _checkLicense() async {
-    await Future.delayed(const Duration(seconds: 2));
-    
-    final licenseKey = await StorageService.getLicenseKey();
-    
-    if (mounted) {
-      if (licenseKey != null) {
-        // Initialize API with license key
-        final apiService = ApiService();
-        apiService.setLicenseKey(licenseKey);
-        
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
-      } else {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const ActivationScreen()),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
-          ),
-        ),
-        child: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '🎙️',
-                style: TextStyle(fontSize: 100),
-              ),
-              SizedBox(height: 24),
-              Text(
-                'Clipnote',
-                style: TextStyle(
-                  fontSize: 48,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'AI-powered meeting notes',
-                style: TextStyle(
-                  fontSize: 18,
-                  color: Colors.white70,
-                ),
-              ),
-              SizedBox(height: 40),
-              CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            ],
-          ),
-        ),
-      ),
+      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
+      initialRoute: '/home',
+      routes: {
+        '/home'     : (_) => const HomeScreen(),
+        '/activate' : (_) => const ActivationScreen(),
+        '/upload'   : (_) => const UploadScreen(),
+      },
+      // routes that need arguments can use onGenerateRoute if you like
     );
   }
 }
