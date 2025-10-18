@@ -9,6 +9,7 @@ from pathlib import Path
 from .routers import meetings, health, auth, license
 from app.routers.storage_b2 import router as storage_router
 from dotenv import load_dotenv
+from app.routers import iap
 from app.app_uploads import router as uploads_router
 from app.meeting_api import router as meeting_router
 import warnings
@@ -32,6 +33,7 @@ app.include_router(license.router)
 app.include_router(storage_router)
 app.include_router(uploads_router)
 app.include_router(meeting_router)
+app.include_router(iap.router)
 
 @app.get("/healthz")
 def healthz():

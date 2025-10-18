@@ -1,5 +1,5 @@
 """
-License Service for SQLModel
+License Service for SQLModel - Now supports both manual licenses and IAP
 Add this as services/license.py
 """
 import secrets
@@ -23,10 +23,16 @@ def create_license(
     session: Session,
     email: str,
     tier: LicenseTier,
-    gumroad_order_id: Optional[str] = None
+    gumroad_order_id: Optional[str] = None,
+    iap_purchase_token: Optional[str] = None,
+    iap_store: Optional[str] = None,
+    iap_product_id: Optional[str] = None
 ) -> License:
-    """Create a new license"""
-    license_key = generate_license_key(tier.value, email)
+    """Create a new license (supports both manual and IAP)"""
+    # Generate license key
+    # For IAP licenses, use "IAP" prefix to distinguish
+    prefix = "IAP" if iap_purchase_token else None
+    license_key = generate_license_key(tier.value, email, prefix)
     
     license = License(
         license_key=license_key,
@@ -34,7 +40,10 @@ def create_license(
         email=email,
         is_active=True,
         gumroad_order_id=gumroad_order_id,
-        activated_at=datetime.utcnow()
+        activated_at=datetime.utcnow(),
+        iap_purchase_token=iap_purchase_token,
+        iap_store=iap_store,
+        iap_product_id=iap_product_id
     )
     
     session.add(license)
@@ -42,6 +51,14 @@ def create_license(
     session.refresh(license)
     
     return license
+
+def find_license_by_iap_token(
+    session: Session,
+    purchase_token: str
+) -> Optional[License]:
+    """Find license by IAP purchase token"""
+    statement = select(License).where(License.iap_purchase_token == purchase_token)
+    return session.exec(statement).first()
 
 def validate_license(session: Session, license_key: str) -> Tuple[bool, Optional[License], Optional[str]]:
     """
@@ -150,8 +167,29 @@ def get_license_info(session: Session, license_key: str) -> dict:
         "meetings_limit": limit,
         "has_quota": has_quota,
         "activated_at": license.activated_at.isoformat() if license.activated_at else None,
-        "is_active": license.is_active
+        "expires_at": license.expires_at.isoformat() if license.expires_at else None,
+        "is_active": license.is_active,
+        "is_iap": license.iap_purchase_token is not None
     }
+    
+def update_iap_license(
+    session: Session,
+    purchase_token: str,
+    expires_at: Optional[datetime] = None,
+    is_active: bool = True
+) -> Optional[License]:
+    """Update an IAP license (for subscription renewals/cancellations)"""
+    license = find_license_by_iap_token(session, purchase_token)
+    
+    if license:
+        license.is_active = is_active
+        license.expires_at = expires_at
+        license.updated_at = datetime.utcnow()
+        session.commit()
+        session.refresh(license)
+        return license
+    
+    return None
 
 def deactivate_license(session: Session, license_key: str) -> bool:
     """Deactivate a license"""
@@ -167,6 +205,7 @@ def deactivate_license(session: Session, license_key: str) -> bool:
 
 def validate_file_size(file_size_bytes: int, tier: LicenseTier) -> Tuple[bool, str]:
     """Validate if file size is within tier limits"""
+    tier_str = tier.value if isinstance(tier, LicenseTier) else tier
     tier_config = TIER_LIMITS[tier]
     max_size_bytes = tier_config["max_file_size_mb"] * 1024 * 1024
     

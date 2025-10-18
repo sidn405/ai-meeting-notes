@@ -1,13 +1,15 @@
 # app/routers/meetings.py
-from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException, Depends, Cookie
+from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException, Depends, Cookie, Header
 from typing import Optional
 from ..security import require_auth
 from fastapi.responses import FileResponse
 from pathlib import Path
-from sqlmodel import select
+from sqlmodel import select, Session
 from ..db import get_session, DATA_DIR
-from ..models import Meeting
+from ..models import Meeting, License, LicenseTier, TIER_LIMITS
 from ..services.pipeline import process_meeting, send_summary_email, process_meeting_transcribe_summarize
+from app.services.license import validate_license, check_usage_limit
+
 import json, re, os
 
 # CHANGED: Import license system
@@ -19,6 +21,48 @@ router = APIRouter(
     tags=["meetings"],
     dependencies=[Depends(require_auth)],
 )
+
+def require_license(
+    x_license_key: str = Header(..., alias="X-License-Key"),
+    db: Session = Depends(get_session)
+):
+    """
+    Dependency that validates license key from header
+    Works for both manual licenses and IAP-generated licenses
+    """
+    is_valid, license, error = validate_license(db, x_license_key)
+    
+    if not is_valid:
+        raise HTTPException(403, error or "Invalid license")
+    
+    tier_config = TIER_LIMITS[license.tier]
+    
+    return license, tier_config
+
+def track_meeting_usage(db: Session, license_key: str):
+    """
+    Check quota and increment usage
+    Raises HTTPException if limit reached
+    """
+    from app.services.license import check_usage_limit, increment_usage
+    
+    license = db.exec(
+        select(License).where(License.license_key == license_key)
+    ).first()
+    
+    if not license:
+        raise HTTPException(404, "License not found")
+    
+    has_quota, used, limit = check_usage_limit(db, license_key, license.tier)
+    
+    if not has_quota:
+        raise HTTPException(
+            429,
+            f"Monthly meeting limit reached ({used}/{limit}). "
+            f"Upgrade your plan for more meetings."
+        )
+    
+    increment_usage(db, license_key)
 
 def detect_language(audio_path: str) -> str:
     """Auto-detect language if not specified"""

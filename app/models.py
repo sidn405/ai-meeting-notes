@@ -12,6 +12,7 @@ Base = declarative_base()
 
 # License Tier Enum
 class LicenseTier(str, enum.Enum):
+    FREE = "free"
     STARTER = "starter"
     PROFESSIONAL = "professional"
     BUSINESS = "business"
@@ -36,27 +37,22 @@ class License(SQLModel, table=True):
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
-
-# License Usage Model
-class LicenseUsage(SQLModel, table=True):
-    __tablename__ = "license_usage"
     
-    id: Optional[int] = Field(default=None, primary_key=True)
-    license_key: str = Field(index=True)
-    
-    # Monthly usage tracking
-    year: int
-    month: int
-    meetings_used: int = Field(default=0)
-
 # Tier Limits Configuration
 TIER_LIMITS = {
-    LicenseTier.STARTER: {
+    LicenseTier.FREE: {
         "max_file_size_mb": 25,
         "meetings_per_month": 5,
         "price": 0,
-        "name": "Starter",
+        "name": "Free",
         "description": "Free plan with basic capture"
+    },
+    LicenseTier.STARTER: {          # Created new tier
+        "max_file_size_mb": 50,
+        "meetings_per_month": 25,
+        "price": 29,
+        "name": "Starter",
+        "description": "Starter plan with basic capture"
     },
     LicenseTier.PROFESSIONAL: {
         "max_file_size_mb": 200,
@@ -76,16 +72,57 @@ TIER_LIMITS = {
 
 class Meeting(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    
     title: str
     audio_path: Optional[str] = None
     transcript_path: Optional[str] = None
     summary_path: Optional[str] = None
+    
     status: str = "uploaded"  # uploaded|transcribed|summarized|delivered
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    license_key: str = Field(index=True, unique=True, max_length=64)
+    tier: str = Field(max_length=32)
+    
     email_to: Optional[str] = None
     slack_channel: Optional[str] = None
     status: str = "queued"
+    
     # NEW:
     progress: int = 0
     step: Optional[str] = None
+    
+     # IAP Support
+    iap_purchase_token: Optional[str] = Field(default=None, max_length=512)  # Google/Apple purchase ID
+    iap_store: Optional[str] = Field(default=None, max_length=20)  # "google_play" or "app_store"
+    iap_product_id: Optional[str] = Field(default=None, max_length=128)  # Product ID purchased
+    
+    # Status
+    is_active: bool = Field(default=True)
+    activated_at: Optional[datetime] = Field(default=None)
+    expires_at: Optional[datetime] = Field(default=None)  # For subscriptions
+    
+    # Tracking
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Legacy support (if you had Gumroad)
+    gumroad_order_id: Optional[str] = Field(default=None, max_length=128)
+    
+# License Usage Model
+class LicenseUsage(SQLModel, table=True):
+    __tablename__ = "license_usage"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    license_key: str = Field(index=True)
+    
+    # Monthly usage tracking
+    year: int
+    month: int
+    meetings_used: int = Field(default=0)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        #Ensure one usage record per license per month
+        table_args = (
+            {'sqlite_autoincrement': True},
+        )
