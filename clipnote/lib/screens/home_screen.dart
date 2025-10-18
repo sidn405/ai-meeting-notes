@@ -15,45 +15,46 @@ class _HomeScreenState extends State<HomeScreen> {
   final _iapService = IapService();
   final _api = ApiService.I;
   
-  // TODO: Load this from API based on authenticated user
-  Map<String, dynamic>? _userInfo;
+  Map<String, dynamic>? _licenseInfo;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _initIAP();
-    _loadUserInfo();
+    _loadLicenseInfo();
   }
 
   Future<void> _initIAP() async {
-    await _iapService.init();
+    try {
+      await _iapService.init();
+    } catch (e) {
+      print('Failed to initialize IAP: $e');
+    }
   }
 
-  Future<void> _loadUserInfo() async {
+  Future<void> _loadLicenseInfo() async {
     setState(() => _isLoading = true);
     
     try {
-      // TODO: Get authenticated user's info from backend
-      // final info = await _api.getUserInfo();
-      // setState(() {
-      //   _userInfo = info;
-      //   _isLoading = false;
-      // });
+      await _api.loadLicenseKey();
+      final info = await _api.getLicenseInfo();
       
-      // For now, default to free tier
-      setState(() => _isLoading = false);
+      setState(() {
+        _licenseInfo = info;
+        _isLoading = false;
+      });
     } catch (e) {
       setState(() => _isLoading = false);
     }
   }
 
-  bool get isPaidUser => _userInfo?['tier'] != null && _userInfo?['tier'] != 'free';
-  String? get userEmail => _userInfo?['email'];
-  String? get planName => _userInfo?['tier_name'];
-  int get meetingsUsed => _userInfo?['meetings_used'] ?? 0;
-  int get meetingsLimit => _userInfo?['meetings_limit'] ?? 5;
-  int get maxFileSizeMB => _userInfo?['max_file_size_mb'] ?? 10;
+  bool get isPaidUser => _licenseInfo?['tier'] != null && _licenseInfo?['tier'] != 'free';
+  String? get userEmail => _licenseInfo?['email'];
+  String? get planName => _licenseInfo?['tier_name'];
+  int get meetingsUsed => _licenseInfo?['meetings_used'] ?? 0;
+  int get meetingsLimit => _licenseInfo?['meetings_limit'] ?? 5;
+  int get maxFileSizeMB => _licenseInfo?['max_file_size_mb'] ?? 10;
 
   @override
   Widget build(BuildContext context) {
@@ -122,7 +123,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              // User Status Card
               if (isPaidUser && userEmail != null) ...[
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -207,7 +207,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 24),
               ] else ...[
-                // Free tier card
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -230,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        '5 meetings per month',
+                        '5 meetings per month\n25MB max file size',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -265,7 +264,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 24),
               ],
               
-              // Create Meeting Button
               SizedBox(
                 height: 56,
                 child: ElevatedButton.icon(
@@ -292,7 +290,6 @@ class _HomeScreenState extends State<HomeScreen> {
               
               const SizedBox(height: 24),
               
-              // Quick Stats
               Row(
                 children: [
                   Expanded(
@@ -402,6 +399,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 _planTile(
                   context: c,
                   icon: Icons.verified,
+                  title: 'Starter',
+                  subtitle: '25 meetings per month\n50MB max file size',
+                  price: _iapService.proProduct?.price ?? '\$29/month',
+                  isPro: true,
+                ),
+                const SizedBox(height: 20),
+                _planTile(
+                  context: c,
+                  icon: Icons.verified,
                   title: 'Professional',
                   subtitle: '50 meetings per month\n200MB max file size',
                   price: _iapService.proProduct?.price ?? '\$69/month',
@@ -455,7 +461,6 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: () async {
           Navigator.pop(context);
           
-          // Show loading
           showDialog(
             context: this.context,
             barrierDismissible: false,
@@ -468,7 +473,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 : await _iapService.purchaseBusiness();
             
             if (!mounted) return;
-            Navigator.pop(this.context); // Close loading
+            Navigator.pop(this.context);
             
             ScaffoldMessenger.of(this.context).showSnackBar(
               SnackBar(
@@ -478,7 +483,7 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           } catch (e) {
             if (!mounted) return;
-            Navigator.pop(this.context); // Close loading
+            Navigator.pop(this.context);
             
             ScaffoldMessenger.of(this.context).showSnackBar(
               SnackBar(
