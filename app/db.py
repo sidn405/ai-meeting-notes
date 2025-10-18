@@ -1,6 +1,8 @@
 # app/db.py
 import os
-from sqlmodel import SQLModel, create_engine, Session
+from sqlmodel import SQLModel, create_engine, Session, Field
+from datetime import datetime
+from typing import Optional
 from .models import License, LicenseUsage
 from sqlalchemy import text
 from pathlib import Path
@@ -11,6 +13,61 @@ DB_PATH = DATA_DIR / "app.db"
 
 DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
 ALLOW_SQLITE_FALLBACK = os.getenv("DB_ALLOW_SQLITE_FALLBACK", "0") == "1"
+
+class UserSubscription(SQLModel, table=True):
+    __tablename__ = "user_subscriptions"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: str = Field(index=True)  # Device ID or auth user ID
+    email: Optional[str] = Field(default=None)
+    
+    # Subscription details
+    tier: str = Field(default="free")  # free, professional, business
+    store: str  # google_play or app_store
+    product_id: str  # com.clipnote.pro.monthly
+    
+    # Purchase info
+    purchase_token: str = Field(unique=True)  # Google: purchase token, Apple: transaction ID
+    original_transaction_id: Optional[str] = None  # Apple only
+    
+    # Status
+    is_active: bool = Field(default=True)
+    expires_at: Optional[datetime] = None
+    
+    # Tracking
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    last_verified_at: Optional[datetime] = None
+
+
+class UserUsage(SQLModel, table=True):
+    __tablename__ = "user_usage"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: str = Field(index=True)
+    year: int
+    month: int
+    meetings_used: int = Field(default=0)
+    
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+TIER_CONFIG = {
+    "free": {
+        "name": "Free",
+        "meetings_per_month": 5,
+        "max_file_size_mb": 50,
+    },
+    "professional": {
+        "name": "Professional",
+        "meetings_per_month": 50,
+        "max_file_size_mb": 200,
+    },
+    "business": {
+        "name": "Business",
+        "meetings_per_month": 100,
+        "max_file_size_mb": 500,
+    }
+}
 
 def _pg_url(url: str) -> str:
     if url.startswith("postgres://"):
@@ -34,6 +91,8 @@ def _try_pg_engine():
         return None
 
 _engine = _try_pg_engine() or create_engine(f"sqlite:///{DB_PATH}", echo=False)
+
+
 
 # ========== NEW: Database-agnostic column checking ==========
 def ensure_meeting_progress_columns():
