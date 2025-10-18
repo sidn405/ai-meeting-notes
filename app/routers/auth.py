@@ -1,5 +1,5 @@
 # app/routers/auth.py
-from fastapi import APIRouter, HTTPException, Form, router, Depends
+from fastapi import APIRouter, HTTPException, Form, Depends
 from pydantic import BaseModel
 from fastapi.responses import RedirectResponse, JSONResponse
 import hmac, os
