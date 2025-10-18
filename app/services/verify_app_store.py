@@ -1,10 +1,12 @@
 import requests
 import os
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, router
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 from db import UserSubscription
+
+router = APIRouter(prefix="/apple", tags=["apple"])
 
 @router.post("/iap/verify/apple")
 async def verify_app_store(request: dict, session: Session = Depends()):

@@ -2,12 +2,12 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 import os
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, router
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 from db import UserSubscription
 
-
+router = APIRouter(prefix="/google", tags=["google"])
 
 
 @router.post("/iap/verify/google")
