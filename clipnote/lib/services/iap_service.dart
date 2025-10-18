@@ -17,7 +17,7 @@ class IapService {
   factory IapService() => _inst;
 
   final InAppPurchase _iap = InAppPurchase.instance;
-  final ApiService _api = ApiService();
+  final ApiService _api = ApiService.I; // ✅ Fixed: use singleton instance
 
   late final StreamSubscription<List<PurchaseDetails>> _sub;
 
@@ -35,7 +35,7 @@ class IapService {
     _sub = _iap.purchaseStream.listen(_onPurchaseUpdates, onDone: () {
       // ignore
     }, onError: (Object e, StackTrace s) {
-      // ignore — errors surface individually in _onPurchaseUpdates
+      // ignore – errors surface individually in _onPurchaseUpdates
     });
 
     // Query products
@@ -53,7 +53,6 @@ class IapService {
       await _sub.cancel();
     }
   }
-
 
   ProductDetails? get proProduct => _products[kProMonthlyId];
   ProductDetails? get businessProduct => _products[kBusinessMonthlyId];
@@ -80,7 +79,7 @@ class IapService {
     if (!_available) {
       await init();
       if (!_available) {
-        throw 'IAP not available on this device/store.';
+        throw Exception('IAP not available on this device/store.');
       }
     }
 
@@ -89,9 +88,11 @@ class IapService {
       // Try query again (products may not be cached yet)
       final resp = await _iap.queryProductDetails({productId});
       if (resp.notFoundIDs.contains(productId)) {
-        throw 'Product $productId not found. Check store configuration.';
+        throw Exception('Product $productId not found. Check store configuration.');
       }
-      _products[productId] = resp.productDetails.first;
+      if (resp.productDetails.isNotEmpty) {
+        _products[productId] = resp.productDetails.first;
+      }
     }
 
     final product = _products[productId];
@@ -101,7 +102,7 @@ class IapService {
     final purchaseParam = PurchaseParam(productDetails: product);
 
     final ok = await _iap.buyNonConsumable(purchaseParam: purchaseParam);
-    if (!ok) throw 'Failed to start purchase flow.';
+    if (!ok) throw Exception('Failed to start purchase flow.');
 
     // We will complete the flow via the purchaseStream.
     // Return a placeholder; UI will be notified via verification (optional).
@@ -134,7 +135,7 @@ class IapService {
           break;
 
         case PurchaseStatus.canceled:
-          // User canceled — nothing to do.
+          // User canceled – nothing to do.
           break;
       }
     }
@@ -144,21 +145,55 @@ class IapService {
     // serverVerificationData is recommended for Android & iOS for server-side verification
     final receipt = p.verificationData.serverVerificationData;
 
-    final store = Platform.isAndroid
-        ? 'google_play'
-        : Platform.isIOS
-            ? 'app_store'
-            : 'unknown';
+    final endpoint = Platform.isAndroid
+        ? '/iap/verify/google'
+        : '/iap/verify/apple';
+
+    // TODO: Get actual user ID from your auth system
+    // For now, using device ID or a temporary identifier
+    final userId = 'user_${DateTime.now().millisecondsSinceEpoch}';
 
     try {
-      await _api.verifyIapReceipt(store: store, receipt: receipt);
-      // Optionally call _api.getLicenseInfo() here and notify app state.
+      final result = await _api.verifyIapReceipt(
+        endpoint: endpoint,
+        userId: userId,
+        receipt: receipt,
+        productId: p.productID,
+      );
+      
+      if (kDebugMode) {
+        print('IAP verified: ${result['tier']} until ${result['expires_at']}');
+      }
+      
+      // Optionally fetch updated user info
+      // final userInfo = await _api.getUserInfo(userId);
+      // Update app state with new tier...
+      
     } catch (e) {
       // If verification fails, consider consuming/refunding depending on your policy.
       // For subscriptions, you usually just deny entitlement in your backend.
       if (kDebugMode) {
-        // ignore: avoid_print
         print('IAP verification failed: $e');
+      }
+      rethrow;
+    }
+  }
+
+  /// Restore previous purchases (for subscriptions)
+  Future<void> restorePurchases() async {
+    if (!_available) {
+      await init();
+      if (!_available) {
+        throw Exception('IAP not available on this device/store.');
+      }
+    }
+    
+    try {
+      await _iap.restorePurchases();
+      // The purchaseStream will receive restored purchases
+    } catch (e) {
+      if (kDebugMode) {
+        print('Failed to restore purchases: $e');
       }
       rethrow;
     }

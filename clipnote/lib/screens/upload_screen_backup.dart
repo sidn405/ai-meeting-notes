@@ -13,7 +13,8 @@ class UploadScreen extends StatefulWidget {
 
 class _UploadScreenState extends State<UploadScreen> {
   final api = ApiService.I;
-  
+  final _meetingId = TextEditingController(text: 'demo-meeting-1');
+
   // Language list matching website
   final List<Map<String, String>> _languages = [
     {'code': 'auto', 'name': 'Auto-Detect'},
@@ -40,6 +41,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
   @override
   void dispose() {
+    _meetingId.dispose();
     super.dispose();
   }
 
@@ -265,24 +267,18 @@ class _UploadScreenState extends State<UploadScreen> {
                           setModalState(() => isSubmitting = true);
                           
                           try {
-                            // Create meeting with transcript
-                            final newMeetingId = await api.createMeeting(
-                              title: titleCtrl.text.trim().isEmpty 
-                                  ? 'Untitled Meeting' 
-                                  : titleCtrl.text.trim(),
-                            );
-                            
-                            // Submit transcript and trigger summarization
-                            await api.submitTranscriptToMeeting(
-                              meetingId: newMeetingId,
+                            await api.submitTranscript(
+                              meetingId: _meetingId.text.trim(),
+                              title: titleCtrl.text.trim().isEmpty ? null : titleCtrl.text.trim(),
                               transcript: transcriptCtrl.text,
+                              summarize: true,
                             );
                             
                             if (!mounted) return;
                             Navigator.pop(c);
                             Navigator.of(this.context).pushReplacement(
                               MaterialPageRoute(
-                                builder: (_) => ProgressScreen(meetingId: newMeetingId),
+                                builder: (_) => ProgressScreen(meetingId: _meetingId.text),
                               ),
                             );
                           } catch (e) {
@@ -333,7 +329,6 @@ class _UploadScreenState extends State<UploadScreen> {
     final hintsCtrl = TextEditingController();
     String selectedLanguage = 'auto';
     bool saveToCloud = false;
-    bool isSubmitting = false;
     
     showModalBottomSheet(
       context: context,
@@ -490,13 +485,11 @@ class _UploadScreenState extends State<UploadScreen> {
                     const SizedBox(height: 8),
                     
                     OutlinedButton.icon(
-                      onPressed: isSubmitting ? null : () async {
+                      onPressed: () async {
                         Navigator.pop(c);
                         await _pickAndUploadFile(
                           title: titleCtrl.text.trim(),
-                          email: emailCtrl.text.trim(),
                           language: selectedLanguage,
-                          hints: hintsCtrl.text.trim(),
                           saveToCloud: saveToCloud,
                           transcribeOnly: false,
                         );
@@ -523,17 +516,8 @@ class _UploadScreenState extends State<UploadScreen> {
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: isSubmitting ? null : () async {
-                              setModalState(() => isSubmitting = true);
+                            onPressed: () {
                               Navigator.pop(c);
-                              await _pickAndUploadFile(
-                                title: titleCtrl.text.trim(),
-                                email: emailCtrl.text.trim(),
-                                language: selectedLanguage,
-                                hints: hintsCtrl.text.trim(),
-                                saveToCloud: saveToCloud,
-                                transcribeOnly: true,
-                              );
                             },
                             icon: const Icon(Icons.description, size: 18),
                             label: const Text('Transcribe Only'),
@@ -547,17 +531,8 @@ class _UploadScreenState extends State<UploadScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: isSubmitting ? null : () async {
-                              setModalState(() => isSubmitting = true);
+                            onPressed: () {
                               Navigator.pop(c);
-                              await _pickAndUploadFile(
-                                title: titleCtrl.text.trim(),
-                                email: emailCtrl.text.trim(),
-                                language: selectedLanguage,
-                                hints: hintsCtrl.text.trim(),
-                                saveToCloud: saveToCloud,
-                                transcribeOnly: false,
-                              );
                             },
                             icon: const Icon(Icons.auto_awesome, size: 18),
                             label: const Text('Transcribe & Summarize'),
@@ -582,9 +557,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
   Future<void> _pickAndUploadFile({
     required String title,
-    required String email,
     required String language,
-    required String hints,
     required bool saveToCloud,
     required bool transcribeOnly,
   }) async {
@@ -610,46 +583,43 @@ class _UploadScreenState extends State<UploadScreen> {
         builder: (c) => const Center(child: CircularProgressIndicator()),
       );
 
-      // Always upload to cloud for processing
-      final presign = await api.presignUpload(
-        filename: filename,
-        contentType: contentType,
-        folder: 'raw',
-      );
+      if (saveToCloud) {
+        final presign = await api.presignUpload(
+          filename: filename,
+          contentType: contentType,
+          folder: 'raw',
+        );
 
-      await api.putBytes(
-        url: presign.url,
-        bytes: bytes,
-        headers: presign.headers,
-        method: presign.method,
-      );
+        await api.putBytes(
+          url: presign.url,
+          bytes: bytes,
+          headers: presign.headers,
+          method: presign.method,
+        );
 
-      // Create meeting record with metadata
-      final meetingId = await api.createMeeting(
-        title: title.isEmpty ? 'Untitled Meeting' : title,
-        audioKey: presign.key,
-        email: email.isEmpty ? null : email,
-      );
+        await api.recordAsset(
+          meetingId: _meetingId.text.trim(),
+          key: presign.key,
+          publicUrl: presign.publicUrl,
+        );
 
-      // Start processing
-      await api.startProcessing(
-        meetingId: meetingId,
-        s3key: presign.key,
-        mode: transcribeOnly ? 'transcribe' : 'transcribe_and_summarize',
-        language: language == 'auto' ? null : language,
-        hints: hints.isEmpty ? null : hints,
-      );
+        await api.startProcessing(
+          meetingId: _meetingId.text.trim(),
+          s3key: presign.key,
+          mode: transcribeOnly ? 'transcribe' : 'transcribe_and_summarize',
+        );
+      }
 
       if (!mounted) return;
-      Navigator.pop(context); // Close loading dialog
+      Navigator.pop(context);
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => ProgressScreen(meetingId: meetingId),
+          builder: (_) => ProgressScreen(meetingId: _meetingId.text),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context); // Close loading dialog
+      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Upload failed: $e')),
       );

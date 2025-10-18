@@ -1,210 +1,258 @@
-// lib/services/api_service.dart
-import 'dart:typed_data';
-import 'package:dio/dio.dart';
+// Add these methods to your ApiService class
 
-/// TODO: update if your base changes
-const API_BASE = 'https://ai-meeting-notes-production-81d7.up.railway.app';
-
-class PresignResponse {
-  final String url;                        // PUT URL to B2/S3
-  final String key;                        // object key, e.g. raw/...m4a
-  final String? publicUrl;                 // optional public URL
-  final String method;                     // usually 'PUT'
-  final Map<String, String> headers;       // exact headers required by the PUT
-
-  PresignResponse({
-    required this.url,
-    required this.key,
-    required this.method,
-    required this.headers,
-    this.publicUrl,
-  });
-}
+import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:http/http.dart' as http;
 
 class ApiService {
-  final Dio _dio = Dio(BaseOptions(
-    baseUrl: API_BASE,
-    connectTimeout: const Duration(seconds: 20),
-    receiveTimeout: const Duration(minutes: 2),
-  ));
-
-  String? _apiKey; // X-API-Key (license)
-
-  // Called by Activation screen or after web purchase
-  void setLicenseKey(String key) {
-    _apiKey = key;
-  }
-
-  Map<String, String> _authHeaders() {
-    final key = _apiKey; // snapshot for promotion
-    return (key != null && key.isNotEmpty) ? {'X-API-Key': key} : const {};
-  }
-
-  /// ----- LICENSE / IAP -----
-
-  Future<Map<String, dynamic>> getLicenseInfo() async {
-    final res = await _dio.get(
-      '/license/info',
-      options: Options(headers: _authHeaders()),
-    );
-    return (res.data as Map).cast<String, dynamic>();
-  }
-
-  Future<void> activateLicense(String licenseKey) async {
-    await _dio.post(
-      '/license/activate',
-      data: {'license_key': licenseKey},
-      options: Options(headers: _authHeaders()),
-    );
-    _apiKey = licenseKey;
-  }
-
-  Future<void> verifyIapReceipt({
-    required String store, // 'google_play' | 'app_store'
-    required String receipt,
+  static final ApiService I = ApiService._();
+  ApiService._();
+  
+  final String baseUrl = 'https://ai-meeting-notes-production-81d7.up.railway.app';
+  
+  // Create a new meeting
+  Future<String> createMeeting({
+    required String title,
+    String? audioKey,
+    String? email,
   }) async {
-    await _dio.post(
-      '/iap/verify',
-      data: {'store': store, 'receipt': receipt},
-      options: Options(headers: _authHeaders()),
+    final response = await http.post(
+      Uri.parse('$baseUrl/meetings'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'title': title,
+        if (audioKey != null) 'audio_key': audioKey,
+        if (email != null) 'email_to': email,
+      }),
     );
+    
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Failed to create meeting: ${response.body}');
+    }
+    
+    final data = jsonDecode(response.body);
+    return data['id'].toString();
   }
-
-  /// ----- UPLOAD FLOW -----
-
-  Future<PresignResponse> presignUpload({
-    required String filename,
-    required String contentType,
-    required String folder, // e.g., 'raw'
-  }) async {
-    final res = await _dio.post(
-      '/uploads/presign',
-      data: {
-        'filename': filename,
-        'content_type': contentType,
-        'folder': folder,
-      },
-      options: Options(headers: _authHeaders()),
-    );
-
-    final m = (res.data as Map).cast<String, dynamic>();
-    final headersAny = (m['headers'] as Map?) ?? const {};
-    final headers = headersAny.map(
-      (k, v) => MapEntry(k.toString(), v.toString()),
-    );
-
-    return PresignResponse(
-      url: m['url'] as String,
-      key: m['key'] as String,
-      publicUrl: m['public_url'] as String?,
-      method: (m['method'] as String?) ?? 'PUT',
-      headers: headers,
-    );
-  }
-
-  Future<void> recordAsset({
-    required String meetingId,
-    required String s3Key,
-    required String filename,
-    required String type, // 'audio' | 'video'
-    required String contentType,
-    required int sizeBytes,
-  }) async {
-    await _dio.post(
-      '/uploads/record',
-      data: {
-        'meeting_id': meetingId,
-        's3key': s3Key,
-        'filename': filename,
-        'type': type,
-        'content_type': contentType,
-        'size': sizeBytes,
-      },
-      options: Options(headers: _authHeaders()),
-    );
-  }
-
-  /// Start transcription/summarization for an uploaded object
-  Future<void> startProcessing({
-    required String meetingId,
-    required String s3Key,
-    required bool summarize,
-  }) async {
-    await _dio.post(
-      '/process/start',
-      data: {
-        'meeting_id': meetingId,
-        's3key': s3Key,
-        'summarize': summarize,
-      },
-      options: Options(headers: _authHeaders()),
-    );
-  }
-
-  /// Direct transcript submission (no audio)
+  
+  // Submit transcript for summarization
   Future<void> submitTranscript({
     required String meetingId,
+    String? title,
     required String transcript,
     required bool summarize,
   }) async {
-    await _dio.post(
-      '/process/from_transcript',
-      data: {
-        'meeting_id': meetingId,
-        'transcript': transcript,
-        'summarize': summarize,
-      },
-      options: Options(headers: _authHeaders()),
+    // First, create or update the meeting
+    final response = await http.post(
+      Uri.parse('$baseUrl/meetings'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'title': title ?? 'Untitled Meeting',
+        'transcript_text': transcript,
+      }),
     );
+    
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Failed to submit transcript: ${response.body}');
+    }
+    
+    final data = jsonDecode(response.body);
+    final newMeetingId = data['id'].toString();
+    
+    // If summarize is true, trigger summarization
+    if (summarize) {
+      await http.post(
+        Uri.parse('$baseUrl/meetings/$newMeetingId/summarize'),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
   }
-
-  /// Poll processing status for a meeting
-  Future<Map<String, dynamic>> getMeetingSummary({
+  
+  // Submit transcript to existing meeting and trigger summarization
+  Future<void> submitTranscriptToMeeting({
     required String meetingId,
+    required String transcript,
   }) async {
-    final res = await _dio.get(
-      '/process/result', // change if your backend uses a different path
-      queryParameters: {'meeting_id': meetingId},
-      options: Options(headers: _authHeaders()),
+    // Update meeting with transcript
+    await http.put(
+      Uri.parse('$baseUrl/meetings/$meetingId'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'transcript_text': transcript,
+      }),
     );
-    return (res.data as Map).cast<String, dynamic>();
-  }
-
-
-  /// PUT bytes to presigned storage URL (NO auth headers here!)
-  Future<Response> putBytes({
-    required String url,
-    required Uint8List bytes,
-    Map<String, String>? headers,
-    String method = 'PUT',
-  }) {
-    final client = Dio();
-    return client.request(
-      url,
-      data: bytes,
-      options: Options(method: method, headers: headers),
+    
+    // Trigger summarization
+    final response = await http.post(
+      Uri.parse('$baseUrl/meetings/$meetingId/summarize'),
+      headers: {'Content-Type': 'application/json'},
     );
+    
+    if (response.statusCode != 200 && response.statusCode != 202) {
+      throw Exception('Failed to start summarization: ${response.body}');
+    }
   }
-
-  // --- Singleton convenience (keep both to satisfy older calls) ---
-  static final ApiService I = ApiService();
-  static ApiService get instance => I;
-
-  // --- Meeting status + summary used by Progress/Results screens ---
+  
+  // Start processing (transcription and/or summarization)
+  Future<void> startProcessing({
+    required String meetingId,
+    required String s3key,
+    required String mode,
+    String? language,
+    String? hints,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/meetings/$meetingId/process'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        's3_key': s3key,
+        'mode': mode,
+        if (language != null) 'language': language,
+        if (hints != null) 'hints': hints,
+      }),
+    );
+    
+    if (response.statusCode != 200 && response.statusCode != 202) {
+      throw Exception('Failed to start processing: ${response.body}');
+    }
+  }
+  
+  // Get meeting processing status
   Future<Map<String, dynamic>> getMeetingStatus(String meetingId) async {
-    final r = await _dio.get(
-      '$API_BASE/meetings/$meetingId/status',
-      options: Options(headers: _authHeaders()),
+    final response = await http.get(
+      Uri.parse('$baseUrl/meetings/$meetingId/status'),
     );
-    return (r.data as Map).cast<String, dynamic>();
+    
+    if (response.statusCode != 200) {
+      throw Exception('Failed to get status: ${response.body}');
+    }
+    
+    return jsonDecode(response.body);
   }
-
-  Future<Map<String, dynamic>> getMeetingSummary(String meetingId) async {
-    final r = await _dio.get(
-      '$API_BASE/meetings/$meetingId/summary',
-      options: Options(headers: _authHeaders()),
+  
+  // Get meeting summary
+  Future<Map<String, dynamic>> getMeetingSummary(int meetingId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/meetings/$meetingId/summary'),
     );
-    return (r.data as Map).cast<String, dynamic>();
+    
+    if (response.statusCode != 200) {
+      throw Exception('Failed to get summary: ${response.body}');
+    }
+    
+    return jsonDecode(response.body);
   }
+  
+  // Presign upload
+  Future<PresignResponse> presignUpload({
+    required String filename,
+    required String contentType,
+    required String folder,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/uploads/presign'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'filename': filename,
+        'content_type': contentType,
+        'folder': folder,
+      }),
+    );
+    
+    if (response.statusCode != 200) {
+      throw Exception('Failed to get presigned URL: ${response.body}');
+    }
+    
+    final data = jsonDecode(response.body);
+    return PresignResponse(
+      url: data['url'],
+      key: data['key'],
+      headers: Map<String, String>.from(data['headers'] ?? {}),
+      method: data['method'] ?? 'PUT',
+      publicUrl: data['public_url'],
+    );
+  }
+  
+  // Upload bytes to presigned URL
+  Future<void> putBytes({
+    required String url,
+    required List<int> bytes,
+    required Map<String, String> headers,
+    required String method,
+  }) async {
+    final request = http.Request(method, Uri.parse(url));
+    request.headers.addAll(headers);
+    request.bodyBytes = bytes;
+    
+    final streamedResponse = await request.send();
+    
+    if (streamedResponse.statusCode != 200) {
+      final body = await streamedResponse.stream.bytesToString();
+      throw Exception('Upload failed: ${streamedResponse.statusCode} $body');
+    }
+  }
+  
+  // Verify IAP receipt with backend
+  Future<Map<String, dynamic>> verifyIapReceipt({
+    required String endpoint,  // '/iap/verify/google' or '/iap/verify/apple'
+    required String userId,
+    required String receipt,
+    required String productId,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'user_id': userId,
+        Platform.isAndroid ? 'purchase_token' : 'receipt_data': receipt,
+        'product_id': productId,
+      }),
+    );
+    
+    if (response.statusCode != 200) {
+      throw Exception('Receipt verification failed: ${response.body}');
+    }
+    
+    return jsonDecode(response.body);
+  }
+  
+  // Get user info (tier, usage, limits)
+  Future<Map<String, dynamic>> getUserInfo(String userId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/users/$userId/info'),
+    );
+    
+    if (response.statusCode != 200) {
+      throw Exception('Failed to get user info: ${response.body}');
+    }
+    
+    return jsonDecode(response.body);
+  }
+  
+  // Increment user's monthly usage
+  Future<void> incrementUserUsage(String userId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/users/$userId/usage/increment'),
+      headers: {'Content-Type': 'application/json'},
+    );
+    
+    if (response.statusCode != 200) {
+      throw Exception('Failed to increment usage: ${response.body}');
+    }
+  }
+}
 
+class PresignResponse {
+  final String url;
+  final String key;
+  final Map<String, String> headers;
+  final String method;
+  final String? publicUrl;
+  
+  PresignResponse({
+    required this.url,
+    required this.key,
+    required this.headers,
+    required this.method,
+    this.publicUrl,
+  });
 }
