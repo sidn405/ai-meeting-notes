@@ -1,25 +1,18 @@
 # app/routers/meetings.py
-from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException, Depends, Cookie, Header
+from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException, Depends, Header
 from typing import Optional
-from ..security import require_auth
 from fastapi.responses import FileResponse
 from pathlib import Path
 from sqlmodel import select, Session
 from ..db import get_session, DATA_DIR
 from ..models import Meeting, License, LicenseTier, TIER_LIMITS
-from ..services.pipeline import process_meeting, send_summary_email, process_meeting_transcribe_summarize
-from app.services.license import validate_license, check_usage_limit
-from ..services.pipeline import process_meeting_transcribe_only
-import json, re, os
+from ..services.pipeline import process_meeting, send_summary_email, process_meeting_transcribe_summarize, process_meeting_transcribe_only
 
-# CHANGED: Import license system
-from ..middleware.license import require_license, track_meeting_usage, validate_file_size
-from ..services.license import LicenseTier, TIER_LIMITS
+import json, re
 
 router = APIRouter(
     prefix="/meetings",
     tags=["meetings"],
-    #dependencies=[Depends(require_auth)],
 )
 
 def optional_license(
@@ -71,17 +64,15 @@ def track_meeting_usage(db: Session, license_key: str):
     
     increment_usage(db, license_key)
 
-def detect_language(audio_path: str) -> str:
-    """Auto-detect language if not specified"""
-    # If using AssemblyAI, they support auto-detection
-    # Just pass language=None or omit it
-    return None  # Let AssemblyAI auto-detect
-
-def _truthy(v) -> bool:
-    """Helper to check if form value is truthy"""
-    if v is None:
-        return False
-    return str(v).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+def validate_file_size(file_size: int, tier_config: dict) -> tuple[bool, str]:
+    """Validate file size against tier limits"""
+    max_size_mb = tier_config.get("max_file_size_mb", 25)
+    max_size_bytes = max_size_mb * 1024 * 1024
+    
+    if file_size > max_size_bytes:
+        return False, f"File size ({file_size / (1024*1024):.1f}MB) exceeds tier limit of {max_size_mb}MB"
+    
+    return True, ""
 
 
 @router.post("/upload")
@@ -92,20 +83,17 @@ async def upload_meeting(
     file: UploadFile = File(...),
     language: str | None = Form(None),
     hints: str | None = Form(None),
-    model_size: str | None = Form(None),
-    device: str | None = Form(None),
-    compute_type: str | None = Form(None),
-    license_info: tuple = Depends(optional_license),
+    license_info: tuple = Depends(optional_license),  # ✅ CHANGED
     db = Depends(get_session),
 ):
     """Upload - works for FREE and PAID users"""
     license, tier_config = license_info
     
-    # ADDED: Handle empty string for auto-detect
+    # Handle empty string for auto-detect
     if language == "":
-        language = None  # Triggers auto-detection in transcription
+        language = None
     
-    # ADDED: Clean up hints (remove extra whitespace, handle empty)
+    # Clean up hints
     if hints:
         hints = hints.strip()
         if not hints:
@@ -113,10 +101,10 @@ async def upload_meeting(
     
     # Validate file type
     ext = Path(file.filename).suffix.lower()
-    if ext not in {".mp3", ".m4a", ".wav", ".mp4"}:
-        raise HTTPException(status_code=400, detail="Unsupported file type. Allowed: .mp3, .m4a, .wav, .mp4")
+    if ext not in {".mp3", ".m4a", ".wav", ".mp4", ".mov", ".mkv", ".webm"}:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
 
-    # Read file and validate size based on license tier
+    # Read file and validate size
     file_content = await file.read()
     file_size = len(file_content)
     
@@ -124,7 +112,7 @@ async def upload_meeting(
         raise HTTPException(status_code=400, detail="File is empty")
     
     # Check file size against tier limit
-    is_valid, error_msg = validate_file_size(file_size, license.tier)
+    is_valid, error_msg = validate_file_size(file_size, tier_config)
     if not is_valid:
         raise HTTPException(status_code=413, detail=error_msg)
     
@@ -140,90 +128,33 @@ async def upload_meeting(
         s.refresh(m)
         mid = m.id
 
-    # Track usage for license
-    if license:  # Only track if user has a license
+    # Track usage for paid users only
+    if license:  # ✅ ADDED CHECK
         track_meeting_usage(db, license.license_key)
 
     # Queue processing
     background_tasks.add_task(
         process_meeting,
         mid,
-        language=language,  # Now properly None for auto-detect
+        language=language,
         hints=hints
     )
     
     return {
         "id": mid, 
         "status": "queued",
-        "tier": license.tier,
+        "tier": license.tier if license else "free",
         "file_size_mb": round(file_size / (1024 * 1024), 2),
-        "language": language or "auto-detect",  # Show what was selected
+        "language": language or "auto-detect",
     }
 
-
-@router.post("/upload-sync")
-async def upload_meeting_sync(
-    title: str = Form(...),
-    email_to: str | None = Form(None),
-    file: UploadFile = File(...),
-    language: str | None = Form(None),
-    hints: str | None = Form(None),
-    model_size: str | None = Form(None),
-    device: str | None = Form(None),
-    compute_type: str | None = Form(None),
-    license_info: tuple = Depends(require_license),
-    db = Depends(get_session),
-):
-    """Upload and process immediately (blocks until complete)"""
-    license, tier_config = license_info
-    
-    # ADDED: Handle auto-detect
-    if language == "":
-        language = None
-    if hints:
-        hints = hints.strip() or None
-    
-    ext = Path(file.filename).suffix.lower()
-    if ext not in {".mp3", ".m4a", ".wav", ".mp4"}:
-        raise HTTPException(status_code=400, detail="Unsupported file type")
-
-    # Validate file size
-    file_content = await file.read()
-    file_size = len(file_content)
-    
-    is_valid, error_msg = validate_file_size(file_size, license.tier)
-    if not is_valid:
-        raise HTTPException(status_code=413, detail=error_msg)
-
-    audio_path = DATA_DIR / f"{Path(file.filename).stem}.uploaded{ext}"
-    audio_path.write_bytes(file_content)
-
-    with get_session() as s:
-        m = Meeting(title=title, audio_path=str(audio_path), email_to=email_to, status="queued")
-        s.add(m)
-        s.commit()
-        s.refresh(m)
-        mid = m.id
-
-    # Track usage
-    if license:  # Only track if user has a license
-        track_meeting_usage(db, license.license_key)
-
-    # Process synchronously
-    process_meeting(mid, language=language, hints=hints)
-
-    with get_session() as s:
-        m = s.get(Meeting, mid)
-        if not m:
-            raise HTTPException(404, "Not found")
-        return {"id": m.id, "status": m.status}
 
 @router.post("/from-text")
 async def create_from_text(
     title: str = Form(...),
     transcript: str = Form(...),
     email_to: str | None = Form(None),
-    license_info: tuple = Depends(require_license),  # CHANGED: Add license check
+    license_info: tuple = Depends(optional_license),  # ✅ CHANGED
     db = Depends(get_session),
 ):
     """Create meeting from text transcript (no audio)"""
@@ -246,8 +177,8 @@ async def create_from_text(
         s.refresh(m)
         mid = m.id
 
-    # Track usage
-    if license:  # Only track if user has a license
+    # Track usage for paid users only
+    if license:  # ✅ ADDED CHECK
         track_meeting_usage(db, license.license_key)
 
     # Process meeting
@@ -257,23 +188,25 @@ async def create_from_text(
         m = s.get(Meeting, mid)
         return {"id": m.id, "status": m.status}
 
+
 @router.post("/from-text-sync")
 async def create_from_text_sync(
     title: str = Form(...),
     transcript: str = Form(...),
     email_to: str | None = Form(None),
-    license_info: tuple = Depends(require_license),  # CHANGED: Add license check
+    license_info: tuple = Depends(optional_license),  # ✅ CHANGED
     db = Depends(get_session),
 ):
     """Alias for from-text (already synchronous)"""
     return await create_from_text(title, transcript, email_to, license_info, db)
+
 
 @router.post("/transcribe-only")
 async def transcribe_only(
     title: str = Form(...),
     transcript: str = Form(...),
     email_to: str | None = Form(None),
-    license_info: tuple = Depends(require_license),
+    license_info: tuple = Depends(optional_license),  # ✅ CHANGED
     db = Depends(get_session),
 ):
     """Save transcript without summarization"""
@@ -298,8 +231,8 @@ async def transcribe_only(
         s.refresh(m)
         mid = m.id
 
-    # Track usage
-    if license:  # Only track if user has a license
+    # Track usage for paid users only
+    if license:  # ✅ ADDED CHECK
         track_meeting_usage(db, license.license_key)
 
     return {
@@ -307,7 +240,8 @@ async def transcribe_only(
         "status": "delivered",
         "message": "Transcript saved successfully"
     }
-    
+
+
 @router.post("/upload-transcribe-only")
 async def upload_transcribe_only(
     background_tasks: BackgroundTasks,
@@ -316,7 +250,7 @@ async def upload_transcribe_only(
     file: UploadFile = File(...),
     language: str | None = Form(None),
     hints: str | None = Form(None),
-    license_info: tuple = Depends(optional_license),
+    license_info: tuple = Depends(optional_license),  # ✅ CHANGED
     db = Depends(get_session),
 ):
     """Upload and transcribe ONLY (no summarization)"""
@@ -328,7 +262,7 @@ async def upload_transcribe_only(
         hints = hints.strip() or None
     
     ext = Path(file.filename).suffix.lower()
-    if ext not in {".mp3", ".m4a", ".wav", ".mp4"}:
+    if ext not in {".mp3", ".m4a", ".wav", ".mp4", ".mov", ".mkv", ".webm"}:
         raise HTTPException(status_code=400, detail="Unsupported file type")
 
     file_content = await file.read()
@@ -356,7 +290,8 @@ async def upload_transcribe_only(
         s.refresh(m)
         mid = m.id
 
-    if license:  # Only track if user has a license
+    # Track usage for paid users only
+    if license:  # ✅ ADDED CHECK
         track_meeting_usage(db, license.license_key)
 
     background_tasks.add_task(
@@ -369,12 +304,13 @@ async def upload_transcribe_only(
     return {
         "id": mid, 
         "status": "queued",
-        "file_size_mb": round(file_size / (1024 / 1024), 2),
+        "tier": license.tier if license else "free",
+        "file_size_mb": round(file_size / (1024 * 1024), 2),
         "language": language or "auto-detect",
         "mode": "transcribe_only"
     }
 
-# FULL VERSION - transcribe and summarize
+
 @router.post("/upload-transcribe-summarize")
 async def upload_transcribe_summarize(
     background_tasks: BackgroundTasks,
@@ -383,40 +319,34 @@ async def upload_transcribe_summarize(
     file: UploadFile = File(...),
     language: str | None = Form(None),
     hints: str | None = Form(None),
-    license_info: tuple = Depends(require_license),
+    license_info: tuple = Depends(optional_license),  # ✅ CHANGED
     db = Depends(get_session),
 ):
     """Upload and transcribe (with summarization)"""
     license, tier_config = license_info
     
-    # Handle empty string for auto-detect
     if language == "":
         language = None
     if hints:
         hints = hints.strip() or None
     
-    # Validate file type
     ext = Path(file.filename).suffix.lower()
-    if ext not in {".mp3", ".m4a", ".wav", ".mp4"}:
-        raise HTTPException(status_code=400, detail="Unsupported file type. Allowed: .mp3, .m4a, .wav, .mp4")
+    if ext not in {".mp3", ".m4a", ".wav", ".mp4", ".mov", ".mkv", ".webm"}:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
 
-    # Read file and validate size
     file_content = await file.read()
     file_size = len(file_content)
     
     if file_size == 0:
         raise HTTPException(status_code=400, detail="File is empty")
     
-    # Check file size against tier limit
-    is_valid, error_msg = validate_file_size(file_size, license.tier)
+    is_valid, error_msg = validate_file_size(file_size, tier_config)
     if not is_valid:
         raise HTTPException(status_code=413, detail=error_msg)
     
-    # Save file
     audio_path = DATA_DIR / f"{Path(file.filename).stem}.uploaded{ext}"
     audio_path.write_bytes(file_content)
 
-    # Create meeting record
     with get_session() as s:
         m = Meeting(
             title=title, 
@@ -429,14 +359,10 @@ async def upload_transcribe_summarize(
         s.refresh(m)
         mid = m.id
 
-    # Track usage
-    if license:  # Only track if user has a license
+    # Track usage for paid users only
+    if license:  # ✅ ADDED CHECK
         track_meeting_usage(db, license.license_key)
 
-    # Import the transcribe-only function
-    from ..services.pipeline import process_meeting_transcribe_summarize
-    
-    # Queue transcription (with summarization)
     background_tasks.add_task(
         process_meeting_transcribe_summarize,
         mid,
@@ -447,11 +373,146 @@ async def upload_transcribe_summarize(
     return {
         "id": mid, 
         "status": "queued",
-        "tier": license.tier,
+        "tier": license.tier if license else "free",
         "file_size_mb": round(file_size / (1024 * 1024), 2),
         "language": language or "auto-detect",
+        "mode": "transcribe_and_summarize"
+    }
+
+
+@router.post("/create-from-url")
+async def create_from_url(
+    background_tasks: BackgroundTasks,
+    payload: dict,
+    license_info: tuple = Depends(optional_license),  # ✅ CHANGED
+    db = Depends(get_session),
+):
+    """Create meeting from S3 URL (for multipart uploads)"""
+    license, tier_config = license_info
+    
+    title = payload.get('title')
+    file_url = payload.get('file_url')
+    filename = payload.get('filename')
+    email_to = payload.get('email_to')
+    language = payload.get('language')
+    hints = payload.get('hints')
+    
+    if not file_url or not filename:
+        raise HTTPException(400, "file_url and filename required")
+    
+    # Download file from S3 to local storage
+    import requests
+    response = requests.get(file_url, timeout=300)
+    if response.status_code != 200:
+        raise HTTPException(400, "Failed to download file from S3")
+    
+    file_content = response.content
+    file_size = len(file_content)
+    
+    is_valid, error_msg = validate_file_size(file_size, tier_config)
+    if not is_valid:
+        raise HTTPException(status_code=413, detail=error_msg)
+    
+    ext = Path(filename).suffix.lower()
+    audio_path = DATA_DIR / f"{Path(filename).stem}.uploaded{ext}"
+    audio_path.write_bytes(file_content)
+    
+    with get_session() as s:
+        m = Meeting(
+            title=title or 'Untitled Meeting',
+            audio_path=str(audio_path),
+            email_to=email_to,
+            status="queued"
+        )
+        s.add(m)
+        s.commit()
+        s.refresh(m)
+        mid = m.id
+    
+    # Track usage for paid users only
+    if license:  # ✅ ADDED CHECK
+        track_meeting_usage(db, license.license_key)
+    
+    background_tasks.add_task(
+        process_meeting_transcribe_summarize,
+        mid,
+        language=language,
+        hints=hints
+    )
+    
+    return {
+        "id": mid,
+        "status": "queued",
+        "file_size_mb": round(file_size / (1024 * 1024), 2),
+    }
+
+
+@router.post("/create-from-url-transcribe-only")
+async def create_from_url_transcribe_only(
+    background_tasks: BackgroundTasks,
+    payload: dict,
+    license_info: tuple = Depends(optional_license),  # ✅ CHANGED
+    db = Depends(get_session),
+):
+    """Create meeting from S3 URL - transcribe only"""
+    license, tier_config = license_info
+    
+    title = payload.get('title')
+    file_url = payload.get('file_url')
+    filename = payload.get('filename')
+    email_to = payload.get('email_to')
+    language = payload.get('language')
+    hints = payload.get('hints')
+    
+    if not file_url or not filename:
+        raise HTTPException(400, "file_url and filename required")
+    
+    import requests
+    response = requests.get(file_url, timeout=300)
+    if response.status_code != 200:
+        raise HTTPException(400, "Failed to download file from S3")
+    
+    file_content = response.content
+    file_size = len(file_content)
+    
+    is_valid, error_msg = validate_file_size(file_size, tier_config)
+    if not is_valid:
+        raise HTTPException(status_code=413, detail=error_msg)
+    
+    ext = Path(filename).suffix.lower()
+    audio_path = DATA_DIR / f"{Path(filename).stem}.uploaded{ext}"
+    audio_path.write_bytes(file_content)
+    
+    with get_session() as s:
+        m = Meeting(
+            title=title or 'Untitled Meeting',
+            audio_path=str(audio_path),
+            email_to=email_to,
+            status="queued"
+        )
+        s.add(m)
+        s.commit()
+        s.refresh(m)
+        mid = m.id
+    
+    # Track usage for paid users only
+    if license:  # ✅ ADDED CHECK
+        track_meeting_usage(db, license.license_key)
+    
+    background_tasks.add_task(
+        process_meeting_transcribe_only,
+        mid,
+        language=language,
+        hints=hints
+    )
+    
+    return {
+        "id": mid,
+        "status": "queued",
+        "file_size_mb": round(file_size / (1024 * 1024), 2),
         "mode": "transcribe_only"
     }
+
 
 @router.get("/list")
 def list_meetings():
@@ -534,56 +595,6 @@ def meeting_status(meeting_id: int):
         }
 
 
-@router.post("/{meeting_id}/run")
-def run_meeting(meeting_id: int):
-    """Manually trigger processing for a meeting"""
-    process_meeting(meeting_id)
-    with get_session() as s:
-        m = s.get(Meeting, meeting_id)
-        if not m:
-            raise HTTPException(404, "Not found")
-        return {"id": m.id, "status": m.status}
-
-@router.post("/{meeting_id}/summarize")
-async def summarize_existing_meeting(
-    meeting_id: int,
-    background_tasks: BackgroundTasks,
-):
-    """Summarize an already-transcribed meeting"""
-    with get_session() as s:
-        m = s.get(Meeting, meeting_id)
-        if not m:
-            raise HTTPException(404, "Meeting not found")
-        
-        if not m.transcript_path or not Path(m.transcript_path).exists():
-            raise HTTPException(400, "No transcript available to summarize")
-        
-        if m.summary_path and Path(m.summary_path).exists():
-            raise HTTPException(400, "Meeting already summarized")
-    
-    # Queue summarization
-    #background_tasks.add_task(summarize_existing_transcript, meeting_id)
-    
-    return {
-        "id": meeting_id,
-        "status": "processing",
-        "message": "Summarization queued"
-    }
-
-@router.post("/{meeting_id}/send-email")
-async def send_meeting_email(meeting_id: int, payload: dict):
-    """Send or resend meeting summary via email"""
-    email_to = payload.get("email_to")
-    if not email_to:
-        raise HTTPException(400, "email_to is required")
-    
-    try:
-        send_summary_email(meeting_id, email_to)
-        return {"success": True, "message": f"Email sent to {email_to}"}
-    except Exception as e:
-        raise HTTPException(500, f"Failed to send email: {str(e)}")
-
-
 @router.delete("/{meeting_id}")
 def delete_meeting(meeting_id: int):
     """Delete a meeting and its associated files"""
@@ -600,150 +611,7 @@ def delete_meeting(meeting_id: int):
         if m.summary_path and Path(m.summary_path).exists():
             Path(m.summary_path).unlink()
         
-        # Delete from database
         s.delete(m)
         s.commit()
         
         return {"success": True, "message": "Meeting deleted"}
-    
-@router.post("/create-from-url")
-async def create_from_url(
-    background_tasks: BackgroundTasks,
-    payload: dict,
-    license_info: tuple = Depends(optional_license),
-    db = Depends(get_session),
-):
-    """Create meeting from S3 URL (for multipart uploads)"""
-    license, tier_config = license_info
-    
-    title = payload.get('title')
-    file_url = payload.get('file_url')
-    filename = payload.get('filename')
-    email_to = payload.get('email_to')
-    language = payload.get('language')
-    hints = payload.get('hints')
-    
-    if not file_url or not filename:
-        raise HTTPException(400, "file_url and filename required")
-    
-    # Download file from S3 to local storage
-    import requests
-    response = requests.get(file_url, timeout=300)
-    if response.status_code != 200:
-        raise HTTPException(400, "Failed to download file from S3")
-    
-    file_content = response.content
-    file_size = len(file_content)
-    
-    # Validate file size
-    is_valid, error_msg = validate_file_size(file_size, tier_config)
-    if not is_valid:
-        raise HTTPException(status_code=413, detail=error_msg)
-    
-    # Save file locally
-    ext = Path(filename).suffix.lower()
-    audio_path = DATA_DIR / f"{Path(filename).stem}.uploaded{ext}"
-    audio_path.write_bytes(file_content)
-    
-    # Create meeting record
-    with get_session() as s:
-        m = Meeting(
-            title=title or 'Untitled Meeting',
-            audio_path=str(audio_path),
-            email_to=email_to,
-            status="queued"
-        )
-        s.add(m)
-        s.commit()
-        s.refresh(m)
-        mid = m.id
-    
-    # Track usage
-    if license:
-        track_meeting_usage(db, license.license_key)
-    
-    # Queue processing
-    background_tasks.add_task(
-        process_meeting_transcribe_summarize,
-        mid,
-        language=language,
-        hints=hints
-    )
-    
-    return {
-        "id": mid,
-        "status": "queued",
-        "file_size_mb": round(file_size / (1024 * 1024), 2),
-    }
-
-
-@router.post("/create-from-url-transcribe-only")
-async def create_from_url_transcribe_only(
-    background_tasks: BackgroundTasks,
-    payload: dict,
-    license_info: tuple = Depends(optional_license),
-    db = Depends(get_session),
-):
-    """Create meeting from S3 URL - transcribe only"""
-    license, tier_config = license_info
-    
-    title = payload.get('title')
-    file_url = payload.get('file_url')
-    filename = payload.get('filename')
-    email_to = payload.get('email_to')
-    language = payload.get('language')
-    hints = payload.get('hints')
-    
-    if not file_url or not filename:
-        raise HTTPException(400, "file_url and filename required")
-    
-    # Download file from S3
-    import requests
-    response = requests.get(file_url, timeout=300)
-    if response.status_code != 200:
-        raise HTTPException(400, "Failed to download file from S3")
-    
-    file_content = response.content
-    file_size = len(file_content)
-    
-    # Validate file size
-    is_valid, error_msg = validate_file_size(file_size, tier_config)
-    if not is_valid:
-        raise HTTPException(status_code=413, detail=error_msg)
-    
-    # Save file locally
-    ext = Path(filename).suffix.lower()
-    audio_path = DATA_DIR / f"{Path(filename).stem}.uploaded{ext}"
-    audio_path.write_bytes(file_content)
-    
-    # Create meeting record
-    with get_session() as s:
-        m = Meeting(
-            title=title or 'Untitled Meeting',
-            audio_path=str(audio_path),
-            email_to=email_to,
-            status="queued"
-        )
-        s.add(m)
-        s.commit()
-        s.refresh(m)
-        mid = m.id
-    
-    # Track usage
-    if license:
-        track_meeting_usage(db, license.license_key)
-    
-    # Queue transcription only
-    background_tasks.add_task(
-        process_meeting_transcribe_only,
-        mid,
-        language=language,
-        hints=hints
-    )
-    
-    return {
-        "id": mid,
-        "status": "queued",
-        "file_size_mb": round(file_size / (1024 * 1024), 2),
-        "mode": "transcribe_only"
-    }
