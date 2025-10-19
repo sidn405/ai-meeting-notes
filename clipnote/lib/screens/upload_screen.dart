@@ -727,14 +727,15 @@ class _UploadScreenState extends State<UploadScreen> {
                                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                 ),
                               )
-                            : const Icon(Icons.auto_awesome, size: 18),
-                        label: Text(
-                          isSubmitting ? 'Uploading...' : 'Transcribe &\nSummarize',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                            : const Icon(Icons.auto_awesome, size: 16),
+                        label: const Text(
+                          'Transcribe &\nSummarize',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, height: 1.2),
                           textAlign: TextAlign.center,
                         ),
                         style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(0, 48),
+                          minimumSize: const Size(0, 56),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                           backgroundColor: const Color(0xFF667eea),
                           foregroundColor: Colors.white,
                           disabledBackgroundColor: Colors.grey,
