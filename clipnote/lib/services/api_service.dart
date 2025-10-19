@@ -101,9 +101,11 @@ class ApiService {
 
   /// Verify IAP purchase and get license key
   Future<String> verifyIapAndGetLicense({
-    required String purchaseToken,
+    required String userId,
+    required String receipt,
     required String productId,
     required String store, // 'google_play' or 'app_store'
+    String? email,
   }) async {
     final uri = Uri.parse('$baseUrl/iap/verify');
     
@@ -111,9 +113,11 @@ class ApiService {
       uri,
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
-        'purchase_token': purchaseToken,
+        'user_id': userId,
+        'receipt': receipt,
         'product_id': productId,
         'store': store,
+        if (email != null) 'email': email,
       }),
     ).timeout(const Duration(seconds: 30));
 
@@ -123,6 +127,9 @@ class ApiService {
       
       // Save the license key
       await saveLicenseKey(licenseKey);
+      
+      // Update tier info
+      _currentTier = data['tier'] ?? 'free';
       
       return licenseKey;
     } else {

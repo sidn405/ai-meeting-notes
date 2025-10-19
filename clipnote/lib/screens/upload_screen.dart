@@ -374,11 +374,15 @@ class _UploadScreenState extends State<UploadScreen> {
                 top: 8,
                 bottom: MediaQuery.of(c).viewInsets.bottom + 20,
               ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                     const Text(
                       'Upload Meeting (Audio/Video)',
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
@@ -657,80 +661,92 @@ class _UploadScreenState extends State<UploadScreen> {
                         ),
                       ),
                     ],
-                    
-                    const SizedBox(height: 16),
-                    
-                    // Action Buttons
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: (isSubmitting || selectedFile == null || isFileTooLarge) 
-                                ? null 
-                                : () async {
-                              setModalState(() => isSubmitting = true);
-                              Navigator.pop(c);
-                              await _uploadSelectedFile(
-                                file: selectedFile!,
-                                title: titleCtrl.text.trim(),
-                                email: emailCtrl.text.trim(),
-                                language: selectedLanguage,
-                                hints: hintsCtrl.text.trim(),
-                                saveToCloud: saveToCloud,
-                                transcribeOnly: true,
-                              );
-                            },
-                            icon: const Icon(Icons.description, size: 18),
-                            label: const Text('Transcribe Only'),
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 44),
-                              side: const BorderSide(color: Color(0xFF667eea)),
-                              foregroundColor: const Color(0xFF667eea),
-                            ),
-                          ),
+                  ],
+                ),
+              ),
+            ),
+            
+            // Action Buttons - Fixed at bottom, above keyboard
+            const SizedBox(height: 16),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: (isSubmitting || selectedFile == null || isFileTooLarge) 
+                            ? null 
+                            : () async {
+                          setModalState(() => isSubmitting = true);
+                          Navigator.pop(c);
+                          await _uploadSelectedFile(
+                            file: selectedFile!,
+                            title: titleCtrl.text.trim(),
+                            email: emailCtrl.text.trim(),
+                            language: selectedLanguage,
+                            hints: hintsCtrl.text.trim(),
+                            saveToCloud: saveToCloud,
+                            transcribeOnly: true,
+                          );
+                        },
+                        icon: const Icon(Icons.description, size: 18),
+                        label: const Text('Transcribe Only'),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                          side: const BorderSide(color: Color(0xFF667eea)),
+                          foregroundColor: const Color(0xFF667eea),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: (isSubmitting || selectedFile == null || isFileTooLarge) 
-                                ? null 
-                                : () async {
-                              setModalState(() => isSubmitting = true);
-                              Navigator.pop(c);
-                              await _uploadSelectedFile(
-                                file: selectedFile!,
-                                title: titleCtrl.text.trim(),
-                                email: emailCtrl.text.trim(),
-                                language: selectedLanguage,
-                                hints: hintsCtrl.text.trim(),
-                                saveToCloud: saveToCloud,
-                                transcribeOnly: false,
-                              );
-                            },
-                            icon: isSubmitting 
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                    ),
-                                  )
-                                : const Icon(Icons.auto_awesome, size: 18),
-                            label: Text(isSubmitting ? 'Uploading...' : 'Transcribe & Summarize'),
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size(0, 44),
-                              backgroundColor: const Color(0xFF667eea),
-                              foregroundColor: Colors.white,
-                              disabledBackgroundColor: Colors.grey,
-                            ),
-                          ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: (isSubmitting || selectedFile == null || isFileTooLarge) 
+                            ? null 
+                            : () async {
+                          setModalState(() => isSubmitting = true);
+                          Navigator.pop(c);
+                          await _uploadSelectedFile(
+                            file: selectedFile!,
+                            title: titleCtrl.text.trim(),
+                            email: emailCtrl.text.trim(),
+                            language: selectedLanguage,
+                            hints: hintsCtrl.text.trim(),
+                            saveToCloud: saveToCloud,
+                            transcribeOnly: false,
+                          );
+                        },
+                        icon: isSubmitting 
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const Icon(Icons.auto_awesome, size: 18),
+                        label: Text(
+                          isSubmitting ? 'Uploading...' : 'Transcribe &\nSummarize',
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                          textAlign: TextAlign.center,
                         ),
-                      ],
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                          backgroundColor: const Color(0xFF667eea),
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
+            ),
+          ],
+        ),
             );
           },
         );
@@ -751,36 +767,84 @@ class _UploadScreenState extends State<UploadScreen> {
     final Uint8List bytes = file.bytes!;
     final filename = file.name;
     final fileSizeMB = bytes.length / (1024 * 1024);
+    final progressNotifier = ValueNotifier<double>(0.0); // Use ValueNotifier
 
     print('Uploading file: $filename (${fileSizeMB.toStringAsFixed(2)} MB)');
     print('Mode: ${transcribeOnly ? "transcribe-only" : "transcribe-and-summarize"}');
 
     if (!mounted) return;
 
-    // Show progress dialog
-    double uploadProgress = 0;
+    // Show progress dialog with background overlay
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (c) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 16),
-                Text(
-                  fileSizeMB > 20 
-                      ? 'Uploading large file...\n${uploadProgress.toStringAsFixed(0)}%'
-                      : 'Uploading...',
-                  textAlign: TextAlign.center,
-                ),
-                if (fileSizeMB > 20) ...[
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(value: uploadProgress / 100),
+      barrierColor: Colors.black54,
+      builder: (c) => ValueListenableBuilder<double>(
+        valueListenable: progressNotifier,
+        builder: (context, uploadProgress, child) {
+          return Center(
+            child: Container(
+              margin: const EdgeInsets.all(40),
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 60,
+                    height: 60,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 5,
+                      value: fileSizeMB > 20 && uploadProgress > 0 
+                          ? uploadProgress / 100 
+                          : null,
+                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF667eea)),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    fileSizeMB > 20 
+                        ? 'Uploading large file...'
+                        : 'Uploading...',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF667eea),
+                    ),
+                  ),
+                  if (fileSizeMB > 20) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      '${uploadProgress.toStringAsFixed(0)}%',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: 200,
+                      child: LinearProgressIndicator(
+                        value: uploadProgress / 100,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF667eea)),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Text(
+                    'Please wait...',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
                 ],
-              ],
+              ),
             ),
           );
         },
@@ -797,13 +861,14 @@ class _UploadScreenState extends State<UploadScreen> {
         hints: hints.isEmpty ? null : hints,
         transcribeOnly: transcribeOnly,
         onProgress: (progress) {
-          uploadProgress = progress;
+          progressNotifier.value = progress; // Update notifier
         },
       );
       
       print('Meeting created with ID: $meetingId');
 
       if (!mounted) return;
+      progressNotifier.dispose(); // Clean up
       Navigator.pop(context); // Close loading dialog
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -813,6 +878,7 @@ class _UploadScreenState extends State<UploadScreen> {
     } catch (e) {
       print('Upload error: $e');
       if (!mounted) return;
+      progressNotifier.dispose(); // Clean up
       Navigator.pop(context); // Close loading dialog
       
       String errorMessage = 'Upload failed: ${e.toString().replaceAll('Exception: ', '')}';
