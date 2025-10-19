@@ -14,7 +14,6 @@ class UploadScreen extends StatefulWidget {
 class _UploadScreenState extends State<UploadScreen> {
   final api = ApiService.I;
   
-  // Language list matching website
   final List<Map<String, String>> _languages = [
     {'code': 'auto', 'name': 'Auto-Detect'},
     {'code': 'en', 'name': 'English'},
@@ -37,11 +36,6 @@ class _UploadScreenState extends State<UploadScreen> {
     {'code': 'sv', 'name': 'Swedish'},
     {'code': 'da', 'name': 'Danish'},
   ];
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +75,6 @@ class _UploadScreenState extends State<UploadScreen> {
               ),
               const SizedBox(height: 24),
               
-              // From Transcript Section
               _sectionCard(
                 title: 'From Transcript (No Audio)',
                 badge: 'AI Summarization',
@@ -90,7 +83,6 @@ class _UploadScreenState extends State<UploadScreen> {
               
               const SizedBox(height: 16),
               
-              // Upload Meeting Section
               _sectionCard(
                 title: 'Upload Meeting (Audio/Video)',
                 badge: 'AI-Powered',
@@ -265,31 +257,41 @@ class _UploadScreenState extends State<UploadScreen> {
                           setModalState(() => isSubmitting = true);
                           
                           try {
-                            // Create meeting with transcript
-                            final newMeetingId = await api.createMeeting(
+                            print('Submitting transcript...');
+                            final meetingId = await api.submitTranscript(
                               title: titleCtrl.text.trim().isEmpty 
                                   ? 'Untitled Meeting' 
                                   : titleCtrl.text.trim(),
-                            );
-                            
-                            // Submit transcript and trigger summarization
-                            await api.submitTranscriptToMeeting(
-                              meetingId: newMeetingId,
                               transcript: transcriptCtrl.text,
                             );
+                            
+                            print('Transcript submitted, meeting ID: $meetingId');
                             
                             if (!mounted) return;
                             Navigator.pop(c);
                             Navigator.of(this.context).pushReplacement(
                               MaterialPageRoute(
-                                builder: (_) => ProgressScreen(meetingId: newMeetingId),
+                                builder: (_) => ProgressScreen(meetingId: meetingId),
                               ),
                             );
                           } catch (e) {
+                            print('Error submitting transcript: $e');
                             setModalState(() => isSubmitting = false);
                             if (!mounted) return;
+                            
+                            String errorMessage = 'Error: $e';
+                            if (e.toString().contains('TimeoutException')) {
+                              errorMessage = 'Request timed out. Please check your internet connection.';
+                            } else if (e.toString().contains('SocketException')) {
+                              errorMessage = 'Cannot connect to server. Please check your internet connection.';
+                            }
+                            
                             ScaffoldMessenger.of(this.context).showSnackBar(
-                              SnackBar(content: Text('Error: $e')),
+                              SnackBar(
+                                content: Text(errorMessage),
+                                duration: const Duration(seconds: 5),
+                                backgroundColor: Colors.red,
+                              ),
                             );
                           }
                         },
@@ -334,6 +336,19 @@ class _UploadScreenState extends State<UploadScreen> {
     String selectedLanguage = 'auto';
     bool saveToCloud = false;
     bool isSubmitting = false;
+    PlatformFile? selectedFile;
+    
+    // Tier limits (in MB) - should match backend TIER_LIMITS
+    final tierLimits = {
+      'free': 25,
+      'starter': 50,
+      'professional': 200,
+      'business': 500,
+    };
+    
+    // Get current user's tier from ApiService
+    final currentTier = api.currentTier;
+    final maxFileSizeMB = tierLimits[currentTier] ?? 25;
     
     showModalBottomSheet(
       context: context,
@@ -346,6 +361,12 @@ class _UploadScreenState extends State<UploadScreen> {
       builder: (c) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            // Check if selected file exceeds tier limit
+            final fileSizeMB = selectedFile != null 
+                ? (selectedFile!.size / (1024 * 1024)) 
+                : 0.0;
+            final isFileTooLarge = fileSizeMB > maxFileSizeMB;
+            
             return Padding(
               padding: EdgeInsets.only(
                 left: 20,
@@ -363,9 +384,9 @@ class _UploadScreenState extends State<UploadScreen> {
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Upload audio or video files for automatic transcription and AI summarization.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    Text(
+                      'Upload audio or video files for automatic transcription and AI summarization. Max file size: ${maxFileSizeMB}MB',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                     
                     const SizedBox(height: 16),
@@ -373,6 +394,7 @@ class _UploadScreenState extends State<UploadScreen> {
                     TextField(
                       controller: titleCtrl,
                       textInputAction: TextInputAction.next,
+                      enabled: !isSubmitting,
                       decoration: InputDecoration(
                         labelText: 'Meeting Title',
                         border: OutlineInputBorder(
@@ -387,6 +409,7 @@ class _UploadScreenState extends State<UploadScreen> {
                     TextField(
                       controller: emailCtrl,
                       keyboardType: TextInputType.emailAddress,
+                      enabled: !isSubmitting,
                       decoration: InputDecoration(
                         labelText: 'Email results to (optional)',
                         border: OutlineInputBorder(
@@ -399,7 +422,6 @@ class _UploadScreenState extends State<UploadScreen> {
                     
                     const SizedBox(height: 12),
                     
-                    // Language Dropdown
                     DropdownButtonFormField<String>(
                       value: selectedLanguage,
                       decoration: InputDecoration(
@@ -416,7 +438,7 @@ class _UploadScreenState extends State<UploadScreen> {
                           child: Text(lang['name']!),
                         );
                       }).toList(),
-                      onChanged: (value) {
+                      onChanged: isSubmitting ? null : (value) {
                         setModalState(() => selectedLanguage = value!);
                       },
                     ),
@@ -425,6 +447,7 @@ class _UploadScreenState extends State<UploadScreen> {
                     
                     TextField(
                       controller: hintsCtrl,
+                      enabled: !isSubmitting,
                       decoration: InputDecoration(
                         labelText: 'Hints / Terminology (optional)',
                         border: OutlineInputBorder(
@@ -471,7 +494,7 @@ class _UploadScreenState extends State<UploadScreen> {
                           ),
                           Switch(
                             value: saveToCloud,
-                            onChanged: (val) {
+                            onChanged: isSubmitting ? null : (val) {
                               setModalState(() => saveToCloud = val);
                             },
                             activeColor: const Color(0xFF667eea),
@@ -489,32 +512,151 @@ class _UploadScreenState extends State<UploadScreen> {
                     ),
                     const SizedBox(height: 8),
                     
+                    // Browse button
                     OutlinedButton.icon(
                       onPressed: isSubmitting ? null : () async {
-                        Navigator.pop(c);
-                        await _pickAndUploadFile(
-                          title: titleCtrl.text.trim(),
-                          email: emailCtrl.text.trim(),
-                          language: selectedLanguage,
-                          hints: hintsCtrl.text.trim(),
-                          saveToCloud: saveToCloud,
-                          transcribeOnly: false,
-                        );
+                        try {
+                          final result = await FilePicker.platform.pickFiles(
+                            allowMultiple: false,
+                            withData: true,
+                            type: FileType.custom,
+                            allowedExtensions: const ['m4a', 'mp3', 'wav', 'aac', 'mp4', 'mov', 'mkv', 'webm'],
+                          );
+                          
+                          if (result != null && result.files.single.bytes != null) {
+                            setModalState(() {
+                              selectedFile = result.files.single;
+                            });
+                          }
+                        } catch (e) {
+                          print('File picker error: $e');
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            SnackBar(content: Text('Error selecting file: $e')),
+                          );
+                        }
                       },
-                      icon: const Icon(Icons.upload_file, size: 20),
-                      label: const Text('Browse'),
+                      icon: Icon(
+                        selectedFile != null ? Icons.check_circle : Icons.upload_file, 
+                        size: 20,
+                        color: selectedFile != null 
+                            ? (isFileTooLarge ? Colors.orange : Colors.green)
+                            : null,
+                      ),
+                      label: Text(selectedFile != null ? 'File Selected' : 'Browse Files'),
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size(double.infinity, 40),
-                        side: BorderSide(color: Colors.grey.shade400),
-                        foregroundColor: Colors.black87,
+                        side: BorderSide(
+                          color: selectedFile != null 
+                              ? (isFileTooLarge ? Colors.orange : Colors.green)
+                              : Colors.grey.shade400,
+                        ),
+                        foregroundColor: selectedFile != null 
+                            ? (isFileTooLarge ? Colors.orange : Colors.green)
+                            : Colors.black87,
                       ),
                     ),
+                    
+                    // Show selected file info
+                    if (selectedFile != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isFileTooLarge ? Colors.orange.shade50 : Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: isFileTooLarge ? Colors.orange.shade200 : Colors.green.shade200
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  isFileTooLarge ? Icons.warning : Icons.attach_file,
+                                  size: 16,
+                                  color: isFileTooLarge ? Colors.orange : Colors.green,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    selectedFile!.name,
+                                    style: const TextStyle(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Text(
+                                  '${fileSizeMB.toStringAsFixed(1)} MB',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isFileTooLarge ? Colors.orange : Colors.grey.shade600,
+                                    fontWeight: isFileTooLarge ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (isFileTooLarge) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                '⚠️ File exceeds ${maxFileSizeMB}MB limit for $currentTier tier',
+                                style: const TextStyle(fontSize: 11, color: Colors.orange),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
                     
                     const SizedBox(height: 6),
                     const Text(
                       'Supported formats: .mp3, .m4a, .wav, .mp4, .mov, .mkv, .webm',
                       style: TextStyle(fontSize: 11, color: Colors.grey),
                     ),
+                    
+                    // Show upgrade prompt if file too large
+                    if (isFileTooLarge) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.rocket_launch, color: Colors.white, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Upgrade to upload larger files',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Starter: 50MB • Pro: 200MB • Business: 500MB',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.9),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.arrow_forward, color: Colors.white, size: 16),
+                          ],
+                        ),
+                      ),
+                    ],
                     
                     const SizedBox(height: 16),
                     
@@ -523,10 +665,13 @@ class _UploadScreenState extends State<UploadScreen> {
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: isSubmitting ? null : () async {
+                            onPressed: (isSubmitting || selectedFile == null || isFileTooLarge) 
+                                ? null 
+                                : () async {
                               setModalState(() => isSubmitting = true);
                               Navigator.pop(c);
-                              await _pickAndUploadFile(
+                              await _uploadSelectedFile(
+                                file: selectedFile!,
                                 title: titleCtrl.text.trim(),
                                 email: emailCtrl.text.trim(),
                                 language: selectedLanguage,
@@ -547,10 +692,13 @@ class _UploadScreenState extends State<UploadScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: isSubmitting ? null : () async {
+                            onPressed: (isSubmitting || selectedFile == null || isFileTooLarge) 
+                                ? null 
+                                : () async {
                               setModalState(() => isSubmitting = true);
                               Navigator.pop(c);
-                              await _pickAndUploadFile(
+                              await _uploadSelectedFile(
+                                file: selectedFile!,
                                 title: titleCtrl.text.trim(),
                                 email: emailCtrl.text.trim(),
                                 language: selectedLanguage,
@@ -559,12 +707,22 @@ class _UploadScreenState extends State<UploadScreen> {
                                 transcribeOnly: false,
                               );
                             },
-                            icon: const Icon(Icons.auto_awesome, size: 18),
-                            label: const Text('Transcribe & Summarize'),
+                            icon: isSubmitting 
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  )
+                                : const Icon(Icons.auto_awesome, size: 18),
+                            label: Text(isSubmitting ? 'Uploading...' : 'Transcribe & Summarize'),
                             style: ElevatedButton.styleFrom(
                               minimumSize: const Size(0, 44),
                               backgroundColor: const Color(0xFF667eea),
                               foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.grey,
                             ),
                           ),
                         ),
@@ -580,7 +738,9 @@ class _UploadScreenState extends State<UploadScreen> {
     );
   }
 
-  Future<void> _pickAndUploadFile({
+  // Upload method with progress
+  Future<void> _uploadSelectedFile({
+    required PlatformFile file,
     required String title,
     required String email,
     required String language,
@@ -588,57 +748,60 @@ class _UploadScreenState extends State<UploadScreen> {
     required bool saveToCloud,
     required bool transcribeOnly,
   }) async {
+    final Uint8List bytes = file.bytes!;
+    final filename = file.name;
+    final fileSizeMB = bytes.length / (1024 * 1024);
+
+    print('Uploading file: $filename (${fileSizeMB.toStringAsFixed(2)} MB)');
+    print('Mode: ${transcribeOnly ? "transcribe-only" : "transcribe-and-summarize"}');
+
+    if (!mounted) return;
+
+    // Show progress dialog
+    double uploadProgress = 0;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(
+                  fileSizeMB > 20 
+                      ? 'Uploading large file...\n${uploadProgress.toStringAsFixed(0)}%'
+                      : 'Uploading...',
+                  textAlign: TextAlign.center,
+                ),
+                if (fileSizeMB > 20) ...[
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(value: uploadProgress / 100),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
     try {
-      final result = await FilePicker.platform.pickFiles(
-        allowMultiple: false,
-        withData: true,
-        type: FileType.custom,
-        allowedExtensions: const ['m4a', 'mp3', 'wav', 'aac', 'mp4', 'mov', 'mkv', 'webm'],
-      );
-      
-      if (result == null || result.files.single.bytes == null) return;
-
-      final PlatformFile file = result.files.single;
-      final Uint8List bytes = file.bytes!;
-      final filename = file.name;
-      final contentType = _guessMime(filename);
-
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (c) => const Center(child: CircularProgressIndicator()),
-      );
-
-      // Always upload to cloud for processing
-      final presign = await api.presignUpload(
-        filename: filename,
-        contentType: contentType,
-        folder: 'raw',
-      );
-
-      await api.putBytes(
-        url: presign.url,
-        bytes: bytes,
-        headers: presign.headers,
-        method: presign.method,
-      );
-
-      // Create meeting record with metadata
-      final meetingId = await api.createMeeting(
+      final meetingId = await api.uploadMeeting(
         title: title.isEmpty ? 'Untitled Meeting' : title,
-        audioKey: presign.key,
+        fileBytes: bytes,
+        filename: filename,
         email: email.isEmpty ? null : email,
-      );
-
-      // Start processing
-      await api.startProcessing(
-        meetingId: meetingId,
-        s3key: presign.key,
-        mode: transcribeOnly ? 'transcribe' : 'transcribe_and_summarize',
         language: language == 'auto' ? null : language,
         hints: hints.isEmpty ? null : hints,
+        transcribeOnly: transcribeOnly,
+        onProgress: (progress) {
+          uploadProgress = progress;
+        },
       );
+      
+      print('Meeting created with ID: $meetingId');
 
       if (!mounted) return;
       Navigator.pop(context); // Close loading dialog
@@ -648,24 +811,28 @@ class _UploadScreenState extends State<UploadScreen> {
         ),
       );
     } catch (e) {
+      print('Upload error: $e');
       if (!mounted) return;
       Navigator.pop(context); // Close loading dialog
+      
+      String errorMessage = 'Upload failed: ${e.toString().replaceAll('Exception: ', '')}';
+      if (e.toString().contains('TimeoutException')) {
+        errorMessage = 'Upload timed out. Please try again with a better connection.';
+      } else if (e.toString().contains('SocketException') || e.toString().contains('Broken pipe')) {
+        errorMessage = 'Connection lost during upload. Please check your internet connection and try again.';
+      } else if (e.toString().contains('413') || e.toString().contains('too large')) {
+        errorMessage = 'File is too large for your account tier. Please upgrade or use a smaller file.';
+      } else if (e.toString().contains('Monthly meeting limit')) {
+        errorMessage = 'Monthly meeting limit reached. Please upgrade your plan.';
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Upload failed: $e')),
+        SnackBar(
+          content: Text(errorMessage),
+          duration: const Duration(seconds: 5),
+          backgroundColor: Colors.red,
+        ),
       );
     }
-  }
-
-  String _guessMime(String filename) {
-    final f = filename.toLowerCase();
-    if (f.endsWith('.m4a')) return 'audio/m4a';
-    if (f.endsWith('.mp3')) return 'audio/mpeg';
-    if (f.endsWith('.wav')) return 'audio/wav';
-    if (f.endsWith('.aac')) return 'audio/aac';
-    if (f.endsWith('.mp4')) return 'video/mp4';
-    if (f.endsWith('.mov')) return 'video/quicktime';
-    if (f.endsWith('.mkv')) return 'video/x-matroska';
-    if (f.endsWith('.webm')) return 'video/webm';
-    return 'application/octet-stream';
   }
 }

@@ -14,3 +14,4 @@ class Upload(SQLModel, table=True):
     size_bytes: Optional[int] = Field(default=None)
     duration_ms: Optional[int] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    

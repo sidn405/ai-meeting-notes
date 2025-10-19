@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'activation_screen.dart';
 import 'upload_screen.dart';
 import 'user_guide_screen.dart';
+import '../services/iap_service.dart';
+import '../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -11,15 +12,71 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // TODO: Replace with actual user data from your auth/database
-  final bool isPaidUser = false; // Set to true for paid users
-  final String? userEmail = null; // Set to user email if logged in
-  final String? planName = null; // e.g., 'Professional Plan', 'Business Plan'
-  final int meetingsUsed = 0;
-  final int meetingsLimit = 5;
+  final _iapService = IapService();
+  final _api = ApiService.I;
+  
+  Map<String, dynamic>? _licenseInfo;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _initIAP();
+    _loadLicenseInfo();
+  }
+
+  Future<void> _initIAP() async {
+    try {
+      await _iapService.init();
+    } catch (e) {
+      print('Failed to initialize IAP: $e');
+    }
+  }
+
+  Future<void> _loadLicenseInfo() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      await _api.loadLicenseKey();
+      final info = await _api.getLicenseInfo();
+      
+      setState(() {
+        _licenseInfo = info;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  bool get isPaidUser => _licenseInfo?['tier'] != null && _licenseInfo?['tier'] != 'free';
+  String? get userEmail => _licenseInfo?['email'];
+  String? get planName => _licenseInfo?['tier_name'];
+  int get meetingsUsed => _licenseInfo?['meetings_used'] ?? 0;
+  int get meetingsLimit => _licenseInfo?['meetings_limit'] ?? 5;
+  int get maxFileSizeMB => _licenseInfo?['max_file_size_mb'] ?? 25;
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+            ),
+          ),
+          child: const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -66,7 +123,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              // Only show user card for paid users
               if (isPaidUser && userEmail != null) ...[
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -86,23 +142,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           const SizedBox(width: 8),
                           const Expanded(
                             child: Text(
-                              'You are logged in and ready to upload',
+                              'Premium Active',
                               style: TextStyle(color: Colors.white, fontSize: 14),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              // Logout
-                            },
-                            style: TextButton.styleFrom(
-                              backgroundColor: Colors.white.withOpacity(0.2),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: const Text(
-                              'Logout',
-                              style: TextStyle(color: Colors.white, fontSize: 12),
                             ),
                           ),
                         ],
@@ -143,19 +184,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               ],
                             ),
                           ),
-                          Column(
-                            children: [
-                              IconButton(
-                                onPressed: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Key copied to clipboard')),
-                                  );
-                                },
-                                icon: const Icon(Icons.copy, color: Colors.white, size: 20),
-                                tooltip: 'Copy Key',
-                              ),
-                            ],
-                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -166,7 +194,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
                           Expanded(
-                            child: _statItem('Max File Size', '200MB'),
+                            child: _statItem('Max File Size', '${maxFileSizeMB}MB'),
                           ),
                           Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
                           Expanded(
@@ -179,7 +207,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 24),
               ] else ...[
-                // Free tier card
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -202,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        '5 meetings per month\n& 50MB file upload size',
+                        '5 meetings per month\n25MB max file size',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -237,7 +264,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 24),
               ],
               
-              // Create Meeting Button
               SizedBox(
                 height: 56,
                 child: ElevatedButton.icon(
@@ -264,7 +290,6 @@ class _HomeScreenState extends State<HomeScreen> {
               
               const SizedBox(height: 24),
               
-              // Quick Stats
               Row(
                 children: [
                   Expanded(
@@ -374,27 +399,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 _planTile(
                   context: c,
                   icon: Icons.verified,
+                  title: 'Starter',
+                  subtitle: '25 meetings per month\n50MB max file size',
+                  price: _iapService.proProduct?.price ?? '\$29/month',
+                  isPro: true,
+                ),
+                const SizedBox(height: 20),
+                _planTile(
+                  context: c,
+                  icon: Icons.verified,
                   title: 'Professional',
-                  subtitle: '50 meetings per month\n& 200MB upload file size',
-                  price: '\$69/month',
+                  subtitle: '50 meetings per month\n200MB max file size',
+                  price: _iapService.proProduct?.price ?? '\$69/month',
+                  isPro: true,
                 ),
                 const SizedBox(height: 12),
                 _planTile(
                   context: c,
                   icon: Icons.business,
                   title: 'Business',
-                  subtitle: '100 meetings per month\n& 500MB upload file size',
-                  price: '\$119/month',
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(c);
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ActivationScreen()),
-                    );
-                  },
-                  child: const Text('I already have a license'),
+                  subtitle: '100 meetings per month\n500MB max file size',
+                  price: _iapService.businessProduct?.price ?? '\$119/month',
+                  isPro: false,
                 ),
               ],
             ),
@@ -410,6 +436,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required String title,
     required String subtitle,
     required String price,
+    required bool isPro,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -426,16 +453,45 @@ class _HomeScreenState extends State<HomeScreen> {
           title,
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+        subtitle: Text(subtitle, style: const TextStyle(fontSize: 13)),
         trailing: Text(
           price,
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
-        onTap: () {
+        onTap: () async {
           Navigator.pop(context);
-          ScaffoldMessenger.of(this.context).showSnackBar(
-            const SnackBar(content: Text('IAP: purchase flow will start here')),
+          
+          showDialog(
+            context: this.context,
+            barrierDismissible: false,
+            builder: (c) => const Center(child: CircularProgressIndicator()),
           );
+          
+          try {
+            final result = isPro 
+                ? await _iapService.purchasePro()
+                : await _iapService.purchaseBusiness();
+            
+            if (!mounted) return;
+            Navigator.pop(this.context);
+            
+            ScaffoldMessenger.of(this.context).showSnackBar(
+              SnackBar(
+                content: Text('Purchase initiated: $result'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          } catch (e) {
+            if (!mounted) return;
+            Navigator.pop(this.context);
+            
+            ScaffoldMessenger.of(this.context).showSnackBar(
+              SnackBar(
+                content: Text('Purchase failed: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
         },
       ),
     );

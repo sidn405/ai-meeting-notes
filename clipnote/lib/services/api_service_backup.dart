@@ -1,192 +1,318 @@
-// lib/services/api_service.dart
-import 'dart:typed_data';
-import 'package:dio/dio.dart';
-
-/// TODO: update if your base changes
-const API_BASE = 'https://ai-meeting-notes-production-81d7.up.railway.app';
-
-class PresignResponse {
-  final String url;                        // PUT URL to B2/S3
-  final String key;                        // object key, e.g. raw/...m4a
-  final String? publicUrl;                 // optional public URL
-  final String method;                     // usually 'PUT'
-  final Map<String, String> headers;       // exact headers required by the PUT
-
-  PresignResponse({
-    required this.url,
-    required this.key,
-    required this.method,
-    required this.headers,
-    this.publicUrl,
-  });
-}
+import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 
 class ApiService {
-  final Dio _dio = Dio(BaseOptions(
-    baseUrl: API_BASE,
-    connectTimeout: const Duration(seconds: 20),
-    receiveTimeout: const Duration(minutes: 2),
-  ));
-
-  String? _apiKey; // X-API-Key (license)
-
-  // Called by Activation screen or after web purchase
+  static final ApiService I = ApiService._();
+  ApiService._();
+  
+  final String baseUrl = 'https://ai-meeting-notes-production-81d7.up.railway.app';
+  String? _licenseKey;
+  
+  // Timeout duration for all requests
+  static const Duration timeoutDuration = Duration(seconds: 30);
+  
+  void _log(String message) {
+    if (kDebugMode) {
+      print('[ApiService] $message');
+    }
+  }
+  
+  // Save license key after IAP verification
   void setLicenseKey(String key) {
-    _apiKey = key;
+    _licenseKey = key;
+    _saveLicenseKeyToStorage(key);
   }
-
-  Map<String, String> _authHeaders() {
-    final key = _apiKey; // snapshot for promotion
-    return (key != null && key.isNotEmpty) ? {'X-API-Key': key} : const {};
+  
+  Future<void> _saveLicenseKeyToStorage(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('license_key', key);
   }
-
-  /// ----- LICENSE / IAP -----
-
-  Future<Map<String, dynamic>> getLicenseInfo() async {
-    final res = await _dio.get(
-      '/license/info',
-      options: Options(headers: _authHeaders()),
-    );
-    return (res.data as Map).cast<String, dynamic>();
+  
+  Future<void> loadLicenseKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    _licenseKey = prefs.getString('license_key');
   }
-
-  Future<void> activateLicense(String licenseKey) async {
-    await _dio.post(
-      '/license/activate',
-      data: {'license_key': licenseKey},
-      options: Options(headers: _authHeaders()),
-    );
-    _apiKey = licenseKey;
+  
+  // Add license key to all API calls
+  Map<String, String> _getHeaders() {
+    final headers = {'Content-Type': 'application/json'};
+    if (_licenseKey != null) {
+      headers['X-License-Key'] = _licenseKey!;
+    }
+    return headers;
   }
-
-  Future<void> verifyIapReceipt({
-    required String store, // 'google_play' | 'app_store'
-    required String receipt,
-  }) async {
-    await _dio.post(
-      '/iap/verify',
-      data: {'store': store, 'receipt': receipt},
-      options: Options(headers: _authHeaders()),
-    );
-  }
-
-  /// ----- UPLOAD FLOW -----
-
-  Future<PresignResponse> presignUpload({
-    required String filename,
-    required String contentType,
-    required String folder, // e.g., 'raw'
-  }) async {
-    final res = await _dio.post(
-      '/uploads/presign',
-      data: {
-        'filename': filename,
-        'content_type': contentType,
-        'folder': folder,
-      },
-      options: Options(headers: _authHeaders()),
-    );
-
-    final m = (res.data as Map).cast<String, dynamic>();
-    final headersAny = (m['headers'] as Map?) ?? const {};
-    final headers = headersAny.map(
-      (k, v) => MapEntry(k.toString(), v.toString()),
-    );
-
-    return PresignResponse(
-      url: m['url'] as String,
-      key: m['key'] as String,
-      publicUrl: m['public_url'] as String?,
-      method: (m['method'] as String?) ?? 'PUT',
-      headers: headers,
-    );
-  }
-
-  Future<void> recordAsset({
-    required String meetingId,
-    required String key,  // Changed from s3Key to key
-    String? publicUrl,
-  }) async {
-    await _dio.post(
-      '/uploads/record',
-      data: {
-        'meeting_id': meetingId,
-        's3key': key,
-        'public_url': publicUrl,
-      },
-      options: Options(headers: _authHeaders()),
-    );
-  }
-
-  /// Start transcription/summarization for an uploaded object
-  Future<void> startProcessing({
-    required String meetingId,
-    required String s3key,  // Changed from s3Key to s3key to match caller
-    required String mode,   // Changed from bool summarize to String mode
-  }) async {
-    await _dio.post(
-      '/process/start',
-      data: {
-        'meeting_id': meetingId,
-        's3key': s3key,
-        'mode': mode,
-      },
-      options: Options(headers: _authHeaders()),
-    );
-  }
-
-  /// Direct transcript submission (no audio)
-  Future<void> submitTranscript({
-    required String meetingId,
-    String? title,  // Added title parameter
+  
+  // Submit transcript directly (uses backend's /meetings/from-text endpoint)
+  Future<String> submitTranscript({
+    required String title,
     required String transcript,
-    required bool summarize,
+    String? email,
   }) async {
-    await _dio.post(
-      '/process/from_transcript',
-      data: {
-        'meeting_id': meetingId,
-        if (title != null) 'title': title,
-        'transcript': transcript,
-        'summarize': summarize,
-      },
-      options: Options(headers: _authHeaders()),
-    );
+    _log('Submitting transcript directly: $title');
+    
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/meetings/from-text'),
+      );
+      
+      // Add license header if available
+      if (_licenseKey != null) {
+        request.headers['X-License-Key'] = _licenseKey!;
+      }
+      
+      // Add form fields
+      request.fields['title'] = title;
+      request.fields['transcript'] = transcript;
+      if (email != null && email.isNotEmpty) {
+        request.fields['email_to'] = email;
+      }
+      
+      _log('Sending transcript submission...');
+      
+      final streamedResponse = await request.send().timeout(timeoutDuration);
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      _log('Submit transcript response: ${response.statusCode}');
+      
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception('Failed to submit transcript: ${response.body}');
+      }
+      
+      final data = jsonDecode(response.body);
+      final meetingId = data['id'].toString();
+      _log('Transcript submitted, meeting ID: $meetingId');
+      return meetingId;
+    } catch (e) {
+      _log('Error submitting transcript: $e');
+      rethrow;
+    }
   }
-
-  /// PUT bytes to presigned storage URL (NO auth headers here!)
-  Future<Response> putBytes({
-    required String url,
-    required Uint8List bytes,
-    Map<String, String>? headers,
-    String method = 'PUT',
-  }) {
-    final client = Dio();
-    return client.request(
-      url,
-      data: bytes,
-      options: Options(method: method, headers: headers),
-    );
+  
+  // Upload file to backend (uses /meetings/upload endpoint)
+  Future<String> uploadMeeting({
+    required String title,
+    required List<int> fileBytes,
+    required String filename,
+    String? email,
+    String? language,
+    String? hints,
+  }) async {
+    _log('Uploading meeting: $title, file: $filename');
+    
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/meetings/upload'),
+      );
+      
+      // Add license header if available
+      if (_licenseKey != null) {
+        request.headers['X-License-Key'] = _licenseKey!;
+      }
+      
+      // Add form fields
+      request.fields['title'] = title;
+      if (email != null && email.isNotEmpty) {
+        request.fields['email_to'] = email;
+      }
+      if (language != null && language != 'auto') {
+        request.fields['language'] = language;
+      }
+      if (hints != null && hints.isNotEmpty) {
+        request.fields['hints'] = hints;
+      }
+      
+      // Add file
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          fileBytes,
+          filename: filename,
+        ),
+      );
+      
+      _log('Sending multipart request...');
+      
+      // Calculate timeout based on file size
+      final sizeInMB = fileBytes.length / (1024 * 1024);
+      final estimatedMinutes = 2 + (sizeInMB / 10).ceil();
+      final timeout = Duration(minutes: estimatedMinutes.clamp(2, 15));
+      
+      _log('Upload timeout: ${timeout.inMinutes} minutes for ${sizeInMB.toStringAsFixed(2)}MB');
+      
+      final streamedResponse = await request.send().timeout(timeout);
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      _log('Upload response: ${response.statusCode}');
+      
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception('Failed to upload meeting: ${response.body}');
+      }
+      
+      final data = jsonDecode(response.body);
+      final meetingId = data['id'].toString();
+      _log('Meeting uploaded successfully: $meetingId');
+      return meetingId;
+    } catch (e) {
+      _log('Error uploading meeting: $e');
+      rethrow;
+    }
   }
-
-  // --- Singleton convenience (keep both to satisfy older calls) ---
-  static final ApiService I = ApiService();
-  static ApiService get instance => I;
-
-  // --- Meeting status + summary used by Progress/Results screens ---
+  
+  // Verify IAP and get license key
+  Future<String> verifyIapAndGetLicense({
+    required String userId,
+    required String receipt,
+    required String productId,
+    required String store,
+    String? email,
+  }) async {
+    _log('Verifying IAP for user: $userId');
+    
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/iap/verify'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'user_id': userId,
+          'email': email,
+          'receipt': receipt,
+          'product_id': productId,
+          'store': store,
+        }),
+      ).timeout(timeoutDuration);
+      
+      _log('IAP verification response: ${response.statusCode}');
+      
+      if (response.statusCode != 200) {
+        throw Exception('IAP verification failed: ${response.body}');
+      }
+      
+      final data = jsonDecode(response.body);
+      final licenseKey = data['license_key'] as String;
+      
+      setLicenseKey(licenseKey);
+      
+      return licenseKey;
+    } catch (e) {
+      _log('Error verifying IAP: $e');
+      rethrow;
+    }
+  }
+  
+  // Get license info
+  Future<Map<String, dynamic>> getLicenseInfo() async {
+    if (_licenseKey == null) {
+      throw Exception('No license key available');
+    }
+    
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/iap/subscription-status/$_licenseKey'),
+      ).timeout(timeoutDuration);
+      
+      if (response.statusCode != 200) {
+        throw Exception('Failed to get license info: ${response.body}');
+      }
+      
+      return jsonDecode(response.body);
+    } catch (e) {
+      _log('Error getting license info: $e');
+      rethrow;
+    }
+  }
+  
+  // Get meeting processing status
   Future<Map<String, dynamic>> getMeetingStatus(String meetingId) async {
-    final r = await _dio.get(
-      '/meetings/$meetingId/status',
-      options: Options(headers: _authHeaders()),
-    );
-    return (r.data as Map).cast<String, dynamic>();
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/meetings/$meetingId/status'),
+        headers: _getHeaders(),
+      ).timeout(timeoutDuration);
+      
+      if (response.statusCode != 200) {
+        throw Exception('Failed to get status: ${response.body}');
+      }
+      
+      return jsonDecode(response.body);
+    } catch (e) {
+      _log('Error getting meeting status: $e');
+      rethrow;
+    }
   }
-
-  Future<Map<String, dynamic>> getMeetingSummary(String meetingId) async {
-    final r = await _dio.get(
-      '/meetings/$meetingId/summary',
-      options: Options(headers: _authHeaders()),
-    );
-    return (r.data as Map).cast<String, dynamic>();
+  
+  // Get meeting summary
+  Future<Map<String, dynamic>> getMeetingSummary(int meetingId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/meetings/$meetingId/summary'),
+        headers: _getHeaders(),
+      ).timeout(timeoutDuration);
+      
+      if (response.statusCode != 200) {
+        throw Exception('Failed to get summary: ${response.body}');
+      }
+      
+      return jsonDecode(response.body);
+    } catch (e) {
+      _log('Error getting meeting summary: $e');
+      rethrow;
+    }
+  }
+  
+  // Get user info (tier, usage, limits)
+  Future<Map<String, dynamic>> getUserInfo(String userId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/$userId/info'),
+        headers: _getHeaders(),
+      ).timeout(timeoutDuration);
+      
+      if (response.statusCode != 200) {
+        throw Exception('Failed to get user info: ${response.body}');
+      }
+      
+      return jsonDecode(response.body);
+    } catch (e) {
+      _log('Error getting user info: $e');
+      rethrow;
+    }
+  }
+  
+  // Increment user's monthly usage
+  Future<void> incrementUserUsage(String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/users/$userId/usage/increment'),
+        headers: _getHeaders(),
+      ).timeout(timeoutDuration);
+      
+      if (response.statusCode != 200) {
+        throw Exception('Failed to increment usage: ${response.body}');
+      }
+    } catch (e) {
+      _log('Error incrementing usage: $e');
+      rethrow;
+    }
+  }
+  
+  // Health check - test if backend is reachable
+  Future<bool> checkHealth() async {
+    try {
+      _log('Checking backend health...');
+      final response = await http.get(
+        Uri.parse('$baseUrl/health'),
+      ).timeout(const Duration(seconds: 10));
+      
+      _log('Health check response: ${response.statusCode}');
+      return response.statusCode == 200;
+    } catch (e) {
+      _log('Backend health check failed: $e');
+      return false;
+    }
   }
 }

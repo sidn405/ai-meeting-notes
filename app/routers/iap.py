@@ -52,8 +52,10 @@ async def verify_iap_receipt(
     """
     
     # Determine tier from product_id
-    if "pro" in request.product_id.lower():
+    if "starter" in request.product_id.lower():
         tier = LicenseTier.PROFESSIONAL
+    elif "pro" in request.product_id.lower():
+        tier = LicenseTier.BUSINESS
     elif "business" in request.product_id.lower():
         tier = LicenseTier.BUSINESS
     else:

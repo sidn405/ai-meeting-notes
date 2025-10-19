@@ -9,7 +9,7 @@ from ..db import get_session, DATA_DIR
 from ..models import Meeting, License, LicenseTier, TIER_LIMITS
 from ..services.pipeline import process_meeting, send_summary_email, process_meeting_transcribe_summarize
 from app.services.license import validate_license, check_usage_limit
-
+from ..services.pipeline import process_meeting_transcribe_only
 import json, re, os
 
 # CHANGED: Import license system
@@ -19,24 +19,31 @@ from ..services.license import LicenseTier, TIER_LIMITS
 router = APIRouter(
     prefix="/meetings",
     tags=["meetings"],
-    dependencies=[Depends(require_auth)],
+    #dependencies=[Depends(require_auth)],
 )
 
-def require_license(
-    x_license_key: str = Header(..., alias="X-License-Key"),
+def optional_license(
+    x_license_key: str | None = Header(None, alias="X-License-Key"),
     db: Session = Depends(get_session)
 ):
     """
-    Dependency that validates license key from header
-    Works for both manual licenses and IAP-generated licenses
+    Optional license check - returns tier config
+    If no license provided, returns FREE tier config
     """
+    from app.services.license import validate_license, TIER_LIMITS, LicenseTier
+    
+    if not x_license_key:
+        # No license = FREE tier
+        return None, TIER_LIMITS[LicenseTier.FREE.value]
+    
+    # Validate license if provided
     is_valid, license, error = validate_license(db, x_license_key)
     
     if not is_valid:
-        raise HTTPException(403, error or "Invalid license")
+        # Invalid license = still allow as FREE tier (don't block)
+        return None, TIER_LIMITS[LicenseTier.FREE.value]
     
     tier_config = TIER_LIMITS[license.tier]
-    
     return license, tier_config
 
 def track_meeting_usage(db: Session, license_key: str):
@@ -88,10 +95,10 @@ async def upload_meeting(
     model_size: str | None = Form(None),
     device: str | None = Form(None),
     compute_type: str | None = Form(None),
-    license_info: tuple = Depends(require_license),
+    license_info: tuple = Depends(optional_license),
     db = Depends(get_session),
 ):
-    """Upload audio/video file and queue for processing"""
+    """Upload - works for FREE and PAID users"""
     license, tier_config = license_info
     
     # ADDED: Handle empty string for auto-detect
@@ -134,7 +141,8 @@ async def upload_meeting(
         mid = m.id
 
     # Track usage for license
-    track_meeting_usage(db, license.license_key)
+    if license:  # Only track if user has a license
+        track_meeting_usage(db, license.license_key)
 
     # Queue processing
     background_tasks.add_task(
@@ -198,7 +206,8 @@ async def upload_meeting_sync(
         mid = m.id
 
     # Track usage
-    track_meeting_usage(db, license.license_key)
+    if license:  # Only track if user has a license
+        track_meeting_usage(db, license.license_key)
 
     # Process synchronously
     process_meeting(mid, language=language, hints=hints)
@@ -238,7 +247,8 @@ async def create_from_text(
         mid = m.id
 
     # Track usage
-    track_meeting_usage(db, license.license_key)
+    if license:  # Only track if user has a license
+        track_meeting_usage(db, license.license_key)
 
     # Process meeting
     process_meeting(mid)
@@ -289,12 +299,79 @@ async def transcribe_only(
         mid = m.id
 
     # Track usage
-    track_meeting_usage(db, license.license_key)
+    if license:  # Only track if user has a license
+        track_meeting_usage(db, license.license_key)
 
     return {
         "id": mid, 
         "status": "delivered",
         "message": "Transcript saved successfully"
+    }
+    
+@router.post("/upload-transcribe-only")
+async def upload_transcribe_only(
+    background_tasks: BackgroundTasks,
+    title: str = Form(...),
+    email_to: str | None = Form(None),
+    file: UploadFile = File(...),
+    language: str | None = Form(None),
+    hints: str | None = Form(None),
+    license_info: tuple = Depends(optional_license),
+    db = Depends(get_session),
+):
+    """Upload and transcribe ONLY (no summarization)"""
+    license, tier_config = license_info
+    
+    if language == "":
+        language = None
+    if hints:
+        hints = hints.strip() or None
+    
+    ext = Path(file.filename).suffix.lower()
+    if ext not in {".mp3", ".m4a", ".wav", ".mp4"}:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    file_content = await file.read()
+    file_size = len(file_content)
+    
+    if file_size == 0:
+        raise HTTPException(status_code=400, detail="File is empty")
+    
+    is_valid, error_msg = validate_file_size(file_size, tier_config)
+    if not is_valid:
+        raise HTTPException(status_code=413, detail=error_msg)
+    
+    audio_path = DATA_DIR / f"{Path(file.filename).stem}.uploaded{ext}"
+    audio_path.write_bytes(file_content)
+
+    with get_session() as s:
+        m = Meeting(
+            title=title, 
+            audio_path=str(audio_path), 
+            email_to=email_to, 
+            status="queued"
+        )
+        s.add(m)
+        s.commit()
+        s.refresh(m)
+        mid = m.id
+
+    if license:  # Only track if user has a license
+        track_meeting_usage(db, license.license_key)
+
+    background_tasks.add_task(
+        process_meeting_transcribe_only,
+        mid,
+        language=language,
+        hints=hints
+    )
+    
+    return {
+        "id": mid, 
+        "status": "queued",
+        "file_size_mb": round(file_size / (1024 / 1024), 2),
+        "language": language or "auto-detect",
+        "mode": "transcribe_only"
     }
 
 # FULL VERSION - transcribe and summarize
@@ -353,7 +430,8 @@ async def upload_transcribe_summarize(
         mid = m.id
 
     # Track usage
-    track_meeting_usage(db, license.license_key)
+    if license:  # Only track if user has a license
+        track_meeting_usage(db, license.license_key)
 
     # Import the transcribe-only function
     from ..services.pipeline import process_meeting_transcribe_summarize
@@ -527,3 +605,145 @@ def delete_meeting(meeting_id: int):
         s.commit()
         
         return {"success": True, "message": "Meeting deleted"}
+    
+@router.post("/create-from-url")
+async def create_from_url(
+    background_tasks: BackgroundTasks,
+    payload: dict,
+    license_info: tuple = Depends(optional_license),
+    db = Depends(get_session),
+):
+    """Create meeting from S3 URL (for multipart uploads)"""
+    license, tier_config = license_info
+    
+    title = payload.get('title')
+    file_url = payload.get('file_url')
+    filename = payload.get('filename')
+    email_to = payload.get('email_to')
+    language = payload.get('language')
+    hints = payload.get('hints')
+    
+    if not file_url or not filename:
+        raise HTTPException(400, "file_url and filename required")
+    
+    # Download file from S3 to local storage
+    import requests
+    response = requests.get(file_url, timeout=300)
+    if response.status_code != 200:
+        raise HTTPException(400, "Failed to download file from S3")
+    
+    file_content = response.content
+    file_size = len(file_content)
+    
+    # Validate file size
+    is_valid, error_msg = validate_file_size(file_size, tier_config)
+    if not is_valid:
+        raise HTTPException(status_code=413, detail=error_msg)
+    
+    # Save file locally
+    ext = Path(filename).suffix.lower()
+    audio_path = DATA_DIR / f"{Path(filename).stem}.uploaded{ext}"
+    audio_path.write_bytes(file_content)
+    
+    # Create meeting record
+    with get_session() as s:
+        m = Meeting(
+            title=title or 'Untitled Meeting',
+            audio_path=str(audio_path),
+            email_to=email_to,
+            status="queued"
+        )
+        s.add(m)
+        s.commit()
+        s.refresh(m)
+        mid = m.id
+    
+    # Track usage
+    if license:
+        track_meeting_usage(db, license.license_key)
+    
+    # Queue processing
+    background_tasks.add_task(
+        process_meeting_transcribe_summarize,
+        mid,
+        language=language,
+        hints=hints
+    )
+    
+    return {
+        "id": mid,
+        "status": "queued",
+        "file_size_mb": round(file_size / (1024 * 1024), 2),
+    }
+
+
+@router.post("/create-from-url-transcribe-only")
+async def create_from_url_transcribe_only(
+    background_tasks: BackgroundTasks,
+    payload: dict,
+    license_info: tuple = Depends(optional_license),
+    db = Depends(get_session),
+):
+    """Create meeting from S3 URL - transcribe only"""
+    license, tier_config = license_info
+    
+    title = payload.get('title')
+    file_url = payload.get('file_url')
+    filename = payload.get('filename')
+    email_to = payload.get('email_to')
+    language = payload.get('language')
+    hints = payload.get('hints')
+    
+    if not file_url or not filename:
+        raise HTTPException(400, "file_url and filename required")
+    
+    # Download file from S3
+    import requests
+    response = requests.get(file_url, timeout=300)
+    if response.status_code != 200:
+        raise HTTPException(400, "Failed to download file from S3")
+    
+    file_content = response.content
+    file_size = len(file_content)
+    
+    # Validate file size
+    is_valid, error_msg = validate_file_size(file_size, tier_config)
+    if not is_valid:
+        raise HTTPException(status_code=413, detail=error_msg)
+    
+    # Save file locally
+    ext = Path(filename).suffix.lower()
+    audio_path = DATA_DIR / f"{Path(filename).stem}.uploaded{ext}"
+    audio_path.write_bytes(file_content)
+    
+    # Create meeting record
+    with get_session() as s:
+        m = Meeting(
+            title=title or 'Untitled Meeting',
+            audio_path=str(audio_path),
+            email_to=email_to,
+            status="queued"
+        )
+        s.add(m)
+        s.commit()
+        s.refresh(m)
+        mid = m.id
+    
+    # Track usage
+    if license:
+        track_meeting_usage(db, license.license_key)
+    
+    # Queue transcription only
+    background_tasks.add_task(
+        process_meeting_transcribe_only,
+        mid,
+        language=language,
+        hints=hints
+    )
+    
+    return {
+        "id": mid,
+        "status": "queued",
+        "file_size_mb": round(file_size / (1024 * 1024), 2),
+        "mode": "transcribe_only"
+    }

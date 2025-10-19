@@ -322,9 +322,9 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
     except Exception as e:
         _set_progress(meeting_id, 100, step=f"Error: {str(e)}", status="failed")
         raise
-
-def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | None = None, hints: str | None = None) -> None:
-    """Process meeting for transcription (with summarization)"""
+    
+def process_meeting_transcribe_only(meeting_id: int, *, language: str | None = None, hints: str | None = None) -> None:
+    """Process meeting for transcription (without summarization)"""
     _set_progress(meeting_id, 5, step="Starting transcription", status="processing")
 
     with get_session() as s:
@@ -369,11 +369,79 @@ def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | Non
                 s.add(mm)
                 s.commit()
             
-            _set_progress(meeting_id, 100, step="Transcription and summary complete.", status="delivered")
+            _set_progress(meeting_id, 100, step="Transcription without summary complete.", status="delivered")
         else:
             raise RuntimeError("No audio file found for transcription.")
 
     except Exception as e:
         _set_progress(meeting_id, 100, step=f"Transcription failed: {str(e)}", status="failed")
         print(f"Transcription failed for meeting {meeting_id}: {e}")
+        raise
+
+def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | None = None, hints: str | None = None) -> None:
+    """Process meeting for transcription AND summarization"""
+    _set_progress(meeting_id, 5, step="Starting", status="processing")
+
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m:
+            raise RuntimeError(f"Meeting {meeting_id} not found")
+        
+        meeting_title = m.title
+        audio_path = m.audio_path
+        transcript_path = m.transcript_path
+        email_to = m.email_to
+
+    try:
+        transcript_text = ""
+        
+        # Step 1: Transcribe
+        if transcript_path and Path(transcript_path).exists():
+            _set_progress(meeting_id, 20, step="Reading existing transcript")
+            transcript_text = Path(transcript_path).read_text(encoding="utf-8")
+        elif audio_path and Path(audio_path).exists():
+            _set_progress(meeting_id, 20, step="Uploading audio to AssemblyAI")
+            transcript_text = _aai_transcribe(audio_path, language=language, hints=hints)
+            
+            if not transcript_text or len(transcript_text) < 50:
+                raise RuntimeError(f"Transcript too short: {len(transcript_text)} characters")
+            
+            _set_progress(meeting_id, 60, step="Saving transcript")
+            tpath = save_text(transcript_text, title=meeting_title)
+            
+            with get_session() as s:
+                mm = s.get(Meeting, meeting_id)
+                mm.transcript_path = tpath
+                s.add(mm)
+                s.commit()
+                transcript_path = tpath
+        else:
+            raise RuntimeError("No audio file found")
+
+        # Step 2: Summarize (THIS IS THE KEY DIFFERENCE)
+        _set_progress(meeting_id, 75, step="Summarizing with AI")
+        summary_json = _summarize_with_openai(transcript_text, meeting_title)
+
+        # Step 3: Save summary
+        base_dir = Path(transcript_path).parent if transcript_path else (DATA_DIR / "summaries")
+        base_dir.mkdir(parents=True, exist_ok=True)
+        spath = str((base_dir / f"summary_{meeting_id}.json").resolve())
+        Path(spath).write_text(json.dumps(summary_json, indent=2), encoding="utf-8")
+
+        with get_session() as s:
+            mm = s.get(Meeting, meeting_id)
+            mm.summary_path = spath
+            s.add(mm)
+            s.commit()
+
+        # Step 4: Email if configured
+        _set_progress(meeting_id, 90, step="Emailing summary")
+        if email_to:
+            _email_with_resend_by_id(meeting_id, summary_json, spath, email_to)
+
+        _set_progress(meeting_id, 100, step="Complete", status="delivered")
+
+    except Exception as e:
+        _set_progress(meeting_id, 100, step=f"Error: {str(e)}", status="failed")
+        print(f"Transcribe+Summarize failed for meeting {meeting_id}: {e}")
         raise
