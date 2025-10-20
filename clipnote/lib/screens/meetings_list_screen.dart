@@ -2,10 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:clipnote/services/api_service.dart';
 import 'transcript_screen.dart';
 import 'results_screen.dart';
-import 'package:clipnote/screens/transcript_screen.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'dart:io';
 
 class MeetingsListScreen extends StatefulWidget {
   final String? initialFilter;
@@ -59,23 +55,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     }
   }
 
-  Future<void> _downloadFile(String content, String filename) async {
-    // Request storage permission
-    if (await Permission.storage.request().isGranted) {
-      // Get download directory
-      final directory = await getExternalStorageDirectory();
-      final file = File('${directory!.path}/$filename');
-      
-      // Write file
-      await file.writeAsString(content);
-      
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Saved to ${file.path}')),
-      );
-    }
-  }
-  
   void _filterMeetings() {
     setState(() {
       _filteredMeetings = _meetings.where((meeting) {
@@ -158,7 +137,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       final difference = now.difference(date);
       
       if (difference.inDays == 0) {
-        // Format time as "Today 3:45 PM"
         final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
         final minute = date.minute.toString().padLeft(2, '0');
         final period = date.hour >= 12 ? 'PM' : 'AM';
@@ -168,7 +146,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       } else if (difference.inDays < 7) {
         return '${difference.inDays} days ago';
       } else {
-        // Format as "Jan 15, 2025"
         final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         return '${months[date.month - 1]} ${date.day}, ${date.year}';
       }
@@ -616,8 +593,10 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                     label: 'View Transcript',
                     onPressed: () {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(this.context).showSnackBar(
-                        const SnackBar(content: Text('Transcript viewer coming soon')),
+                      Navigator.of(this.context).push(
+                        MaterialPageRoute(
+                          builder: (_) => TranscriptScreen(meetingId: id),
+                        ),
                       );
                     },
                   ),
@@ -627,9 +606,20 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                     label: 'View Summary',
                     onPressed: () {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(this.context).showSnackBar(
-                        const SnackBar(content: Text('Summary viewer coming soon')),
+                      Navigator.of(this.context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ResultsScreen(meetingId: id),
+                        ),
                       );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _actionButton(
+                    icon: Icons.email,
+                    label: 'Email Meeting',
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _emailMeeting(id, title);
                     },
                   ),
                   const SizedBox(height: 12),
@@ -638,9 +628,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                     label: 'Download Files',
                     onPressed: () {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(this.context).showSnackBar(
-                        const SnackBar(content: Text('Download feature coming soon')),
-                      );
+                      _downloadMeetingFiles(id, title);
                     },
                   ),
                 ] else if (status == 'processing' || status == 'queued') ...[
@@ -675,6 +663,200 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _emailMeeting(int id, String title) async {
+    final emailController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Email Meeting'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter email address:',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                hintText: 'example@email.com',
+                prefixIcon: Icon(Icons.email),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Meeting: $title',
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final email = emailController.text.trim();
+              if (email.isNotEmpty && email.contains('@')) {
+                Navigator.pop(context);
+                _sendEmail(id, email, title);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid email address'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF667eea),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendEmail(int meetingId, String email, String title) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('Sending email...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      await _api.sendMeetingEmail(meetingId, email);
+      
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Email will be sent to $email'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to send email: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _downloadMeetingFiles(int id, String title) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Download Files'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.description, color: Color(0xFF667eea)),
+              title: const Text('Transcript (.txt)'),
+              onTap: () {
+                Navigator.pop(context);
+                _downloadFile(id, 'transcript', title);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.auto_awesome, color: Color(0xFF667eea)),
+              title: const Text('Summary (.txt)'),
+              onTap: () {
+                Navigator.pop(context);
+                _downloadFile(id, 'summary', title);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf, color: Color(0xFF667eea)),
+              title: const Text('Full Report (.pdf)'),
+              onTap: () {
+                Navigator.pop(context);
+                _downloadFile(id, 'pdf', title);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _downloadFile(int id, String type, String title) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Text('Downloading $type...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final result = await _api.downloadMeetingFile(id, type);
+      
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Download ready: ${result['filename']}'),
+          backgroundColor: Colors.green,
+          action: SnackBarAction(
+            label: 'Open',
+            textColor: Colors.white,
+            onPressed: () {
+              // Could open the download URL here
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Download failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _actionButton({

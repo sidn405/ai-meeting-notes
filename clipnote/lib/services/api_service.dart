@@ -98,7 +98,7 @@ class ApiService {
   /// Check backend health
   Future<bool> checkHealth() async {
     try {
-      final uri = Uri.parse('$baseUrl/health');
+      final uri = Uri.parse('$baseUrl/healthz');
       final response = await http.get(uri);
       return response.statusCode == 200;
     } catch (e) {
@@ -111,10 +111,11 @@ class ApiService {
   Future<String> verifyIapAndGetLicense({
     String? receipt,         // ← Changed from receiptData to receipt
     String? receiptData,     // ← Keep both for compatibility
-    required String platform,
+    //required String platform,
     required String productId,
     String? userId,
     String? store,
+    String? email,
   }) async {
     try {
       // Use receipt or receiptData (whichever is provided)
@@ -127,7 +128,8 @@ class ApiService {
       final uri = Uri.parse('$baseUrl/iap/verify');
       final body = {
         'receipt_data': receiptString,
-        'platform': platform,
+        //'platform': platform,
+        'store': store,
         'product_id': productId,
       };
       
