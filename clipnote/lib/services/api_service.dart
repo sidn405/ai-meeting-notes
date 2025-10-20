@@ -18,6 +18,66 @@ class ApiService {
 
   String get currentTier => _currentTier ?? 'free';
 
+  /// Get meeting statistics
+  Future<Map<String, dynamic>> getMeetingStats() async {
+    try {
+      final uri = Uri.parse('$baseUrl/meetings/list');
+      final headers = <String, String>{};
+      
+      if (_licenseKey != null) {
+        headers['X-License-Key'] = _licenseKey!;
+      }
+      
+      final response = await http.get(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final List meetings = jsonDecode(response.body);
+        
+        // Calculate stats
+        final now = DateTime.now();
+        final thisMonth = meetings.where((m) {
+          try {
+            final createdAt = DateTime.parse(m['created_at']);
+            return createdAt.year == now.year && createdAt.month == now.month;
+          } catch (e) {
+            return false;
+          }
+        }).length;
+        
+        final completed = meetings.where((m) => m['status'] == 'delivered').length;
+        final processing = meetings.where((m) => 
+            m['status'] == 'processing' || m['status'] == 'queued'
+        ).length;
+        
+        return {
+          'total_meetings': meetings.length,
+          'meetings_this_month': thisMonth,
+          'completed': completed,
+          'processing': processing,
+          'recent_meetings': meetings.take(5).toList(),
+        };
+      } else {
+        return {
+          'total_meetings': 0,
+          'meetings_this_month': 0,
+          'completed': 0,
+          'processing': 0,
+          'recent_meetings': [],
+        };
+      }
+    } catch (e) {
+      print('[ApiService] Error getting stats: $e');
+      return {
+        'total_meetings': 0,
+        'meetings_this_month': 0,
+        'completed': 0,
+        'processing': 0,
+        'recent_meetings': [],
+      };
+    }
+  }
+
   /// Load license key from storage
   Future<void> loadLicenseKey() async {
     try {

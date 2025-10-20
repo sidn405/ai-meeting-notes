@@ -11,18 +11,20 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+// At the top of _HomeScreenState class, add these properties:
 class _HomeScreenState extends State<HomeScreen> {
   final _iapService = IapService();
   final _api = ApiService.I;
   
   Map<String, dynamic>? _licenseInfo;
+  Map<String, dynamic>? _meetingStats;  // ADD THIS
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _initIAP();
-    _loadLicenseInfo();
+    _loadData();  // CHANGED from _loadLicenseInfo
   }
 
   Future<void> _initIAP() async {
@@ -33,28 +35,41 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _loadLicenseInfo() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadData() async {
+  setState(() => _isLoading = true);
+  
+  try {
+    await _api.loadLicenseKey();
     
-    try {
-      await _api.loadLicenseKey();
-      final info = await _api.getLicenseInfo();
-      
-      setState(() {
-        _licenseInfo = info;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
-    }
+    // Load both license info and meeting stats
+    final results = await Future.wait<Map<String, dynamic>>([
+      _api.getLicenseInfo(),
+      _api.getMeetingStats(),
+    ]);
+    
+    setState(() {
+      _licenseInfo = results[0];
+      _meetingStats = results[1];
+      _isLoading = false;
+    });
+  } catch (e) {
+    print('Error loading data: $e');
+    setState(() => _isLoading = false);
   }
+}
 
   bool get isPaidUser => _licenseInfo?['tier'] != null && _licenseInfo?['tier'] != 'free';
   String? get userEmail => _licenseInfo?['email'];
   String? get planName => _licenseInfo?['tier_name'];
   int get meetingsUsed => _licenseInfo?['meetings_used'] ?? 0;
-  int get meetingsLimit => _licenseInfo?['meetings_limit'] ?? 5;
+  int get meetingsLimit => _licenseInfo?['meetings_per_month'] ?? 5;
   int get maxFileSizeMB => _licenseInfo?['max_file_size_mb'] ?? 25;
+  
+  // ADD THESE NEW GETTERS:
+  int get totalMeetings => _meetingStats?['total_meetings'] ?? 0;
+  int get meetingsThisMonth => _meetingStats?['meetings_this_month'] ?? 0;
+  int get completedMeetings => _meetingStats?['completed'] ?? 0;
+  int get processingMeetings => _meetingStats?['processing'] ?? 0;
 
   @override
   Widget build(BuildContext context) {
@@ -120,9 +135,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
+          child: RefreshIndicator(
+            onRefresh: _loadData,
+            color: const Color(0xFF667eea),
+            child: ListView(  // ADD THIS child: before ListView
+              padding: const EdgeInsets.all(20),
+              children: [
+                // ... rest of your widgets stay the same ...
               if (isPaidUser && userEmail != null) ...[
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -187,18 +206,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
+                      // In the premium user section, replace the stats row:
                       Row(
                         children: [
                           Expanded(
-                            child: _statItem('Meetings This Month', '$meetingsUsed / $meetingsLimit'),
+                            child: _statItem('This Month', '$meetingsThisMonth / $meetingsLimit'),
                           ),
                           Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
                           Expanded(
-                            child: _statItem('Max File Size', '${maxFileSizeMB}MB'),
+                            child: _statItem('Max File', '${maxFileSizeMB}MB'),
                           ),
                           Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
                           Expanded(
-                            child: _statItem('Remaining', '${meetingsLimit - meetingsUsed}'),
+                            child: _statItem('Remaining', '${meetingsLimit - meetingsThisMonth}'),
                           ),
                         ],
                       ),
@@ -287,24 +307,45 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              
+            
               const SizedBox(height: 24),
               
+              // Stats cards
               Row(
                 children: [
                   Expanded(
                     child: _quickStatCard(
                       icon: Icons.description,
-                      value: '$meetingsUsed',
-                      label: 'Meetings',
+                      value: '$totalMeetings',
+                      label: 'Total Meetings',
                     ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: _quickStatCard(
+                      icon: Icons.check_circle,
+                      value: '$completedMeetings',
+                      label: 'Completed',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _quickStatCard(
                       icon: Icons.calendar_month,
-                      value: '$meetingsUsed/$meetingsLimit',
+                      value: '$meetingsThisMonth',
                       label: 'This Month',
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _quickStatCard(
+                      icon: Icons.hourglass_empty,
+                      value: '$processingMeetings',
+                      label: 'Processing',
                     ),
                   ),
                 ],
@@ -313,68 +354,70 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
-  Widget _statItem(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-          ),
-          textAlign: TextAlign.center,
+// Keep all your existing methods below:
+Widget _statItem(String label, String value) {
+  return Column(
+    children: [
+      Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
         ),
-        const SizedBox(height: 4),
+        textAlign: TextAlign.center,
+      ),
+      const SizedBox(height: 4),
+      Text(
+        value,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    ],
+  );
+}
+
+Widget _quickStatCard({required IconData icon, required String value, required String label}) {
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white.withOpacity(0.15),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: Colors.white.withOpacity(0.3),
+        width: 1,
+      ),
+    ),
+    child: Column(
+      children: [
+        Icon(icon, color: Colors.white, size: 28),
+        const SizedBox(height: 8),
         Text(
           value,
           style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
+            fontSize: 24,
             fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.white,
           ),
         ),
       ],
-    );
-  }
-
-  Widget _quickStatCard({required IconData icon, required String value, required String label}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.3),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: Colors.white, size: 28),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+    ),
+  );
+}
 
   void _showUpgradeSheet() {
     showModalBottomSheet(

@@ -430,6 +430,58 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _checkBackendHealth() async {
+    try {
+      final isHealthy = await _api.checkHealth();
+      
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isHealthy 
+              ? '✅ Backend is online and responding' 
+              : '❌ Backend is not responding'
+          ),
+          backgroundColor: isHealthy ? Colors.green : Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Backend check failed: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+
+  // Add this button to your AppBar actions in home_screen.dart:
+  // 
+  // actions: [
+  //   IconButton(
+  //     icon: const Icon(Icons.health_and_safety),
+  //     onPressed: _checkBackendHealth,
+  //     tooltip: 'Check Backend Status',
+  //   ),
+  //   TextButton(
+  //     onPressed: () {
+  //       Navigator.of(context).push(
+  //         MaterialPageRoute(builder: (_) => const UserGuideScreen()),
+  //       );
+  //     },
+  //     child: const Text(
+  //       'Guide',
+  //       style: TextStyle(color: Colors.white),
+  //     ),
+  //   ),
+  //   const SizedBox(width: 8),
+  // ],
+
   Widget _planTile({
     required BuildContext context,
     required IconData icon,
