@@ -1,11 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:clipnote/services/api_service.dart';
-import 'transcript_screen.dart';
-import 'results_screen.dart';
-import 'package:clipnote/screens/transcript_screen.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'dart:io';
 
 class MeetingsListScreen extends StatefulWidget {
   final String? initialFilter;
@@ -59,23 +53,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     }
   }
 
-  Future<void> _downloadFile(String content, String filename) async {
-    // Request storage permission
-    if (await Permission.storage.request().isGranted) {
-      // Get download directory
-      final directory = await getExternalStorageDirectory();
-      final file = File('${directory!.path}/$filename');
-      
-      // Write file
-      await file.writeAsString(content);
-      
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Saved to ${file.path}')),
-      );
-    }
-  }
-  
   void _filterMeetings() {
     setState(() {
       _filteredMeetings = _meetings.where((meeting) {

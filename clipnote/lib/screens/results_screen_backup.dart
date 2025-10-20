@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:clipnote/services/api_service.dart';
 import '../models/meeting.dart';
-import 'package:flutter/services.dart';
 
 class ResultsScreen extends StatefulWidget {
   final int meetingId;

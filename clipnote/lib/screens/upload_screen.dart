@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:clipnote/services/api_service.dart';
 import 'package:clipnote/screens/progress_screen.dart';
+import 'package:clipnote/screens/transcript_screen.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});

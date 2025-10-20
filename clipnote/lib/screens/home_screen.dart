@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'upload_screen.dart';
 import 'user_guide_screen.dart';
+import 'meetings_list_screen.dart';
 import '../services/iap_service.dart';
 import '../services/api_service.dart';
 
@@ -11,20 +12,19 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-// At the top of _HomeScreenState class, add these properties:
 class _HomeScreenState extends State<HomeScreen> {
   final _iapService = IapService();
   final _api = ApiService.I;
   
   Map<String, dynamic>? _licenseInfo;
-  Map<String, dynamic>? _meetingStats;  // ADD THIS
+  Map<String, dynamic>? _meetingStats;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _initIAP();
-    _loadData();  // CHANGED from _loadLicenseInfo
+    _loadData();
   }
 
   Future<void> _initIAP() async {
@@ -36,27 +36,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadData() async {
-  setState(() => _isLoading = true);
-  
-  try {
-    await _api.loadLicenseKey();
+    setState(() => _isLoading = true);
     
-    // Load both license info and meeting stats
-    final results = await Future.wait<Map<String, dynamic>>([
-      _api.getLicenseInfo(),
-      _api.getMeetingStats(),
-    ]);
-    
-    setState(() {
-      _licenseInfo = results[0];
-      _meetingStats = results[1];
-      _isLoading = false;
-    });
-  } catch (e) {
-    print('Error loading data: $e');
-    setState(() => _isLoading = false);
+    try {
+      await _api.loadLicenseKey();
+      
+      final results = await Future.wait<Map<String, dynamic>>([
+        _api.getLicenseInfo(),
+        _api.getMeetingStats(),
+      ]);
+      
+      setState(() {
+        _licenseInfo = results[0];
+        _meetingStats = results[1];
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading data: $e');
+      setState(() => _isLoading = false);
+    }
   }
-}
+
+  void _navigateToMeetings(String filter) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MeetingsListScreen(initialFilter: filter),
+      ),
+    );
+  }
 
   bool get isPaidUser => _licenseInfo?['tier'] != null && _licenseInfo?['tier'] != 'free';
   String? get userEmail => _licenseInfo?['email'];
@@ -65,7 +72,6 @@ class _HomeScreenState extends State<HomeScreen> {
   int get meetingsLimit => _licenseInfo?['meetings_per_month'] ?? 5;
   int get maxFileSizeMB => _licenseInfo?['max_file_size_mb'] ?? 25;
   
-  // ADD THESE NEW GETTERS:
   int get totalMeetings => _meetingStats?['total_meetings'] ?? 0;
   int get meetingsThisMonth => _meetingStats?['meetings_this_month'] ?? 0;
   int get completedMeetings => _meetingStats?['completed'] ?? 0;
@@ -138,286 +144,300 @@ class _HomeScreenState extends State<HomeScreen> {
           child: RefreshIndicator(
             onRefresh: _loadData,
             color: const Color(0xFF667eea),
-            child: ListView(  // ADD THIS child: before ListView
+            child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                // ... rest of your widgets stay the same ...
-              if (isPaidUser && userEmail != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                      width: 1,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.check_circle, color: Colors.white, size: 20),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Text(
-                              'Premium Active',
-                              style: TextStyle(color: Colors.white, fontSize: 14),
-                            ),
-                          ),
-                        ],
+                if (isPaidUser && userEmail != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 1,
                       ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          const CircleAvatar(
-                            radius: 24,
-                            backgroundColor: Colors.white,
-                            child: Icon(Icons.person, color: Color(0xFF667eea)),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  userEmail!,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                if (planName != null)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.3),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      planName!,
-                                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                'Premium Active',
+                                style: TextStyle(color: Colors.white, fontSize: 14),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            const CircleAvatar(
+                              radius: 24,
+                              backgroundColor: Colors.white,
+                              child: Icon(Icons.person, color: Color(0xFF667eea)),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    userEmail!,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                              ],
+                                  if (planName != null)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.3),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        planName!,
+                                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // In the premium user section, replace the stats row:
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _statItem('This Month', '$meetingsThisMonth / $meetingsLimit'),
-                          ),
-                          Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
-                          Expanded(
-                            child: _statItem('Max File', '${maxFileSizeMB}MB'),
-                          ),
-                          Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
-                          Expanded(
-                            child: _statItem('Remaining', '${meetingsLimit - meetingsThisMonth}'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-              ] else ...[
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                      width: 1,
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _statItem('This Month', '$meetingsThisMonth / $meetingsLimit'),
+                            ),
+                            Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
+                            Expanded(
+                              child: _statItem('Max File', '${maxFileSizeMB}MB'),
+                            ),
+                            Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
+                            Expanded(
+                              child: _statItem('Remaining', '${meetingsLimit - meetingsThisMonth}'),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'Free Tier',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
+                  const SizedBox(height: 24),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 1,
                       ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        '5 meetings per month\n25MB max file size',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _showUpgradeSheet,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: const Color(0xFF667eea),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: const Text(
-                            'Upgrade',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'Free Tier',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          '5 meetings per month\n25MB max file size',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _showUpgradeSheet,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF667eea),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: const Text(
+                              'Upgrade',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+                
+                SizedBox(
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const UploadScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.add_circle_outline, size: 24),
+                    label: const Text(
+                      'Create Meeting',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF667eea),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
+                      elevation: 2,
+                    ),
                   ),
                 ),
+              
                 const SizedBox(height: 24),
+                
+                Row(
+                  children: [
+                    Expanded(
+                      child: _quickStatCard(
+                        icon: Icons.description,
+                        value: '$totalMeetings',
+                        label: 'Total Meetings',
+                        onTap: () => _navigateToMeetings('all'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _quickStatCard(
+                        icon: Icons.check_circle,
+                        value: '$completedMeetings',
+                        label: 'Completed',
+                        onTap: () => _navigateToMeetings('delivered'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _quickStatCard(
+                        icon: Icons.calendar_month,
+                        value: '$meetingsThisMonth',
+                        label: 'This Month',
+                        onTap: () => _navigateToMeetings('this_month'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _quickStatCard(
+                        icon: Icons.hourglass_empty,
+                        value: '$processingMeetings',
+                        label: 'Processing',
+                        onTap: () => _navigateToMeetings('processing'),
+                      ),
+                    ),
+                  ],
+                ),
               ],
-              
-              SizedBox(
-                height: 56,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const UploadScreen()),
-                    );
-                  },
-                  icon: const Icon(Icons.add_circle_outline, size: 24),
-                  label: const Text(
-                    'Create Meeting',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF667eea),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 2,
-                  ),
-                ),
-              ),
-            
-              const SizedBox(height: 24),
-              
-              // Stats cards
-              Row(
-                children: [
-                  Expanded(
-                    child: _quickStatCard(
-                      icon: Icons.description,
-                      value: '$totalMeetings',
-                      label: 'Total Meetings',
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _quickStatCard(
-                      icon: Icons.check_circle,
-                      value: '$completedMeetings',
-                      label: 'Completed',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _quickStatCard(
-                      icon: Icons.calendar_month,
-                      value: '$meetingsThisMonth',
-                      label: 'This Month',
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _quickStatCard(
-                      icon: Icons.hourglass_empty,
-                      value: '$processingMeetings',
-                      label: 'Processing',
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
-// Keep all your existing methods below:
-Widget _statItem(String label, String value) {
-  return Column(
-    children: [
-      Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 11,
-        ),
-        textAlign: TextAlign.center,
-      ),
-      const SizedBox(height: 4),
-      Text(
-        value,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    ],
-  );
-}
-
-Widget _quickStatCard({required IconData icon, required String value, required String label}) {
-  return Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.15),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: Colors.white.withOpacity(0.3),
-        width: 1,
-      ),
-    ),
-    child: Column(
+  Widget _statItem(String label, String value) {
+    return Column(
       children: [
-        Icon(icon, color: Colors.white, size: 28),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 4),
         Text(
           label,
           style: const TextStyle(
-            fontSize: 12,
             color: Colors.white,
+            fontSize: 11,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ],
-    ),
-  );
-}
+    );
+  }
+
+  Widget _quickStatCard({
+    required IconData icon,
+    required String value,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Icon(icon, color: Colors.white, size: 28),
+                const SizedBox(height: 8),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   void _showUpgradeSheet() {
     showModalBottomSheet(
@@ -472,58 +492,6 @@ Widget _quickStatCard({required IconData icon, required String value, required S
       ),
     );
   }
-
-  Future<void> _checkBackendHealth() async {
-    try {
-      final isHealthy = await _api.checkHealth();
-      
-      if (!mounted) return;
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isHealthy 
-              ? '✅ Backend is online and responding' 
-              : '❌ Backend is not responding'
-          ),
-          backgroundColor: isHealthy ? Colors.green : Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Backend check failed: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
-        ),
-      );
-    }
-  }
-
-  // Add this button to your AppBar actions in home_screen.dart:
-  // 
-  // actions: [
-  //   IconButton(
-  //     icon: const Icon(Icons.health_and_safety),
-  //     onPressed: _checkBackendHealth,
-  //     tooltip: 'Check Backend Status',
-  //   ),
-  //   TextButton(
-  //     onPressed: () {
-  //       Navigator.of(context).push(
-  //         MaterialPageRoute(builder: (_) => const UserGuideScreen()),
-  //       );
-  //     },
-  //     child: const Text(
-  //       'Guide',
-  //       style: TextStyle(color: Colors.white),
-  //     ),
-  //   ),
-  //   const SizedBox(width: 8),
-  // ],
 
   Widget _planTile({
     required BuildContext context,

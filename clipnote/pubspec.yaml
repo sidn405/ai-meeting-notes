@@ -39,6 +39,16 @@ dependencies:
   shared_preferences: ^2.2.2
   in_app_purchase: ^3.2.2
   device_info_plus: ^12.1.0
+
+  # For opening email clients
+  url_launcher: ^6.2.2
+  
+  # For PDF generation
+  pdf: ^3.10.7
+
+  # For sharing content to other apps
+  share_plus: ^7.2.1
+
   # iOS simulator-only testing (safe to include; no-op on Android)
   in_app_purchase_storekit: ^0.4.6
   
