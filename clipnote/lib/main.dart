@@ -1,12 +1,12 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
-
+import 'utils/route_observer.dart';
 import 'screens/home_screen.dart';
 import 'screens/activation_screen.dart';
 import 'screens/upload_screen.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
+  //WidgetsFlutterBinding.ensureInitialized();
   runApp(const ClipnoteApp());
 }
 
@@ -25,6 +25,8 @@ class ClipnoteApp extends StatelessWidget {
         '/upload'   : (_) => const UploadScreen(),
       },
       // routes that need arguments can use onGenerateRoute if you like
+      navigatorObservers: [routeObserver],
+      home: const HomeScreen(),
     );
   }
 }

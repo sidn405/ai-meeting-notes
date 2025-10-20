@@ -252,7 +252,8 @@ class ApiService {
   /// Submit transcript (text only, no audio)
   Future<int> submitTranscript({
     required String title,
-    required String transcript,
+    required String transcript,           // ← Changed from email To to email
+    String? email,
     String? emailTo,
   }) async {
     try {

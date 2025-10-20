@@ -181,7 +181,12 @@ class _UploadScreenState extends State<UploadScreen> {
   void _showTranscriptDialog() {
     final titleCtrl = TextEditingController();
     final transcriptCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final hintsCtrl = TextEditingController(); // ✅ Added
+    String selectedLanguage = 'auto'; // ✅ Added
+    bool saveToCloud = false; // ✅ Added
     bool isSubmitting = false;
+    PlatformFile? selectedFile; // ✅ Added for text file upload
     
     showModalBottomSheet(
       context: context,
@@ -201,60 +206,256 @@ class _UploadScreenState extends State<UploadScreen> {
                 top: 8,
                 bottom: MediaQuery.of(c).viewInsets.bottom + 20,
               ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'From Transcript',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 20),
-                    
-                    TextField(
-                      controller: titleCtrl,
-                      textInputAction: TextInputAction.next,
-                      enabled: !isSubmitting,
-                      decoration: InputDecoration(
-                        labelText: 'Title (optional)',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'From Transcript (No Audio)',
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Paste or upload transcript text for AI summarization',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                          
+                          const SizedBox(height: 16),
+                          
+                          TextField(
+                            controller: titleCtrl,
+                            textInputAction: TextInputAction.next,
+                            enabled: !isSubmitting,
+                            decoration: InputDecoration(
+                              labelText: 'Meeting Title',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 12),
+                          
+                          TextField(
+                            controller: emailCtrl,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            enabled: !isSubmitting,
+                            decoration: InputDecoration(
+                              labelText: 'Email results to (optional)',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              suffixIcon: const Icon(Icons.email, color: Color(0xFF667eea), size: 20),
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 12),
+                          
+                          DropdownButtonFormField<String>(
+                            value: selectedLanguage,
+                            decoration: InputDecoration(
+                              labelText: 'Language',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              prefixIcon: const Icon(Icons.language, color: Color(0xFF667eea), size: 20),
+                            ),
+                            items: _languages.map((lang) {
+                              return DropdownMenuItem<String>(
+                                value: lang['code'],
+                                child: Text(lang['name']!),
+                              );
+                            }).toList(),
+                            onChanged: isSubmitting ? null : (value) {
+                              setModalState(() => selectedLanguage = value!);
+                            },
+                          ),
+                          
+                          const SizedBox(height: 12),
+                          
+                          TextField(
+                            controller: hintsCtrl,
+                            enabled: !isSubmitting,
+                            decoration: InputDecoration(
+                              labelText: 'Hints / Terminology (optional)',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              helperText: 'Comma separated names, acronyms, or industry jargon',
+                              helperMaxLines: 2,
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 12),
+                          
+                          // Storage Toggle
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  saveToCloud ? Icons.cloud : Icons.phone_android,
+                                  color: const Color(0xFF667eea),
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        saveToCloud ? 'Save to Cloud' : 'Save to Device',
+                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                                      ),
+                                      Text(
+                                        saveToCloud ? 'Pro feature' : 'Free tier storage',
+                                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Switch(
+                                  value: saveToCloud,
+                                  onChanged: isSubmitting ? null : (val) {
+                                    setModalState(() => saveToCloud = val);
+                                  },
+                                  activeColor: const Color(0xFF667eea),
+                                ),
+                              ],
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 16),
+                          
+                          const Text(
+                            'Transcript Text',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 8),
+                          
+                          // Browse button for text files
+                          OutlinedButton.icon(
+                            onPressed: isSubmitting ? null : () async {
+                              try {
+                                final result = await FilePicker.platform.pickFiles(
+                                  allowMultiple: false,
+                                  withData: true,
+                                  type: FileType.custom,
+                                  allowedExtensions: const ['txt', 'doc', 'docx', 'pdf'],
+                                );
+                                
+                                if (result != null && result.files.single.bytes != null) {
+                                  final bytes = result.files.single.bytes!;
+                                  final text = String.fromCharCodes(bytes);
+                                  
+                                  setModalState(() {
+                                    selectedFile = result.files.single;
+                                    transcriptCtrl.text = text;
+                                  });
+                                }
+                              } catch (e) {
+                                print('File picker error: $e');
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  SnackBar(content: Text('Error reading file: $e')),
+                                );
+                              }
+                            },
+                            icon: Icon(
+                              selectedFile != null ? Icons.check_circle : Icons.upload_file,
+                              size: 20,
+                              color: selectedFile != null ? Colors.green : null,
+                            ),
+                            label: Text(selectedFile != null ? 'File Loaded' : 'Browse Text File'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 40),
+                              side: BorderSide(
+                                color: selectedFile != null ? Colors.green : Colors.grey.shade400,
+                              ),
+                              foregroundColor: selectedFile != null ? Colors.green : Colors.black87,
+                            ),
+                          ),
+                          
+                          // Show selected file info
+                          if (selectedFile != null) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.green.shade200),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.attach_file, size: 16, color: Colors.green),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      selectedFile!.name,
+                                      style: const TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${(selectedFile!.size / 1024).toStringAsFixed(1)} KB',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          
+                          const SizedBox(height: 8),
+                          
+                          TextField(
+                            controller: transcriptCtrl,
+                            maxLines: 8,
+                            enabled: !isSubmitting,
+                            decoration: InputDecoration(
+                              hintText: 'Paste your meeting transcript here...',
+                              alignLabelWithHint: true,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              contentPadding: const EdgeInsets.all(16),
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Supported file formats: .txt, .doc, .docx, .pdf',
+                            style: TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
+                        ],
                       ),
                     ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    TextField(
-                      controller: transcriptCtrl,
-                      maxLines: 5,
-                      enabled: !isSubmitting,
-                      decoration: InputDecoration(
-                        labelText: 'Paste transcript text',
-                        alignLabelWithHint: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        contentPadding: const EdgeInsets.all(16),
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 20),
-                    
-                    SizedBox(
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  SafeArea(
+                    top: false,
+                    child: SizedBox(
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton.icon(
-                        onPressed: isSubmitting ? null : () async {
-                          if (transcriptCtrl.text.trim().isEmpty) {
-                            ScaffoldMessenger.of(this.context).showSnackBar(
-                              const SnackBar(content: Text('Please enter transcript text')),
-                            );
-                            return;
-                          }
-                          
+                        onPressed: (isSubmitting || transcriptCtrl.text.trim().isEmpty) 
+                            ? null 
+                            : () async {
                           setModalState(() => isSubmitting = true);
                           
                           try {
@@ -264,6 +465,7 @@ class _UploadScreenState extends State<UploadScreen> {
                                   ? 'Untitled Meeting' 
                                   : titleCtrl.text.trim(),
                               transcript: transcriptCtrl.text,
+                              email: emailCtrl.text.trim().isEmpty ? null : emailCtrl.text.trim(),
                             );
                             
                             print('Transcript submitted, meeting ID: $meetingId');
@@ -320,8 +522,8 @@ class _UploadScreenState extends State<UploadScreen> {
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             );
           },
