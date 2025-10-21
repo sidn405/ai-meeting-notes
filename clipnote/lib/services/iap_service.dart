@@ -35,7 +35,7 @@ class IapService {
       // ignore
     });
 
-    final resp = await _iap.queryProductDetails({kProMonthlyId, kBusinessMonthlyId});
+    final resp = await _iap.queryProductDetails({kStarterMonthlyId, kProMonthlyId, kBusinessMonthlyId});
     if (resp.error != null) {
       // You can log resp.error
     }
@@ -50,8 +50,9 @@ class IapService {
     }
   }
 
-  ProductDetails? get proProduct => _products[kProMonthlyId];
-  ProductDetails? get businessProduct => _products[kBusinessMonthlyId];
+  ProductDetails? get proProduct => _products[kcom.clipnote.starter.monthly];
+  ProductDetails? get proProduct => _products[kclipnote_pro_monthly];
+  ProductDetails? get businessProduct => _products[kclipnote_business_monthly];
 
   Future<String> purchasePro() async {
     final p = proProduct;
@@ -79,7 +80,11 @@ class IapService {
 
     final details = _products[productId];
     if (details == null) {
-      final resp = await _iap.queryProductDetails({productId});
+      final resp = await _iap.queryProductDetails({
+        kStarterMonthlyId,
+        kProMonthlyId,
+        kBusinessMonthlyId,
+      });
       if (resp.notFoundIDs.contains(productId)) {
         throw Exception('Product $productId not found. Check store configuration.');
       }
