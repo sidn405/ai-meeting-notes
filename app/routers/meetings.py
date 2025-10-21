@@ -177,7 +177,82 @@ async def upload_meeting(
         "file_size_mb": round(file_size / (1024 * 1024), 2),
         "language": language or "auto-detect",
     }
-
+    
+@router.get("/stats")
+def get_meeting_stats(
+    license_info: tuple = Depends(optional_license),
+    db: Session = Depends(get_session),
+):
+    """
+    Get meeting statistics for the current user
+    Returns counts of total, completed, processing, and current month meetings
+    """
+    license, tier_config = license_info
+    
+    # For now, return global stats (in production, filter by user/license)
+    from datetime import datetime
+    from sqlmodel import func
+    
+    total_meetings = db.exec(
+        select(func.count(Meeting.id))
+    ).one()
+    
+    completed_meetings = db.exec(
+        select(func.count(Meeting.id)).where(Meeting.status == "delivered")
+    ).one()
+    
+    processing_meetings = db.exec(
+        select(func.count(Meeting.id)).where(
+            (Meeting.status == "processing") | (Meeting.status == "queued")
+        )
+    ).one()
+    
+    # Meetings this month
+    now = datetime.now()
+    first_day_of_month = datetime(now.year, now.month, 1)
+    
+    meetings_this_month = db.exec(
+        select(func.count(Meeting.id)).where(
+            Meeting.created_at >= first_day_of_month
+        )
+    ).one()
+    
+    return {
+        "total_meetings": total_meetings,
+        "completed": completed_meetings,
+        "processing": processing_meetings,
+        "meetings_this_month": meetings_this_month,
+        "current_month": now.strftime("%B %Y"),
+    }
+    
+@router.get("/list")
+def list_meetings():
+    """Get all meetings ordered by creation date (newest first)"""
+    try:
+        with get_session() as s:
+            meetings = s.exec(
+                select(Meeting).order_by(Meeting.created_at.desc())
+            ).all()
+            return meetings
+    except Exception as e:
+        print(f"Error fetching meetings: {e}")
+        raise HTTPException(500, f"Failed to fetch meetings: {str(e)}")
+    
+@router.get("/{meeting_id}/status")
+def meeting_status(meeting_id: int):
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m:
+            raise HTTPException(404, "Not found")
+        return {
+            "id": m.id,
+            "title": m.title,
+            "status": m.status,
+            "progress": m.progress or 0,
+            "step": m.step,
+            "has_summary": bool(m.summary_path),
+            "has_transcript": bool(m.transcript_path),
+        }
 
 @router.post("/from-text")
 async def create_from_text(
@@ -218,7 +293,6 @@ async def create_from_text(
         m = s.get(Meeting, mid)
         return {"id": m.id, "status": m.status}
 
-
 @router.post("/from-text-sync")
 async def create_from_text_sync(
     title: str = Form(...),
@@ -229,7 +303,6 @@ async def create_from_text_sync(
 ):
     """Alias for from-text (already synchronous)"""
     return await create_from_text(title, transcript, email_to, license_info, db)
-
 
 @router.post("/transcribe-only")
 async def transcribe_only(
@@ -270,7 +343,6 @@ async def transcribe_only(
         "status": "delivered",
         "message": "Transcript saved successfully"
     }
-
 
 @router.post("/upload-transcribe-only")
 async def upload_transcribe_only(
@@ -340,7 +412,6 @@ async def upload_transcribe_only(
         "mode": "transcribe_only"
     }
 
-
 @router.post("/upload-transcribe-summarize")
 async def upload_transcribe_summarize(
     background_tasks: BackgroundTasks,
@@ -409,7 +480,6 @@ async def upload_transcribe_summarize(
         "mode": "transcribe_and_summarize"
     }
 
-
 @router.post("/create-from-url")
 async def create_from_url(
     background_tasks: BackgroundTasks,
@@ -475,7 +545,6 @@ async def create_from_url(
         "status": "queued",
         "file_size_mb": round(file_size / (1024 * 1024), 2),
     }
-
 
 @router.post("/create-from-url-transcribe-only")
 async def create_from_url_transcribe_only(
@@ -543,21 +612,6 @@ async def create_from_url_transcribe_only(
         "mode": "transcribe_only"
     }
 
-
-@router.get("/list")
-def list_meetings():
-    """Get all meetings ordered by creation date (newest first)"""
-    try:
-        with get_session() as s:
-            meetings = s.exec(
-                select(Meeting).order_by(Meeting.created_at.desc())
-            ).all()
-            return meetings
-    except Exception as e:
-        print(f"Error fetching meetings: {e}")
-        raise HTTPException(500, f"Failed to fetch meetings: {str(e)}")
-
-
 @router.get("/{meeting_id}")
 def get_meeting(meeting_id: int):
     """Get meeting details"""
@@ -581,7 +635,6 @@ def download_transcript(meeting_id: int):
             filename=Path(m.transcript_path).name
         )
 
-
 @router.get("/{meeting_id}/download/summary")
 def download_summary(meeting_id: int):
     """Download meeting summary (as file attachment)"""
@@ -595,7 +648,6 @@ def download_summary(meeting_id: int):
             filename=Path(m.summary_path).name
         )
 
-
 @router.get("/{meeting_id}/summary")
 def get_summary(meeting_id: int):
     """Get meeting summary as JSON (for reading, not downloading)"""
@@ -606,24 +658,6 @@ def get_summary(meeting_id: int):
         
         summary_text = Path(m.summary_path).read_text(encoding="utf-8")
         return json.loads(summary_text)
-
-
-@router.get("/{meeting_id}/status")
-def meeting_status(meeting_id: int):
-    with get_session() as s:
-        m = s.get(Meeting, meeting_id)
-        if not m:
-            raise HTTPException(404, "Not found")
-        return {
-            "id": m.id,
-            "title": m.title,
-            "status": m.status,
-            "progress": m.progress or 0,
-            "step": m.step,
-            "has_summary": bool(m.summary_path),
-            "has_transcript": bool(m.transcript_path),
-        }
-
 
 @router.delete("/{meeting_id}")
 def delete_meeting(meeting_id: int):
@@ -667,7 +701,6 @@ def get_transcript(meeting_id: int):
             "meeting_id": m.id,
             "created_at": m.created_at.isoformat() if m.created_at else None,
         }
-
 
 @router.post("/email")
 async def email_meeting(
@@ -732,7 +765,6 @@ async def email_meeting(
         "message": f"Email will be sent to {email}",
         "meeting_id": meeting_id
     }
-
 
 @router.get("/{meeting_id}/download")
 def download_meeting_file(meeting_id: int, type: str):
@@ -846,51 +878,3 @@ def download_meeting_file(meeting_id: int, type: str):
                 status_code=400,
                 detail="Invalid type. Must be 'transcript', 'summary', 'pdf', or 'all'"
             )
-
-
-@router.get("/stats")
-def get_meeting_stats(
-    license_info: tuple = Depends(optional_license),
-    db: Session = Depends(get_session),
-):
-    """
-    Get meeting statistics for the current user
-    Returns counts of total, completed, processing, and current month meetings
-    """
-    license, tier_config = license_info
-    
-    # For now, return global stats (in production, filter by user/license)
-    from datetime import datetime
-    from sqlmodel import func
-    
-    total_meetings = db.exec(
-        select(func.count(Meeting.id))
-    ).one()
-    
-    completed_meetings = db.exec(
-        select(func.count(Meeting.id)).where(Meeting.status == "delivered")
-    ).one()
-    
-    processing_meetings = db.exec(
-        select(func.count(Meeting.id)).where(
-            (Meeting.status == "processing") | (Meeting.status == "queued")
-        )
-    ).one()
-    
-    # Meetings this month
-    now = datetime.now()
-    first_day_of_month = datetime(now.year, now.month, 1)
-    
-    meetings_this_month = db.exec(
-        select(func.count(Meeting.id)).where(
-            Meeting.created_at >= first_day_of_month
-        )
-    ).one()
-    
-    return {
-        "total_meetings": total_meetings,
-        "completed": completed_meetings,
-        "processing": processing_meetings,
-        "meetings_this_month": meetings_this_month,
-        "current_month": now.strftime("%B %Y"),
-    }
