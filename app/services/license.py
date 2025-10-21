@@ -8,15 +8,12 @@ from sqlmodel import Session, select
 from typing import Optional, Tuple
 from ..models import License, LicenseUsage, LicenseTier, TIER_LIMITS
 
-def generate_license_key(tier: str, email: str) -> str:
+def generate_license_key(tier: str, email: str, prefix: str = "") -> str:
     """Generate a unique license key"""
-    tier_prefix = tier[:3].upper()
-    random_part = secrets.token_hex(8).upper()
-    
-    # Split into groups of 4
-    parts = [random_part[i:i+4] for i in range(0, 16, 4)]
-    key = f"{tier_prefix}-{'-'.join(parts)}"
-    
+    base_key = secrets.token_urlsafe(16)
+    key = f"{tier.upper()}-{base_key}"
+    if prefix:
+        key = f"{prefix}-{key}"
     return key
 
 def create_license(
