@@ -212,7 +212,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             onPressed: () {
-                              Navigator.of(context).pushReplacement(
+                              Navigator.of(context).push(  // Changed from pushReplacement to push
                                 MaterialPageRoute(
                                   builder: (_) => TranscriptScreen(meetingId: widget.meetingId),
                                 ),
@@ -238,7 +238,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             onPressed: () {
-                              Navigator.of(context).pushReplacement(
+                              Navigator.of(context).push(  // Changed from pushReplacement to push
                                 MaterialPageRoute(
                                   builder: (_) => ResultsScreen(meetingId: widget.meetingId),
                                 ),
@@ -268,23 +268,6 @@ class _ProgressScreenState extends State<ProgressScreen> {
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.white,
                             side: const BorderSide(color: Colors.white, width: 2),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ] else if (_hasError) ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.arrow_back),
-                          label: const Text('Go Back'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.red,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),

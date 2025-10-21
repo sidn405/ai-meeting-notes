@@ -12,6 +12,7 @@
 .swiftpm/
 migrate_working_dir/
 
+
 # IntelliJ related
 *.iml
 *.ipr
@@ -43,3 +44,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+**/build/
+android/app/build/
+android/app/build/outputs/
+android/app/build/outputs/bundle/
+*.aab
+*.jks
+key.properties
