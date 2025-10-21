@@ -3,6 +3,7 @@ License Service for SQLModel - Now supports both manual licenses and IAP
 Add this as services/license.py
 """
 import secrets
+import re
 from datetime import datetime
 from sqlmodel import Session, select
 from typing import Optional, Tuple
@@ -16,6 +17,13 @@ def generate_license_key(tier: str, email: str, prefix: str = "") -> str:
     rand = secrets.token_hex(8).upper()  # e.g. 1F2A9C… (length 16)
     groups = "-".join([rand[i:i+4] for i in range(0, 16, 4)])
     return f"{head}-{groups}"
+
+PATTERN_A = re.compile(r"^[A-Z]{3}-[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}$")   # BUS-XXXX-XXXX-XXXX-XXXX
+PATTERN_B = re.compile(r"^[A-Z]{2,}-[A-Z0-9\-]{6,}$")                  # e.g. BUSINESS-<token>
+
+def is_key_format_ok(key: str) -> bool:
+    key = key.strip().upper()
+    return bool(PATTERN_A.match(key) or PATTERN_B.match(key))
 
 def create_license(
     session: Session,
