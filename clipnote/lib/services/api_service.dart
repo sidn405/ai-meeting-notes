@@ -29,6 +29,8 @@ class ApiService {
       _licenseKey = prefs.getString('license_key');
       if (_licenseKey != null) {
         print('[ApiService] Loaded license key: ${_licenseKey!.substring(0, 8)}...');
+      } else {
+        print('[ApiService] No license key found');
       }
     } catch (e) {
       print('[ApiService] Error loading license key: $e');
@@ -47,6 +49,17 @@ class ApiService {
     }
   }
 
+  /// Get headers with license key if available
+  Map<String, String> _getHeaders() {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+    if (_licenseKey != null) {
+      headers['X-License-Key'] = _licenseKey!;
+    }
+    return headers;
+  }
+
   /// Get license info from backend
   Future<Map<String, dynamic>> getLicenseInfo() async {
     if (_licenseKey == null) {
@@ -63,10 +76,7 @@ class ApiService {
       final uri = Uri.parse('$baseUrl/license/info');
       final response = await http.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-License-Key': _licenseKey!,
-        },
+        headers: _getHeaders(),
       );
 
       if (response.statusCode == 200) {
@@ -109,16 +119,14 @@ class ApiService {
 
   /// Verify IAP receipt and get license key
   Future<String> verifyIapAndGetLicense({
-    String? receipt,         // ← Changed from receiptData to receipt
-    String? receiptData,     // ← Keep both for compatibility
-    //required String platform,
+    String? receipt,
+    String? receiptData,
     required String productId,
     String? userId,
     String? store,
     String? email,
   }) async {
     try {
-      // Use receipt or receiptData (whichever is provided)
       final receiptString = receipt ?? receiptData;
       
       if (receiptString == null) {
@@ -128,7 +136,6 @@ class ApiService {
       final uri = Uri.parse('$baseUrl/iap/verify');
       final body = {
         'receipt_data': receiptString,
-        //'platform': platform,
         'store': store,
         'product_id': productId,
       };
@@ -147,10 +154,7 @@ class ApiService {
         final data = jsonDecode(response.body);
         final licenseKey = data['license_key'];
         
-        // Save license key
         await saveLicenseKey(licenseKey);
-        
-        // Update tier
         _currentTier = data['tier'] ?? 'free';
         
         return licenseKey;
@@ -169,20 +173,18 @@ class ApiService {
     List<int>? fileBytes,
     String? filename,
     required String title,
-    String? email,           // ← Changed from emailTo to email
-    String? emailTo,         // ← Keep both for compatibility
+    String? email,
+    String? emailTo,
     String? language,
     String? hints,
     bool transcribeOnly = false,
-    void Function(double)? onProgress, // Progress callback (0.0 - 1.0)
+    void Function(double)? onProgress,
   }) async {
     try {
-      // Validate that we have either file or fileBytes
       if (file == null && fileBytes == null) {
         throw Exception('Either file or fileBytes must be provided');
       }
       
-      // Use email or emailTo (whichever is provided)
       final emailAddress = email ?? emailTo;
       
       final uri = Uri.parse('$baseUrl/meetings/${transcribeOnly ? 'upload-transcribe-only' : 'upload-transcribe-summarize'}');
@@ -198,7 +200,6 @@ class ApiService {
       if (language != null) request.fields['language'] = language;
       if (hints != null) request.fields['hints'] = hints;
       
-      // Add file either from File object or from bytes
       if (file != null) {
         request.files.add(await http.MultipartFile.fromPath('file', file.path));
       } else if (fileBytes != null) {
@@ -225,34 +226,29 @@ class ApiService {
     }
   }
 
-  /// Helper method to guess file extension from bytes
   String _getExtensionFromBytes(List<int> bytes) {
     if (bytes.isEmpty) return 'bin';
     
-    // Check for common audio/video file signatures
     if (bytes.length >= 4) {
-      // MP3
       if (bytes[0] == 0xFF && bytes[1] == 0xFB) return 'mp3';
       if (bytes[0] == 0x49 && bytes[1] == 0x44 && bytes[2] == 0x33) return 'mp3';
       
-      // M4A/MP4
       if (bytes[4] == 0x66 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70) {
         return 'm4a';
       }
       
-      // WAV
       if (bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46) {
         return 'wav';
       }
     }
     
-    return 'mp3'; // default
+    return 'mp3';
   }
 
   /// Submit transcript (text only, no audio)
   Future<int> submitTranscript({
     required String title,
-    required String transcript,           // ← Changed from email To to email
+    required String transcript,
     String? email,
     String? emailTo,
   }) async {
@@ -287,12 +283,15 @@ class ApiService {
   Future<Map<String, dynamic>> getMeetingStatus(int meetingId) async {
     try {
       final uri = Uri.parse('$baseUrl/meetings/$meetingId/status');
-      final response = await http.get(uri);
+      final response = await http.get(
+        uri,
+        headers: _getHeaders(),  // ✅ Added license key
+      );
       
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
-      throw Exception('Failed to get status');
+      throw Exception('Failed to get status: ${response.statusCode}');
     } catch (e) {
       print('[ApiService] Error getting meeting status: $e');
       rethrow;
@@ -303,13 +302,16 @@ class ApiService {
   Future<List<Map<String, dynamic>>> getMeetings() async {
     try {
       final uri = Uri.parse('$baseUrl/meetings/list');
-      final response = await http.get(uri);
+      final response = await http.get(
+        uri,
+        headers: _getHeaders(),  // ✅ Added license key
+      );
       
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         return data.map((item) => item as Map<String, dynamic>).toList();
       }
-      throw Exception('Failed to get meetings');
+      throw Exception('Failed to get meetings: ${response.statusCode}');
     } catch (e) {
       print('[ApiService] Error getting meetings: $e');
       rethrow;
@@ -320,12 +322,15 @@ class ApiService {
   Future<Map<String, dynamic>> getMeetingSummary(int meetingId) async {
     try {
       final uri = Uri.parse('$baseUrl/meetings/$meetingId/summary');
-      final response = await http.get(uri);
+      final response = await http.get(
+        uri,
+        headers: _getHeaders(),  // ✅ Added license key
+      );
       
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
-      throw Exception('Summary not found');
+      throw Exception('Summary not found: ${response.statusCode}');
     } catch (e) {
       print('[ApiService] Error getting summary: $e');
       rethrow;
@@ -336,12 +341,15 @@ class ApiService {
   Future<Map<String, dynamic>> getMeetingTranscript(int meetingId) async {
     try {
       final uri = Uri.parse('$baseUrl/meetings/$meetingId/transcript');
-      final response = await http.get(uri);
+      final response = await http.get(
+        uri,
+        headers: _getHeaders(),  // ✅ Added license key
+      );
       
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
-      throw Exception('Transcript not found');
+      throw Exception('Transcript not found: ${response.statusCode}');
     } catch (e) {
       print('[ApiService] Error getting transcript: $e');
       rethrow;
@@ -354,7 +362,7 @@ class ApiService {
       final uri = Uri.parse('$baseUrl/meetings/email');
       final response = await http.post(
         uri,
-        headers: {'Content-Type': 'application/json'},
+        headers: _getHeaders(),  // ✅ Added license key
         body: jsonEncode({
           'meeting_id': meetingId,
           'email': email,
@@ -394,7 +402,10 @@ class ApiService {
   Future<Map<String, dynamic>> getMeetingStats() async {
     try {
       final uri = Uri.parse('$baseUrl/meetings/stats');
-      final response = await http.get(uri);
+      final response = await http.get(
+        uri,
+        headers: _getHeaders(),  // ✅ Added license key
+      );
       
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -406,7 +417,7 @@ class ApiService {
       }
     } catch (e) {
       print('[ApiService] Error getting stats: $e');
-      rethrow; // ✅ Rethrow instead of returning hardcoded zeros
+      rethrow;
     }
   }
 
@@ -414,10 +425,13 @@ class ApiService {
   Future<void> deleteMeeting(int meetingId) async {
     try {
       final uri = Uri.parse('$baseUrl/meetings/$meetingId');
-      final response = await http.delete(uri);
+      final response = await http.delete(
+        uri,
+        headers: _getHeaders(),  // ✅ Added license key
+      );
       
       if (response.statusCode != 200) {
-        throw Exception('Failed to delete meeting');
+        throw Exception('Failed to delete meeting: ${response.statusCode}');
       }
     } catch (e) {
       print('[ApiService] Error deleting meeting: $e');
