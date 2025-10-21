@@ -9,12 +9,13 @@ from typing import Optional, Tuple
 from ..models import License, LicenseUsage, LicenseTier, TIER_LIMITS
 
 def generate_license_key(tier: str, email: str, prefix: str = "") -> str:
-    """Generate a unique license key"""
-    base_key = secrets.token_urlsafe(16)
-    key = f"{tier.upper()}-{base_key}"
-    if prefix:
-        key = f"{prefix}-{key}"
-    return key
+    tier_map = {"starter": "STA", "professional": "PRO", "business": "BUS"}
+    head = (prefix or tier_map.get((tier or "").lower(), "KEY")).upper()
+
+    # 16 hex chars -> 4-4-4-4 groups
+    rand = secrets.token_hex(8).upper()  # e.g. 1F2A9C… (length 16)
+    groups = "-".join([rand[i:i+4] for i in range(0, 16, 4)])
+    return f"{head}-{groups}"
 
 def create_license(
     session: Session,
