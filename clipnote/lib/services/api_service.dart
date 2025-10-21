@@ -397,24 +397,16 @@ class ApiService {
       final response = await http.get(uri);
       
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        print('[ApiService] Meeting stats loaded: $data');
+        return data;
+      } else {
+        print('[ApiService] Failed to get stats: ${response.statusCode} - ${response.body}');
+        throw Exception('Failed to get meeting stats: ${response.statusCode}');
       }
-      
-      // Return default values if error
-      return {
-        'total_meetings': 0,
-        'completed': 0,
-        'processing': 0,
-        'meetings_this_month': 0,
-      };
     } catch (e) {
       print('[ApiService] Error getting stats: $e');
-      return {
-        'total_meetings': 0,
-        'completed': 0,
-        'processing': 0,
-        'meetings_this_month': 0,
-      };
+      rethrow; // ✅ Rethrow instead of returning hardcoded zeros
     }
   }
 
