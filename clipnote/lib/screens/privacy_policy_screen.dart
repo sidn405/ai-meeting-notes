@@ -29,7 +29,8 @@ class PrivacyPolicyScreen extends StatelessWidget {
           children: [
             _buildSection(
               'Last Updated: October 22, 2025',
-              style: const TextStyle(
+              null,
+              const TextStyle(
                 fontSize: 14,
                 fontStyle: FontStyle.italic,
               ),
@@ -200,7 +201,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSection(String title, [String? content, TextStyle? style]) {
+  static Widget _buildSection(String title, [String? content, TextStyle? style]) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
@@ -242,7 +243,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHighlightCard({
+  static Widget _buildHighlightCard({
     required IconData icon,
     required String title,
     required String description,
@@ -646,66 +647,10 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _tipItem(
-                    'Data deletion: We'll delete your account and cloud data within 30 days',
-                  ),
-                  _tipItem(
-                    'Data access: Request a copy of all your stored data',
-                  ),
-                  _tipItem(
-                    'Cloud data automatically deletes after 90 days',
-                  ),
-                  _tipItem(
-                    'Local data: Uninstall the app to remove device storage',
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-          ],
-        ),
-      ),
-    );
-  }
-
-  const SizedBox(height: 16),
-
-            // Quick Tips Card
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.lightbulb, color: Color(0xFF667eea)),
-                      SizedBox(width: 8),
-                      Text(
-                        'Common Requests',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _tipItem(
-                    'Data deletion: We'll delete your account and cloud data within 30 days',
-                  ),
-                  _tipItem(
-                    'Data access: Request a copy of all your stored data',
-                  ),
-                  _tipItem(
-                    'Cloud data automatically deletes after 90 days',
-                  ),
-                  _tipItem(
-                    'Local data: Uninstall the app to remove device storage',
-                  ),
+                  _tipItem('Data deletion: We\'ll delete your account and cloud data within 30 days'),
+                  _tipItem('Data access: Request a copy of all your stored data'),
+                  _tipItem('Cloud data automatically deletes after 90 days'),
+                  _tipItem('Local data: Uninstall the app to remove device storage'),
                 ],
               ),
             ),

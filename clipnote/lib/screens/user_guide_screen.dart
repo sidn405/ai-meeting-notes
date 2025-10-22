@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'privacy_policy_screen.dart';
 
 class UserGuideScreen extends StatelessWidget {
   const UserGuideScreen({super.key});
