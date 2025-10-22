@@ -7,8 +7,9 @@ import 'package:device_info_plus/device_info_plus.dart';
 
 import 'api_service.dart';
 
-const kProMonthlyId = 'com.clipnote.pro.monthly';
-const kBusinessMonthlyId = 'com.clipnote.business.monthly';
+const kProMonthlyId = 'clipnote.pro.monthly';
+const kBusinessMonthlyId = 'clipnote.business.monthly';
+const kStarterMonthlyId = 'com.clipnote.starter.monthly'; // Add this
 
 class IapService {
   IapService._internal();
@@ -50,9 +51,13 @@ class IapService {
     }
   }
 
-  ProductDetails? get proProduct => _products[kcom.clipnote.starter.monthly];
-  ProductDetails? get proProduct => _products[kclipnote_pro_monthly];
-  ProductDetails? get businessProduct => _products[kclipnote_business_monthly];
+  ProductDetails? get starterProduct => _products[kStarterMonthlyId];
+  ProductDetails? get proProduct => _products[kProMonthlyId];
+  ProductDetails? get businessProduct => _products[kBusinessMonthlyId];
+
+  final kStarterMonthlyId = 'com.clipnote.starter.monthly';
+  final kProMonthlyId = 'clipnote.pro.monthly';
+  final kBusinessMonthlyId = 'clipnote.business.monthly';
 
   Future<String> purchasePro() async {
     final p = proProduct;

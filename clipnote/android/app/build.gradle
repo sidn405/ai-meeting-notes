@@ -22,8 +22,8 @@ android {
         applicationId = "com.fourdgaming.clipnote"
         minSdkVersion = flutter.minSdkVersion
         targetSdkVersion = 36  // ✅ Fixed - was "targetSdk"
-        versionCode = flutter.versionCode.toInteger()
-        versionName = flutter.versionName
+        versionCode 2
+        versionName "1.0.1"
     }
 
     signingConfigs {

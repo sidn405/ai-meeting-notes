@@ -4,6 +4,7 @@ import 'user_guide_screen.dart';
 import 'meetings_list_screen.dart';
 import '../services/iap_service.dart';
 import '../services/api_service.dart';
+import '../utils/route_observer.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,7 +13,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with RouteAware {
   final _iapService = IapService();
   final _api = ApiService.I;
   
@@ -25,6 +26,42 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _initIAP();
     _loadData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    print('📱 Returned to HomeScreen - refreshing data...');
+    _loadData();
+  }
+
+  @override
+  void didPush() {
+    print('📱 HomeScreen pushed');
+  }
+
+  @override
+  void didPop() {
+    print('📱 HomeScreen popped');
+  }
+
+  @override
+  void didPushNext() {
+    print('📱 Navigating away from HomeScreen');
   }
 
   Future<void> _initIAP() async {
@@ -41,24 +78,59 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       await _api.loadLicenseKey();
       
-      final results = await Future.wait<Map<String, dynamic>>([
-        _api.getLicenseInfo(),
-        _api.getMeetingStats(),
-      ]);
+      // Load license info
+      try {
+        final licenseInfo = await _api.getLicenseInfo();
+        if (mounted) {
+          setState(() {
+            _licenseInfo = licenseInfo;
+          });
+        }
+      } catch (e) {
+        print('Error loading license info: $e');
+      }
       
-      setState(() {
-        _licenseInfo = results[0];
-        _meetingStats = results[1];
-        _isLoading = false;
-      });
+      // Load meeting stats separately
+      try {
+        final meetingStats = await _api.getMeetingStats();
+        if (mounted) {
+          setState(() {
+            _meetingStats = meetingStats;
+          });
+        }
+      } catch (e) {
+        print('Error loading meeting stats: $e');
+        if (mounted) {
+          setState(() {
+            _meetingStats = {
+              'total_meetings': 0,
+              'meetings_this_month': 0,
+              'completed': 0,
+              'processing': 0,
+            };
+          });
+        }
+      }
+      
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     } catch (e) {
       print('Error loading data: $e');
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  void _navigateToMeetings(String filter) {
-    Navigator.of(context).push(
+  void _navigateToUpload() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const UploadScreen()),
+    );
+  }
+
+  void _navigateToMeetings(String filter) async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MeetingsListScreen(initialFilter: filter),
       ),
@@ -291,11 +363,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 SizedBox(
                   height: 56,
                   child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const UploadScreen()),
-                      );
-                    },
+                    onPressed: _navigateToUpload,
                     icon: const Icon(Icons.add_circle_outline, size: 24),
                     label: const Text(
                       'Create Meeting',

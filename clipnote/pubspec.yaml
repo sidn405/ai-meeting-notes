@@ -39,7 +39,6 @@ dependencies:
   shared_preferences: ^2.2.2
   in_app_purchase: ^3.2.2
   device_info_plus: ^12.1.0
-
   # For opening email clients
   url_launcher: ^6.2.2
   

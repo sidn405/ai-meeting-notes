@@ -27,9 +27,31 @@ class UserGuideScreen extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           children: [
             _guideCard(
+              icon: Icons.privacy_tip,
+              title: 'Privacy & Data',
+              description: 'Learn how we protect your data and manage your privacy.',
+              action: TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const PrivacyPolicyScreen(),
+                    ),
+                  );
+                },
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF667eea),
+                ),
+                child: const Text(
+                  'View Privacy Policy →',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+            _guideCard(
               icon: Icons.mic,
               title: 'Recording Meetings',
-              description: 'Tap the Record button on the home screen to start capturing audio or video. '
+              description: 'Tap the Record button on the Record Video screen to start capturing audio or video. '
                   'You can also upload existing files or paste transcripts.',
             ),
             const SizedBox(height: 16),
@@ -69,7 +91,7 @@ class UserGuideScreen extends StatelessWidget {
             _guideCard(
               icon: Icons.star,
               title: 'Upgrade Benefits',
-              description: 'Professional: Longer uploads, faster processing, cloud storage\n'
+              description: 'Professional: Larger uploads, faster processing, cloud storage\n'
                   'Business: Multiple seats, admin controls, team collaboration.',
             ),
             const SizedBox(height: 16),
