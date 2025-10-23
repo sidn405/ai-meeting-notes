@@ -78,34 +78,34 @@ class Meeting(SQLModel, table=True):
     transcript_path: Optional[str] = None
     summary_path: Optional[str] = None
     
-    status: str = "uploaded"  # uploaded|transcribed|summarized|delivered
+    status: str = "queued"
     
-    license_key: str = Field(index=True, unique=True, max_length=64)
-    tier: str = Field(max_length=32)
+    # ✅ MAKE THESE OPTIONAL - FREE USERS DON'T HAVE LICENSE
+    license_key: Optional[str] = Field(default=None, index=True, max_length=64)
+    tier: Optional[str] = Field(default=None, max_length=32)
     
     email_to: Optional[str] = None
     slack_channel: Optional[str] = None
     
-    
-    # NEW:
+    # Progress tracking
     progress: int = 0
     step: Optional[str] = None
     
-     # IAP Support
-    iap_purchase_token: Optional[str] = Field(default=None, max_length=512)  # Google/Apple purchase ID
-    iap_store: Optional[str] = Field(default=None, max_length=20)  # "google_play" or "app_store"
-    iap_product_id: Optional[str] = Field(default=None, max_length=128)  # Product ID purchased
+    # IAP Support
+    iap_purchase_token: Optional[str] = Field(default=None, max_length=512)
+    iap_store: Optional[str] = Field(default=None, max_length=20)
+    iap_product_id: Optional[str] = Field(default=None, max_length=128)
     
     # Status
     is_active: bool = Field(default=True)
     activated_at: Optional[datetime] = Field(default=None)
-    expires_at: Optional[datetime] = Field(default=None)  # For subscriptions
+    expires_at: Optional[datetime] = Field(default=None)
     
     # Tracking
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
-    # Legacy support (if you had Gumroad)
+    # Legacy support
     gumroad_order_id: Optional[str] = Field(default=None, max_length=128)
     
 # License Usage Model

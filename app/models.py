@@ -28,6 +28,7 @@ class License(SQLModel, table=True):
     
     # Status
     is_active: bool = Field(default=True)
+    device_id: Optional[str] = Field(default=None, index=True)  # NEW: for app installs
     activated_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None
     

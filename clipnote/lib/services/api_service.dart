@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 class ApiService {
   static final ApiService I = ApiService._();
@@ -112,6 +113,106 @@ class ApiService {
       };
     }
   }
+
+  Future<void> ensureUserHasLicense() async {
+  try {
+    // Check if license key already exists
+    await loadLicenseKey();
+    
+    if (_licenseKey != null) {
+      print('[ApiService] ✅ License key already exists: ${_licenseKey!.substring(0, 8)}...');
+      return;
+    }
+    
+    print('[ApiService] 📱 No license key found. Generating free tier license...');
+    
+    // Generate a device ID
+    final deviceId = await _getDeviceId();
+    
+    // Request free tier license from backend
+    final licenseKey = await _generateFreeTierLicense(deviceId);
+    
+    if (licenseKey != null) {
+      await saveLicenseKey(licenseKey);
+      print('[ApiService] ✅ Free tier license generated and saved!');
+    } else {
+      print('[ApiService] ⚠️ Failed to generate license, user will see free tier');
+    }
+  } catch (e) {
+    print('[ApiService] ⚠️ Error ensuring license: $e');
+    // Continue anyway - user gets free tier as fallback
+  }
+}
+
+/// Get unique device identifier
+Future<String> _getDeviceId() async {
+  try {
+    final deviceInfo = DeviceInfoPlugin();
+    
+    if (Platform.isAndroid) {
+      final androidInfo = await deviceInfo.androidInfo;
+      return androidInfo.id; // Android device ID
+    } else if (Platform.isIOS) {
+      final iosInfo = await deviceInfo.iosInfo;
+      return iosInfo.identifierForVendor ?? 'ios-unknown';
+    }
+    
+    return 'unknown-device';
+  } catch (e) {
+    print('[ApiService] Error getting device ID: $e');
+    return 'error-device-id';
+  }
+}
+
+/// Request free tier license from backend
+Future<String?> _generateFreeTierLicense(String deviceId) async {
+  try {
+    final uri = Uri.parse('$baseUrl/license/generate-free-tier');
+    
+    print('[ApiService] 🔍 Attempting free tier request...');
+    print('[ApiService] Base URL: $baseUrl');
+    print('[ApiService] Full URI: $uri');
+    print('[ApiService] Device ID: $deviceId');
+    
+    final request = http.Request('POST', uri);
+    request.headers.addAll({
+      'Content-Type': 'application/json',
+      'User-Agent': 'Clipnote-App/1.0',
+    });
+    request.body = jsonEncode({'device_id': deviceId});
+    
+    print('[ApiService] Request headers: ${request.headers}');
+    print('[ApiService] Request body: ${request.body}');
+    
+    // Set timeout and send
+    final streamedResponse = await request.send().timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        throw Exception('Request timeout after 10 seconds');
+      },
+    );
+    
+    final response = await http.Response.fromStream(streamedResponse);
+    
+    print('[ApiService] Response status: ${response.statusCode}');
+    print('[ApiService] Response headers: ${response.headers}');
+    print('[ApiService] Response body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final licenseKey = data['license_key'];
+      print('[ApiService] ✅ Free tier license received: ${licenseKey.substring(0, 8)}...');
+      return licenseKey;
+    } else {
+      print('[ApiService] ❌ Error generating license: ${response.statusCode} - ${response.body}');
+      return null;
+    }
+  } catch (e) {
+    print('[ApiService] ❌ Network error generating license: $e');
+    print('[ApiService] Error type: ${e.runtimeType}');
+    return null;
+  }
+}
 
   /// Check backend health
   Future<bool> checkHealth() async {

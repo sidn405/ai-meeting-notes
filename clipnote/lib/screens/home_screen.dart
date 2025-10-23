@@ -25,7 +25,14 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   void initState() {
     super.initState();
     _initIAP();
-    _loadData();
+    _initializeLicenseAndLoadData();
+  }
+
+  Future<void> _initializeLicenseAndLoadData() async {
+    // First, ensure user has a license (free tier if new)
+    await _api.ensureUserHasLicense();
+    // Then load all data
+    await _loadData();
   }
 
   @override

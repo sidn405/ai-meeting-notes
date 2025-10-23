@@ -19,6 +19,7 @@ from ..services.license import create_license, get_license_info
 router = APIRouter(prefix="/iap", tags=["In-App Purchases"])
 
 
+
 class IAPVerifyRequest(BaseModel):
     user_id: str  # Device ID or user identifier
     email: Optional[str] = None
@@ -53,9 +54,9 @@ async def verify_iap_receipt(
     
     # Determine tier from product_id
     if "starter" in request.product_id.lower():
-        tier = LicenseTier.PROFESSIONAL
+        tier = LicenseTier.STARTER
     elif "pro" in request.product_id.lower():
-        tier = LicenseTier.BUSINESS
+        tier = LicenseTier.PROFESSIONAL
     elif "business" in request.product_id.lower():
         tier = LicenseTier.BUSINESS
     else:

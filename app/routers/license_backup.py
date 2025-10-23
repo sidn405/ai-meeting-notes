@@ -18,6 +18,8 @@ from ..services.license import (
     LicenseTier
 )
 from ..models import License
+from ..models import License, LicenseUsage, TIER_LIMITS
+
 
 router = APIRouter(prefix="/license", tags=["license"])
 
@@ -117,20 +119,55 @@ def activate_license(
     
     return response
 
-@router.get("/info", response_model=LicenseInfoResponse)
-def get_info(
-    license_key: Optional[str] = Cookie(None),
-    session: Session = Depends(get_session)
+@router.get("/info")
+async def get_license_info(
+    x_license_key: str = Header(..., alias="X-License-Key"),
+    db: Session = Depends(get_session)
 ):
-    """Get current license information from cookie"""
-    if not license_key:
-        return LicenseInfoResponse(
-            valid=False,
-            error="No license key provided"
-        )
+    """Get license information and usage stats"""
     
-    info = get_license_info(session, license_key)
-    return LicenseInfoResponse(**info)
+    license = db.exec(
+        select(License).where(License.license_key == x_license_key)
+    ).first()
+    
+    if not license:
+        # Return free tier info for no license
+        return {
+            "tier": "free",
+            "max_file_size_mb": 25,
+            "meetings_per_month": 5,
+            "meetings_used": 0,
+            "meetings_remaining": 5,
+        }
+    
+    if not license.is_active:
+        raise HTTPException(403, "License is inactive")
+    
+    # Get current month usage
+    now = datetime.utcnow()
+    
+    usage = db.exec(
+        select(LicenseUsage).where(
+            LicenseUsage.license_key == x_license_key,
+            LicenseUsage.year == now.year,
+            LicenseUsage.month == now.month
+        )
+    ).first()
+    
+    meetings_used = usage.meetings_used if usage else 0
+    
+    tier_config = TIER_LIMITS.get(license.tier, TIER_LIMITS["free"])
+    
+    return {
+        "tier": license.tier,
+        "email": license.email,
+        "is_active": license.is_active,
+        "expires_at": license.expires_at.isoformat() if license.expires_at else None,
+        "max_file_size_mb": tier_config["max_file_size_mb"],
+        "meetings_per_month": tier_config["meetings_per_month"],
+        "meetings_used": meetings_used,
+        "meetings_remaining": max(0, tier_config["meetings_per_month"] - meetings_used),
+    }
 
 @router.post("/deactivate")
 def deactivate(
