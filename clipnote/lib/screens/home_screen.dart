@@ -6,7 +6,6 @@ import '../services/iap_service.dart';
 import '../services/api_service.dart';
 import '../utils/route_observer.dart';
 
-
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -82,14 +81,15 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
       // Load license info FIRST and wait for it
       try {
         final licenseInfo = await _api.getLicenseInfo();
+        print('📝 Raw license info: $licenseInfo');
         if (mounted) {
           setState(() {
             _licenseInfo = licenseInfo;
-            print('📝 License info loaded: ${licenseInfo?['tier']}');
+            print('📝 License info loaded. Tier: ${licenseInfo?['tier']}, Is Paid: $isPaidUser');
           });
         }
       } catch (e) {
-        print('Error loading license info: $e');
+        print('❌ Error loading license info: $e');
         // Set default free tier if loading fails
         if (mounted) {
           setState(() {

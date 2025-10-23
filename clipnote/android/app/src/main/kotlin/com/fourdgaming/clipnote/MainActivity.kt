@@ -1,4 +1,4 @@
-package com.example.clipnote
+package com.fourdgaming.clipnote
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -63,6 +63,7 @@ class ApiService {
   /// Get license info from backend
   Future<Map<String, dynamic>> getLicenseInfo() async {
     if (_licenseKey == null) {
+      print('[ApiService] No license key available, returning free tier');
       return {
         'tier': 'free',
         'tier_name': 'Free',
@@ -74,17 +75,24 @@ class ApiService {
 
     try {
       final uri = Uri.parse('$baseUrl/license/info');
+      print('[ApiService] Fetching license info from: $uri');
+      print('[ApiService] Using license key: ${_licenseKey!.substring(0, 8)}...');
+      
       final response = await http.get(
         uri,
         headers: _getHeaders(),
       );
 
+      print('[ApiService] License info response status: ${response.statusCode}');
+      print('[ApiService] License info response body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _currentTier = data['tier'] ?? 'free';
+        print('[ApiService] ✅ License verified! Tier: ${_currentTier}');
         return data;
       } else {
-        print('[ApiService] Error getting license info: ${response.statusCode}');
+        print('[ApiService] ❌ Error getting license info: ${response.statusCode} - ${response.body}');
         return {
           'tier': 'free',
           'tier_name': 'Free',
@@ -94,7 +102,7 @@ class ApiService {
         };
       }
     } catch (e) {
-      print('[ApiService] Error getting license info: $e');
+      print('[ApiService] ❌ Exception getting license info: $e');
       return {
         'tier': 'free',
         'tier_name': 'Free',

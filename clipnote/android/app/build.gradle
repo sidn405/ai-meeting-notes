@@ -4,6 +4,14 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+
+
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "com.fourdgaming.clipnote"
     compileSdk = 36
@@ -22,24 +30,24 @@ android {
         applicationId = "com.fourdgaming.clipnote"
         minSdkVersion = flutter.minSdkVersion
         targetSdkVersion = 36  // ✅ Fixed - was "targetSdk"
-        versionCode 2
-        versionName "1.0.1"
+        versionCode 4
+        versionName "1.0.2"
     }
 
     signingConfigs {
         release {
-            storeFile file("upload-keystore.jks")
-            storePassword System.getenv("KEYSTORE_PASSWORD") ?: "temp-password"
-            keyAlias "upload"
-            keyPassword System.getenv("KEY_PASSWORD") ?: "temp-password"
+            storeFile file(keystoreProperties["storeFile"])
+            storePassword keystoreProperties["storePassword"]
+            keyAlias keystoreProperties["keyAlias"]
+            keyPassword keystoreProperties["keyPassword"]
         }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.release
-            minifyEnabled = true
-            shrinkResources = true
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
         }
     }
 }
