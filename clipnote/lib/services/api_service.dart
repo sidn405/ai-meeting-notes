@@ -244,7 +244,7 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
       
       final uri = Uri.parse('$baseUrl/iap/verify');
       final body = {
-        'receipt_data': receiptString,
+        'receipt': receiptString,
         'store': store,
         'product_id': productId,
       };
