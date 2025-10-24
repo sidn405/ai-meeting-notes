@@ -6,7 +6,7 @@ import os
 import time
 from pathlib import Path
 from typing import Optional
-
+from datetime import datetime
 import httpx
 from openai import OpenAI
 from sqlmodel import select
@@ -262,8 +262,38 @@ def _set_progress(meeting_id: int, progress: int, *, step: str | None = None, st
         s.add(m)
         s.commit()
 
+def _get_transcript_path(meeting_id: int, title: str) -> str:
+    """Generate persistent transcript path"""
+    # Use meeting_id to ensure uniqueness and easy lookup
+    transcripts_dir = DATA_DIR / "transcripts"
+    transcripts_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Safe filename from title
+    safe_title = "".join(c for c in title if c.isalnum() or c in " -_").rstrip()
+    safe_title = safe_title[:50] if safe_title else "meeting"
+    
+    filename = f"{meeting_id}_{safe_title}.txt"
+    path = transcripts_dir / filename
+    
+    print(f"📝 Transcript path: {path}")
+    return str(path.resolve())
+
+def _get_summary_path(meeting_id: int, title: str) -> str:
+    """Generate persistent summary path"""
+    summaries_dir = DATA_DIR / "summaries"
+    summaries_dir.mkdir(parents=True, exist_ok=True)
+    
+    safe_title = "".join(c for c in title if c.isalnum() or c in " -_").rstrip()
+    safe_title = safe_title[:50] if safe_title else "meeting"
+    
+    filename = f"{meeting_id}_{safe_title}.json"
+    path = summaries_dir / filename
+    
+    print(f"📊 Summary path: {path}")
+    return str(path.resolve())
+
 def process_meeting(meeting_id: int, *, language: str | None = None, hints: str | None = None) -> None:
-    # mark processing
+    """Process meeting with transcript AND summary"""
     _set_progress(meeting_id, 5, step="Starting", status="processing")
 
     # Get initial meeting data
@@ -272,7 +302,6 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
         if not m:
             raise RuntimeError(f"Meeting {meeting_id} not found")
         
-        # Store data we'll need later (before session closes)
         meeting_title = m.title
         audio_path = m.audio_path
         transcript_path = m.transcript_path
@@ -280,14 +309,23 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
 
     try:
         transcript_text = ""
+        
+        # Step 1: Get or create transcript
         if transcript_path and Path(transcript_path).exists():
             _set_progress(meeting_id, 10, step="Reading transcript")
             transcript_text = Path(transcript_path).read_text(encoding="utf-8")
         elif audio_path and Path(audio_path).exists():
             _set_progress(meeting_id, 20, step="Uploading audio")
             transcript_text = _aai_transcribe(audio_path, language=language, hints=hints)
-            _set_progress(meeting_id, 60, step="Transcription complete, saving transcript")
-            tpath = save_text(transcript_text, title=meeting_title)
+            
+            if not transcript_text or len(transcript_text) < 50:
+                raise RuntimeError(f"Transcript too short: {len(transcript_text)} characters")
+            
+            _set_progress(meeting_id, 60, step="Saving transcript")
+            # ✅ Use persistent path
+            tpath = _get_transcript_path(meeting_id, meeting_title)
+            Path(tpath).write_text(transcript_text, encoding="utf-8")
+            
             with get_session() as s:
                 mm = s.get(Meeting, meeting_id)
                 mm.transcript_path = tpath
@@ -297,12 +335,12 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
         else:
             raise RuntimeError("No transcript or audio found.")
 
+        # Step 2: Summarize
         _set_progress(meeting_id, 75, step="Summarizing")
         summary_json = _summarize_with_openai(transcript_text, meeting_title)
 
-        base_dir = Path(transcript_path).parent if transcript_path else (DATA_DIR / "summaries")
-        base_dir.mkdir(parents=True, exist_ok=True)
-        spath = str((base_dir / f"summary_{meeting_id}.json").resolve())
+        # ✅ Use persistent path
+        spath = _get_summary_path(meeting_id, meeting_title)
         Path(spath).write_text(json.dumps(summary_json, indent=2), encoding="utf-8")
 
         with get_session() as s:
@@ -311,9 +349,8 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
             s.add(mm)
             s.commit()
 
+        # Step 3: Email if configured
         _set_progress(meeting_id, 90, step="Emailing (if configured)")
-        
-        # Email using stored data, not the detached object
         if email_to:
             _email_with_resend_by_id(meeting_id, summary_json, spath, email_to)
 
@@ -321,10 +358,11 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
 
     except Exception as e:
         _set_progress(meeting_id, 100, step=f"Error: {str(e)}", status="failed")
+        print(f"❌ Process failed: {e}")
         raise
     
 def process_meeting_transcribe_only(meeting_id: int, *, language: str | None = None, hints: str | None = None) -> None:
-    """Process meeting for transcription (without summarization)"""
+    """Process meeting for transcription ONLY"""
     _set_progress(meeting_id, 5, step="Starting transcription", status="processing")
 
     with get_session() as s:
@@ -346,11 +384,9 @@ def process_meeting_transcribe_only(meeting_id: int, *, language: str | None = N
         elif audio_path and Path(audio_path).exists():
             _set_progress(meeting_id, 20, step="Uploading audio to AssemblyAI")
             
-            # ✅ Add timeout protection
             try:
                 transcript_text = _aai_transcribe(audio_path, language=language, hints=hints)
                 
-                # ✅ Verify we got the full transcript
                 if not transcript_text or len(transcript_text) < 50:
                     raise RuntimeError(f"Transcript too short: {len(transcript_text)} characters")
                     
@@ -359,23 +395,23 @@ def process_meeting_transcribe_only(meeting_id: int, *, language: str | None = N
             
             _set_progress(meeting_id, 90, step="Saving transcript")
             
-            # Save transcript
-            tpath = save_text(transcript_text, title=meeting_title)
+            # ✅ Use persistent path
+            tpath = _get_transcript_path(meeting_id, meeting_title)
+            Path(tpath).write_text(transcript_text, encoding="utf-8")
             
-            # Update database
             with get_session() as s:
                 mm = s.get(Meeting, meeting_id)
                 mm.transcript_path = tpath
                 s.add(mm)
                 s.commit()
             
-            _set_progress(meeting_id, 100, step="Transcription without summary complete.", status="delivered")
+            _set_progress(meeting_id, 100, step="Transcription complete", status="delivered")
         else:
             raise RuntimeError("No audio file found for transcription.")
 
     except Exception as e:
         _set_progress(meeting_id, 100, step=f"Transcription failed: {str(e)}", status="failed")
-        print(f"Transcription failed for meeting {meeting_id}: {e}")
+        print(f"❌ Transcription failed: {e}")
         raise
 
 def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | None = None, hints: str | None = None) -> None:
@@ -407,7 +443,9 @@ def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | Non
                 raise RuntimeError(f"Transcript too short: {len(transcript_text)} characters")
             
             _set_progress(meeting_id, 60, step="Saving transcript")
-            tpath = save_text(transcript_text, title=meeting_title)
+            # ✅ Use persistent path
+            tpath = _get_transcript_path(meeting_id, meeting_title)
+            Path(tpath).write_text(transcript_text, encoding="utf-8")
             
             with get_session() as s:
                 mm = s.get(Meeting, meeting_id)
@@ -418,14 +456,12 @@ def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | Non
         else:
             raise RuntimeError("No audio file found")
 
-        # Step 2: Summarize (THIS IS THE KEY DIFFERENCE)
+        # Step 2: Summarize
         _set_progress(meeting_id, 75, step="Summarizing with AI")
         summary_json = _summarize_with_openai(transcript_text, meeting_title)
 
-        # Step 3: Save summary
-        base_dir = Path(transcript_path).parent if transcript_path else (DATA_DIR / "summaries")
-        base_dir.mkdir(parents=True, exist_ok=True)
-        spath = str((base_dir / f"summary_{meeting_id}.json").resolve())
+        # ✅ Use persistent path
+        spath = _get_summary_path(meeting_id, meeting_title)
         Path(spath).write_text(json.dumps(summary_json, indent=2), encoding="utf-8")
 
         with get_session() as s:
@@ -434,7 +470,7 @@ def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | Non
             s.add(mm)
             s.commit()
 
-        # Step 4: Email if configured
+        # Step 3: Email if configured
         _set_progress(meeting_id, 90, step="Emailing summary")
         if email_to:
             _email_with_resend_by_id(meeting_id, summary_json, spath, email_to)
@@ -443,5 +479,5 @@ def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | Non
 
     except Exception as e:
         _set_progress(meeting_id, 100, step=f"Error: {str(e)}", status="failed")
-        print(f"Transcribe+Summarize failed for meeting {meeting_id}: {e}")
+        print(f"❌ Transcribe+Summarize failed: {e}")
         raise
