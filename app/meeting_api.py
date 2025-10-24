@@ -5,7 +5,7 @@ from typing import Optional, List
 from sqlmodel import select
 
 from app.db import get_session          # ✅ your db.py exports get_session()
-from app.uploads_models import Upload   # ✅ model lives in app/upload_models.py
+from app.models import Upload   # ✅ model lives in app/upload_models.py
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])
 
