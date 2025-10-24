@@ -30,6 +30,7 @@ from app.routers.storage_b2 import router as storage_router
 from app.routers import iap
 from app.app_uploads import router as uploads_router
 from app.meeting_api import router as meeting_router
+from app.routers import admin
 # Include license router
 app.include_router(license.router)
 app.include_router(storage_router)
@@ -39,6 +40,7 @@ app.include_router(iap.router)
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(meetings.router)
+app.include_router(admin.router)
 
 @app.get("/healthz")
 def healthz():
