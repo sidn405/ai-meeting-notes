@@ -11,14 +11,13 @@ import os
 import uuid
 from datetime import datetime
 from app.db import get_session
+from ..models import License, LicenseUsage, LicenseTier, TIER_LIMITS
 from ..services.license import (
     create_license,
     validate_license,
     get_license_info,
     deactivate_license,
-    LicenseTier
 )
-from ..models import License, LicenseUsage, TIER_LIMITS
 
 
 router = APIRouter(prefix="/license", tags=["license"])
