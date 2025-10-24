@@ -112,10 +112,6 @@ class Meeting(SQLModel, table=True):
     # Legacy support
     gumroad_order_id: Optional[str] = Field(default=None, max_length=128)
     
-# License Model
-class License(SQLModel, table=True):
-    __tablename__ = "license"  # CHANGED: was "licenses" (plural), now "license" (singular)
-    
     id: Optional[int] = Field(default=None, primary_key=True)
     license_key: str = Field(unique=True, index=True)
     tier: str  # Will store LicenseTier enum values
