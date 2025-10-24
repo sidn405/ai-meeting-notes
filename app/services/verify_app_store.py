@@ -17,7 +17,7 @@ async def verify_app_store(request: dict, session: Session = Depends()):
     {
       "user_id": "device_id_or_user_id",
       "receipt_data": "base64_receipt",
-      "product_id": "com.clipnote.pro.monthly"
+      "product_id": "clipnote_pro_monthly"
     }
     """
     user_id = request["user_id"]

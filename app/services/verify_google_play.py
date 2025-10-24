@@ -19,7 +19,7 @@ async def verify_google_play(request: dict, session: Session = Depends()):
     {
       "user_id": "device_id_or_user_id",
       "purchase_token": "purchase_token_from_google",
-      "product_id": "com.clipnote.pro.monthly"
+      "product_id": "lipnote_pro_monthly"
     }
     """
     user_id = request["user_id"]

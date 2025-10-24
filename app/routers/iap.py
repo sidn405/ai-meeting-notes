@@ -24,7 +24,7 @@ class IAPVerifyRequest(BaseModel):
     user_id: str  # Device ID or user identifier
     email: Optional[str] = None
     receipt: str  # Purchase token (Android) or receipt data (iOS)
-    product_id: str  # com.clipnote.pro.monthly or com.clipnote.business.monthly
+    product_id: str  # com_clipnote_pro.monthly or com.clipnote.business.monthly
     store: str  # "google_play" or "app_store"
 
 
@@ -137,7 +137,7 @@ async def _verify_google_play(purchase_token: str, product_id: str) -> dict:
         
         # Verify subscription
         result = service.purchases().subscriptions().get(
-            packageName=os.getenv("ANDROID_PACKAGE_NAME", "com.clipnote"),
+            packageName=os.getenv("ANDROID_PACKAGE_NAME", "com.fourdgaming.clipnote"),
             subscriptionId=product_id,
             token=purchase_token
         ).execute()
