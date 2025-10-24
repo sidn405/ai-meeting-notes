@@ -357,7 +357,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _showUpgradeSheet,
+                            onPressed: _iapService.isBusy ? null : _showUpgradeSheet,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
                               foregroundColor: const Color(0xFF667eea),

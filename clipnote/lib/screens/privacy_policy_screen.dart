@@ -60,7 +60,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
               '• Improve app functionality',
             ),
             
-            _buildHighlightCard(
+            _buildSection(
               icon: Icons.videocam,
               title: 'Camera Permission',
               description: 'Our app requests camera permission to record video during meetings (optional). '

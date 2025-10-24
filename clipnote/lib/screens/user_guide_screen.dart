@@ -49,6 +49,8 @@ class UserGuideScreen extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            
             _guideCard(
               icon: Icons.mic,
               title: 'Recording Meetings',

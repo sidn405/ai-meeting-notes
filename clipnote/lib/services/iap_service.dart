@@ -17,175 +17,120 @@ class IapService {
   factory IapService() => _inst;
 
   final InAppPurchase _iap = InAppPurchase.instance;
-  final ApiService _api = ApiService.I;
 
-  late final StreamSubscription<List<PurchaseDetails>> _sub;
-
+  bool _initialized = false;
   bool _available = false;
-  bool get isAvailable => _available;
+  bool _purchaseInFlight = false;
 
-  final Map<String, ProductDetails> _products = {};
+  // ⬇️ make it nullable (no `late`)
+  StreamSubscription<List<PurchaseDetails>>? _purchaseSub;
+
+  // your product IDs
+  static const kStarterMonthlyId = 'com.clipnote.starter.monthly';
+  static const kProMonthlyId     = 'clipnote.pro.monthly';
+  static const kBusinessMonthlyId= 'clipnote.business.monthly';
 
   Future<void> init() async {
+    if (_initialized) return;            // ⬅️ guard against double init
+    _initialized = true;
+
     _available = await _iap.isAvailable();
-    if (!_available) return;
 
-    _sub = _iap.purchaseStream.listen(_onPurchaseUpdates, onDone: () {
-      // ignore
-    }, onError: (Object e, StackTrace s) {
-      // ignore
-    });
-
-    final resp = await _iap.queryProductDetails({kStarterMonthlyId, kProMonthlyId, kBusinessMonthlyId});
-    if (resp.error != null) {
-      // You can log resp.error
-    }
-    for (final p in resp.productDetails) {
-      _products[p.id] = p;
-    }
+    // only create one listener
+    _purchaseSub ??= _iap.purchaseStream.listen(
+      _onPurchaseUpdated,
+      onError: (e, st) {
+        debugPrint('IAP stream error: $e');
+        _purchaseInFlight = false;
+      },
+      onDone: () => debugPrint('IAP stream closed'),
+    );
   }
 
   Future<void> dispose() async {
-    if (_available) {
-      await _sub.cancel();
-    }
+    await _purchaseSub?.cancel();
+    _purchaseSub = null;
+    _initialized = false;
   }
 
-  ProductDetails? get starterProduct => _products[kStarterMonthlyId];
-  ProductDetails? get proProduct => _products[kProMonthlyId];
-  ProductDetails? get businessProduct => _products[kBusinessMonthlyId];
-
-  final kStarterMonthlyId = 'com.clipnote.starter.monthly';
-  final kProMonthlyId = 'clipnote.pro.monthly';
-  final kBusinessMonthlyId = 'clipnote.business.monthly';
-
-  Future<String> purchasePro() async {
-    final p = proProduct;
-    if (p == null) {
-      await init();
-    }
-    return _purchaseProduct(kProMonthlyId);
+  Future<void> restore() async {
+    await init();
+    if (!_available) throw Exception('IAP not available on this device/store.');
+    await _iap.restorePurchases();
   }
 
-  Future<String> purchaseBusiness() async {
-    final p = businessProduct;
-    if (p == null) {
-      await init();
-    }
-    return _purchaseProduct(kBusinessMonthlyId);
-  }
+  Future<String> purchasePro()    => _purchaseProduct(kProMonthlyId);
+  Future<String> purchaseBusiness()=> _purchaseProduct(kBusinessMonthlyId);
+  Future<String> purchaseStarter()=> _purchaseProduct(kStarterMonthlyId);
 
   Future<String> _purchaseProduct(String productId) async {
-    if (!_available) {
-      await init();
-      if (!_available) {
-        throw Exception('IAP not available on this device/store.');
-      }
-    }
+    await init();
+    if (_purchaseInFlight) return 'busy';    // prevent double taps
+    _purchaseInFlight = true;
 
-    final details = _products[productId];
-    if (details == null) {
-      final resp = await _iap.queryProductDetails({
-        kStarterMonthlyId,
-        kProMonthlyId,
-        kBusinessMonthlyId,
-      });
-      if (resp.notFoundIDs.contains(productId)) {
-        throw Exception('Product $productId not found. Check store configuration.');
-      }
-      if (resp.productDetails.isNotEmpty) {
-        _products[productId] = resp.productDetails.first;
-      }
-    }
-
-    final product = _products[productId];
-    if (product == null) {
-      throw Exception('Product not found: $productId');
-    }
-    final purchaseParam = PurchaseParam(productDetails: product);
-
-    final ok = await _iap.buyNonConsumable(purchaseParam: purchaseParam);
-    if (!ok) throw Exception('Failed to start purchase flow.');
-
-    return 'pending';
+    final details = await _queryProduct(productId);
+    final param = PurchaseParam(productDetails: details);
+    // Subscriptions are non-consumable in the plugin API:
+    final ok = await _iap.buyNonConsumable(purchaseParam: param);
+    if (!ok) _purchaseInFlight = false;
+    return ok ? 'started' : 'failed_to_start';
   }
 
-  Future<void> _onPurchaseUpdates(List<PurchaseDetails> list) async {
+  Future<ProductDetails> _queryProduct(String id) async {
+    final resp = await _iap.queryProductDetails({id});
+    if (resp.notFoundIDs.isNotEmpty || resp.productDetails.isEmpty) {
+      throw Exception('Product not found: $id');
+    }
+    return resp.productDetails.first;
+  }
+
+  Future<void> _onPurchaseUpdated(List<PurchaseDetails> list) async {
     for (final p in list) {
       switch (p.status) {
-        case PurchaseStatus.pending:
-          break;
-
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
-          await _verifyWithBackend(p);
-
-          if (p.pendingCompletePurchase) {
-            await _iap.completePurchase(p);
-          }
+          await _verifyAndDeliver(p);
           break;
-
         case PurchaseStatus.error:
-          if (p.pendingCompletePurchase) {
-            await _iap.completePurchase(p);
-          }
+          debugPrint('Purchase error: ${p.error}');
           break;
-
         case PurchaseStatus.canceled:
+        case PurchaseStatus.pending:
+          break;
+        default:
           break;
       }
-    }
-  }
-
-  Future<void> _verifyWithBackend(PurchaseDetails p) async {
-    final receipt = p.verificationData.serverVerificationData;
-    final store = Platform.isAndroid ? 'google_play' : 'app_store';
-    
-    final userId = await _getDeviceId();
-    
-    try {
-      final licenseKey = await _api.verifyIapAndGetLicense(
-        userId: userId,
-        receipt: receipt,
-        productId: p.productID,
-        store: store,
-        email: null,
-      );
-      
-      print('✅ IAP verified! License key: $licenseKey');
-      
-    } catch (e) {
-      print('❌ IAP verification failed: $e');
-      rethrow;
-    }
-  }
-
-  Future<String> _getDeviceId() async {
-    final deviceInfo = DeviceInfoPlugin();
-    if (Platform.isAndroid) {
-      final androidInfo = await deviceInfo.androidInfo;
-      return androidInfo.id;
-    } else {
-      final iosInfo = await deviceInfo.iosInfo;
-      return iosInfo.identifierForVendor ?? '';
-    }
-  }
-
-  Future<void> restorePurchases() async {
-    if (!_available) {
-      await init();
-      if (!_available) {
-        throw Exception('IAP not available on this device/store.');
+      if (p.pendingCompletePurchase) {
+        await _iap.completePurchase(p);
       }
     }
-    
-    try {
-      await _iap.restorePurchases();
-    } catch (e) {
-      if (kDebugMode) {
-        print('Failed to restore purchases: $e');
-      }
-      rethrow;
+    _purchaseInFlight = false;
+  }
+
+  Future<void> _verifyAndDeliver(PurchaseDetails p) async {
+    final productId = p.productID;
+    final token = (p.verificationData.serverVerificationData.isNotEmpty)
+        ? p.verificationData.serverVerificationData
+        : p.verificationData.localVerificationData;
+
+    final userId = await _deviceId(); // device_info_plus
+    final body = {
+      "user_id": userId,
+      "email": null,                  // or your signed-in email
+      "receipt": token,
+      "product_id": productId,
+      "store": Platform.isAndroid ? "google_play" : "app_store",
+    };
+
+    final res = await ApiService.post('/iap/verify', body); // your backend
+    if (!(res['success'] == true)) {
+      throw Exception('Server verification failed: ${res['message']}');
     }
+    // TODO: persist license key/tier locally for your UI
+  }
+
+  Future<String> _deviceId() async {
+    final info = await DeviceInfoPlugin().androidInfo;
+    return info.id ?? 'unknown';
   }
 }
