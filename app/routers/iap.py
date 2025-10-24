@@ -1,315 +1,256 @@
-# app/routers/iap.py
-"""
-Bridge IAP purchases to existing license system
-"""
+# app/routers/iap.py - COMPLETE FILE WITH GOOGLE PLAY VERIFICATION
+
 import os
-from datetime import datetime, timedelta
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+import json
+import secrets
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
 from sqlmodel import Session, select
-import requests
+from typing import Optional
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from starlette.background import BackgroundTask
-from fastapi.responses import JSONResponse
+from googleapiclient.errors import HttpError
+
 from ..db import get_session
-from ..models import License, LicenseTier
-from ..services.license import create_license, get_license_info
+from ..models import License
 
-router = APIRouter(prefix="/iap", tags=["In-App Purchases"])
-
+router = APIRouter(prefix="/iap", tags=["iap"])
 
 
 class IAPVerifyRequest(BaseModel):
-    user_id: str
-    email: Optional[str] = None
     receipt: str
+    store: str  # 'google_play' or 'app_store'
     product_id: str
-    store: str
+    user_id: Optional[str] = None
+    email: Optional[str] = None
 
-class IAPVerifyResponse(BaseModel):
-    success: bool
-    license_key: str
-    tier: str
-    tier_name: str
-    expires_at: Optional[str] = None
-    message: str
 
-@router.post("/verify", response_model=IAPVerifyResponse)
-async def verify_iap_receipt(
+def verify_google_play_receipt(receipt_token: str, product_id: str) -> dict:
+    """
+    Verify Google Play purchase receipt with Google's servers
+    """
+    try:
+        # Load service account credentials from environment variable
+        service_account_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON')
+        
+        if not service_account_json:
+            raise Exception("GOOGLE_SERVICE_ACCOUNT_JSON environment variable not set")
+        
+        print("📱 Loading Google service account from environment")
+        
+        # Parse JSON and create credentials
+        credentials_dict = json.loads(service_account_json)
+        credentials = service_account.Credentials.from_service_account_info(
+            credentials_dict,
+            scopes=['https://www.googleapis.com/auth/androidpublisher']
+        )
+        
+        # Build the API client
+        service = build('androidpublisher', 'v3', credentials=credentials)
+        print("✅ Google Play API client initialized")
+        
+        # Your package name from Google Play Console
+        package_name = "com.fourdgaming.clipnote"
+        
+        print(f"🔍 Verifying subscription: {product_id}")
+        print(f"📝 Token: {receipt_token[:20]}...")
+        
+        # Verify subscription with Google
+        result = service.purchases().subscriptions().get(
+            packageName=package_name,
+            subscriptionId=product_id,
+            token=receipt_token
+        ).execute()
+        
+        print(f"✅ Google Play verification successful!")
+        print(f"   Order ID: {result.get('orderId')}")
+        print(f"   Payment State: {result.get('paymentState')}")
+        print(f"   Auto-Renewing: {result.get('autoRenewing')}")
+        
+        # Check expiry
+        expiry_ms = int(result.get('expiryTimeMillis', 0))
+        expiry_date = datetime.fromtimestamp(expiry_ms / 1000) if expiry_ms else None
+        
+        if expiry_date:
+            is_active = expiry_date > datetime.utcnow()
+            print(f"   Expires: {expiry_date}")
+            print(f"   Active: {is_active}")
+        
+        # Acknowledge the purchase (required by Google within 3 days)
+        try:
+            service.purchases().subscriptions().acknowledge(
+                packageName=package_name,
+                subscriptionId=product_id,
+                token=receipt_token,
+                body={}
+            ).execute()
+            print("✅ Subscription acknowledged")
+        except HttpError as e:
+            if e.resp.status == 400:
+                print("ℹ️ Subscription already acknowledged")
+            else:
+                print(f"⚠️ Acknowledgment warning: {e}")
+        
+        return result
+        
+    except HttpError as e:
+        error_content = json.loads(e.content.decode('utf-8'))
+        error_msg = error_content.get('error', {}).get('message', str(e))
+        print(f"❌ Google Play API error: {error_msg}")
+        
+        if e.resp.status == 410:
+            raise Exception("Subscription has been canceled or refunded")
+        elif e.resp.status == 404:
+            raise Exception("Purchase not found - may not exist or is a sandbox purchase")
+        else:
+            raise Exception(f"Google Play verification failed: {error_msg}")
+    
+    except Exception as e:
+        print(f"❌ Verification error: {e}")
+        raise Exception(f"Receipt verification failed: {str(e)}")
+
+
+@router.post("/verify")
+async def verify_iap_purchase(
     request: IAPVerifyRequest,
     db: Session = Depends(get_session)
 ):
     """
-    Verify IAP receipt and create/update license
-    
-    Flow:
-    1. Verify receipt with Google Play or App Store
-    2. Determine tier from product_id
-    3. Create or update license in database
-    4. Return license key for app to use
+    Verify IAP purchase and issue/update license
     """
-    
     print(f"\n{'='*60}")
-    print(f"🔐 IAP VERIFICATION START")
+    print(f"🔐 IAP VERIFICATION REQUEST")
     print(f"{'='*60}")
-    print(f"User ID: {request.user_id}")
     print(f"Store: {request.store}")
     print(f"Product ID: {request.product_id}")
-    print(f"Email: {request.email}")
+    print(f"User ID: {request.user_id}")
+    print(f"Receipt length: {len(request.receipt)} bytes")
     
-    # Determine tier from product_id
-    if "starter" in request.product_id.lower():
-        tier = LicenseTier.STARTER
-    elif "pro" in request.product_id.lower() or "professional" in request.product_id.lower():
-        tier = LicenseTier.PROFESSIONAL
-    elif "business" in request.product_id.lower():
-        tier = LicenseTier.BUSINESS
-    else:
-        print(f"❌ Invalid product_id: {request.product_id}")
-        raise HTTPException(400, "Invalid product_id")
-    
-    print(f"✅ Tier determined: {tier.value}")
-    
-    # Verify receipt based on store
     try:
-        if request.store == "google_play":
-            print(f"🔍 Verifying with Google Play...")
-            verification_result = await _verify_google_play(
-                request.receipt,
-                request.product_id
+        # Step 1: Verify with store
+        if request.store == 'google_play':
+            print(f"\n📱 Verifying with Google Play...")
+            
+            # Call the verification function
+            verification_result = verify_google_play_receipt(
+                receipt_token=request.receipt,
+                product_id=request.product_id
             )
-        elif request.store == "app_store":
-            print(f"🔍 Verifying with App Store...")
-            verification_result = await _verify_app_store(
-                request.receipt,
-                request.product_id
+            
+            # Check payment state (1 = payment received)
+            payment_state = verification_result.get('paymentState')
+            if payment_state != 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Payment not confirmed by Google Play"
+                )
+            
+            order_id = verification_result.get('orderId')
+            print(f"✅ Verified! Order ID: {order_id}")
+            
+        elif request.store == 'app_store':
+            raise HTTPException(
+                status_code=400,
+                detail="App Store verification not yet implemented"
             )
         else:
-            raise HTTPException(400, "Invalid store. Must be 'google_play' or 'app_store'")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid store: {request.store}"
+            )
         
-        if not verification_result["valid"]:
-            print(f"❌ Receipt verification failed: {verification_result['error']}")
-            raise HTTPException(400, f"Receipt verification failed: {verification_result['error']}")
+        # Step 2: Map product ID to tier
+        tier_mapping = {
+            'com.clipnote.starter.monthly': 'starter',
+            'clipnote_pro_monthly': 'pro',
+            'clipnote_business_monthly': 'business',
+        }
         
-        print(f"✅ Receipt verified successfully")
-        print(f"   Expires at: {verification_result.get('expires_at')}")
+        tier = tier_mapping.get(request.product_id, 'free')
+        print(f"📊 Mapped to tier: {tier}")
         
-    except Exception as e:
-        print(f"❌ Verification error: {e}")
-        raise
-    
-    # Get or create license
-    try:
-        # Use email if provided, otherwise use user_id
-        license_email = request.email or f"{request.user_id}@app.clipnote.ai"
+        # Step 3: Find or create license
+        license_key = None
         
-        print(f"\n📋 Checking for existing license...")
-        print(f"   Email: {license_email}")
-        print(f"   Tier: {tier.value}")
+        # Try to find existing license by user_id
+        if request.user_id:
+            existing = db.exec(
+                select(License).where(License.device_id == request.user_id)
+            ).first()
+            if existing:
+                license_key = existing.license_key
+                print(f"📝 Found existing license for user")
         
-        # Check if license already exists for this email/tier
-        stmt = select(License).where(
-            License.email == license_email,
-            License.tier == tier.value
-        ).order_by(License.created_at.desc())
+        # Try to find by email if provided
+        if not license_key and request.email:
+            existing = db.exec(
+                select(License).where(License.email == request.email)
+            ).first()
+            if existing:
+                license_key = existing.license_key
+                print(f"📝 Found existing license for email")
         
-        existing_license = db.exec(stmt).first()
+        # Generate new license key if none found
+        if not license_key:
+            license_key = f"lic_{secrets.token_urlsafe(32)}"
+            print(f"🆕 Generated new license key")
         
-        if existing_license and existing_license.is_active:
-            print(f"✅ Found existing license: {existing_license.license_key}")
-            print(f"   Updating expiry and IAP token...")
-            
-            # Update existing license
-            existing_license.expires_at = verification_result.get("expires_at")
-            existing_license.iap_purchase_token = request.receipt
-            existing_license.updated_at = datetime.utcnow()
-            db.add(existing_license)
-            db.commit()
-            db.refresh(existing_license)
-            license = existing_license
+        # Step 4: Update or create license in database
+        license_obj = db.exec(
+            select(License).where(License.license_key == license_key)
+        ).first()
+        
+        if license_obj:
+            print(f"📝 Updating existing license to tier: {tier}")
+            license_obj.tier = tier
+            license_obj.device_id = request.user_id
+            if request.email:
+                license_obj.email = request.email
+            license_obj.iap_receipt = request.receipt
+            license_obj.iap_product_id = request.product_id
+            license_obj.iap_store = request.store
         else:
-            print(f"✅ Creating new license...")
-            
-            # Create new license
-            license = create_license(
-                session=db,
-                email=license_email,
+            print(f"🆕 Creating new license with tier: {tier}")
+            license_obj = License(
+                license_key=license_key,
                 tier=tier,
-                iap_purchase_token=request.receipt
+                device_id=request.user_id,
+                email=request.email,
+                iap_receipt=request.receipt,
+                iap_product_id=request.product_id,
+                iap_store=request.store,
             )
-            license.expires_at = verification_result.get("expires_at")
-            db.add(license)
-            db.commit()
-            db.refresh(license)
+            db.add(license_obj)
         
-        print(f"\n✅ License saved to database")
-        print(f"   Key: {license.license_key[:20]}...")
-        print(f"   Tier: {license.tier}")
-        print(f"   Email: {license.email}")
-        print(f"   Active: {license.is_active}")
-        print(f"   Expires: {license.expires_at}")
-        
-        # Get full license info
-        license_info = get_license_info(db, license.license_key)
+        db.commit()
+        db.refresh(license_obj)
         
         print(f"\n{'='*60}")
-        print(f"🎉 IAP VERIFICATION SUCCESS")
+        print(f"✅ IAP VERIFICATION COMPLETE")
         print(f"{'='*60}")
-        print(f"License Key: {license.license_key[:20]}...")
-        print(f"Tier: {license_info['tier_name']}")
-        print(f"Expires: {license.expires_at}")
-        
-        response = IAPVerifyResponse(
-            success=True,
-            license_key=license.license_key,
-            tier=license.tier,
-            tier_name=license_info["tier_name"],
-            expires_at=license.expires_at.isoformat() if license.expires_at else None,
-            message=f"Subscription verified: {license_info['tier_name']}"
-        )
-        
-        print(f"\n📤 Returning response: {response.dict()}\n")
-        return response
-        
-    except Exception as e:
-        print(f"❌ License creation/update error: {e}")
-        raise HTTPException(500, f"Failed to save license: {str(e)}")
-
-
-async def _verify_google_play(purchase_token: str, product_id: str) -> dict:
-    """Verify Google Play subscription"""
-    try:
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-        
-        # Load service account credentials
-        creds_path = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
-        if not creds_path:
-            print("❌ GOOGLE_SERVICE_ACCOUNT_JSON not configured")
-            return {"valid": False, "error": "Google service account not configured"}
-        
-        print(f"   Loading credentials from: {creds_path}")
-        credentials = service_account.Credentials.from_service_account_file(
-            creds_path,
-            scopes=["https://www.googleapis.com/auth/androidpublisher"]
-        )
-        
-        # Build API client
-        service = build('androidpublisher', 'v3', credentials=credentials)
-        
-        package_name = os.getenv("ANDROID_PACKAGE_NAME", "com.fourdgaming.clipnote")
-        print(f"   Package: {package_name}")
-        print(f"   Product ID: {product_id}")
-        print(f"   Token: {purchase_token[:20]}...")
-        
-        # Verify subscription
-        result = service.purchases().subscriptions().get(
-            packageName=package_name,
-            subscriptionId=product_id,
-            token=purchase_token
-        ).execute()
-        
-        print(f"   ✅ Google Play API response: {result}")
-        
-        # Check if subscription is active
-        expiry_ms = int(result.get('expiryTimeMillis', 0))
-        expiry_date = datetime.fromtimestamp(expiry_ms / 1000) if expiry_ms else None
-        is_active = expiry_date > datetime.utcnow() if expiry_date else False
-        
-        print(f"   Expiry: {expiry_date}")
-        print(f"   Is active: {is_active}")
+        print(f"License Key: {license_key[:20]}...")
+        print(f"Tier: {tier}")
+        print(f"User ID: {request.user_id}")
+        print(f"{'='*60}\n")
         
         return {
-            "valid": is_active,
-            "expires_at": expiry_date,
-            "error": None if is_active else "Subscription expired"
+            "license_key": license_key,
+            "tier": tier,
+            "message": "Purchase verified successfully"
         }
         
+    except HTTPException:
+        raise
+    
     except Exception as e:
-        print(f"   ❌ Google Play verification error: {e}")
-        return {"valid": False, "error": str(e)}
-
-
-async def _verify_app_store(receipt_data: str, product_id: str) -> dict:
-    """Verify App Store subscription"""
-    try:
-        import requests
+        print(f"\n{'='*60}")
+        print(f"❌ IAP VERIFICATION FAILED")
+        print(f"{'='*60}")
+        print(f"Error: {str(e)}")
+        print(f"{'='*60}\n")
         
-        # Apple verification endpoint
-        url = "https://buy.itunes.apple.com/verifyReceipt"
-        
-        payload = {
-            "receipt-data": receipt_data,
-            "password": os.getenv("APPLE_SHARED_SECRET"),
-            "exclude-old-transactions": True
-        }
-        
-        print(f"   Sending to: {url}")
-        response = requests.post(url, json=payload, timeout=30)
-        result = response.json()
-        
-        print(f"   Apple response status: {result.get('status')}")
-        
-        # If production fails with 21007, try sandbox
-        if result.get("status") == 21007:
-            print(f"   Trying sandbox...")
-            url = "https://sandbox.itunes.apple.com/verifyReceipt"
-            response = requests.post(url, json=payload, timeout=30)
-            result = response.json()
-        
-        if result.get("status") == 0:
-            # Find the subscription
-            latest_info = result.get("latest_receipt_info", [])
-            print(f"   Found {len(latest_info)} transactions")
-            
-            for item in latest_info:
-                if item["product_id"] == product_id:
-                    expiry_ms = int(item["expires_date_ms"])
-                    expiry_date = datetime.fromtimestamp(expiry_ms / 1000)
-                    is_active = expiry_date > datetime.utcnow()
-                    
-                    print(f"   Product found: {product_id}")
-                    print(f"   Expires: {expiry_date}")
-                    print(f"   Is active: {is_active}")
-                    
-                    return {
-                        "valid": is_active,
-                        "expires_at": expiry_date,
-                        "error": None if is_active else "Subscription expired"
-                    }
-            
-            print(f"   ❌ Product not found in receipt: {product_id}")
-            return {"valid": False, "error": "Product not found in receipt"}
-        else:
-            print(f"   ❌ Apple verification failed: {result.get('status')}")
-            return {"valid": False, "error": f"Apple verification failed: {result.get('status')}"}
-            
-    except Exception as e:
-        print(f"   ❌ App Store verification error: {e}")
-        return {"valid": False, "error": str(e)}
-
-
-@router.get("/subscription-status/{license_key}")
-async def get_subscription_status(
-    license_key: str,
-    db: Session = Depends(get_session)
-):
-    """Get subscription status for a license"""
-    
-    license_info = get_license_info(db, license_key)
-    
-    if not license_info["valid"]:
-        raise HTTPException(404, "License not found")
-    
-    return {
-        "license_key": license_key,
-        "tier": license_info["tier"],
-        "tier_name": license_info["tier_name"],
-        "is_active": license_info["is_active"],
-        "expires_at": license_info.get("expires_at"),
-        "meetings_used": license_info["meetings_used"],
-        "meetings_limit": license_info["meetings_limit"],
-        "has_quota": license_info["has_quota"]
-    }
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
