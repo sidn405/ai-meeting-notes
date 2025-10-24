@@ -204,6 +204,18 @@ class IapService {
 
           case PurchaseStatus.error:
             debugPrint('[IapService] ❌ Purchase error: ${p.error?.message ?? "Unknown error"}');
+            
+            // ✅ CRITICAL FIX: Handle "itemAlreadyOwned" by restoring purchases
+            if (p.error?.code == 'BillingResponse.itemAlreadyOwned') {
+              debugPrint('[IapService] 🔄 Item already owned - attempting to restore...');
+              try {
+                await restorePurchases();
+                debugPrint('[IapService] ✅ Restore triggered successfully');
+              } catch (e) {
+                debugPrint('[IapService] ❌ Restore failed: $e');
+              }
+            }
+            
             if (p.pendingCompletePurchase) {
               await _iap.completePurchase(p);
             }
