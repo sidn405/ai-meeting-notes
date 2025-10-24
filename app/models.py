@@ -19,7 +19,7 @@ class LicenseTier(str, enum.Enum):
 
 # License Model
 class License(SQLModel, table=True):
-    __tablename__ = "licenses"
+    __tablename__ = "license"
     
     id: Optional[int] = Field(default=None, primary_key=True)
     license_key: str = Field(unique=True, index=True)
@@ -109,21 +109,24 @@ class Meeting(SQLModel, table=True):
     # Legacy support
     gumroad_order_id: Optional[str] = Field(default=None, max_length=128)
     
-# License Usage Model
-class LicenseUsage(SQLModel, table=True):
-    __tablename__ = "license_usage"
+# License Model
+class License(SQLModel, table=True):
+    __tablename__ = "license"  # CHANGED: was "licenses" (plural), now "license" (singular)
     
     id: Optional[int] = Field(default=None, primary_key=True)
-    license_key: str = Field(index=True)
+    license_key: str = Field(unique=True, index=True)
+    tier: str  # Will store LicenseTier enum values
+    email: str
     
-    # Monthly usage tracking
-    year: int
-    month: int
-    meetings_used: int = Field(default=0)
+    # Status
+    is_active: bool = Field(default=True)
+    device_id: Optional[str] = Field(default=None, index=True)  # For app installs
+    activated_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    
+    # Gumroad integration
+    gumroad_order_id: Optional[str] = Field(default=None, unique=True)
+    
+    # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    
-    class Config:
-        #Ensure one usage record per license per month
-        table_args = (
-            {'sqlite_autoincrement': True},
-        )
+    updated_at: Optional[datetime] = None
