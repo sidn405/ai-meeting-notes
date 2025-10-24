@@ -6,7 +6,6 @@ import os
 from fastapi.responses import HTMLResponse
 from .services.branding import render_meeting_notes_email_html
 from pathlib import Path
-from .routers import meetings, health, auth, license
 from app.routers.storage_b2 import router as storage_router
 from dotenv import load_dotenv
 from app.routers import iap
@@ -28,12 +27,17 @@ app.add_middleware(
 )
 
 init_db()
+
+from .routers import meetings, health, auth, license
 # Include license router
 app.include_router(license.router)
 app.include_router(storage_router)
 app.include_router(uploads_router)
 app.include_router(meeting_router)
 app.include_router(iap.router)
+app.include_router(health.router)
+app.include_router(auth.router)
+app.include_router(meetings.router)
 
 @app.get("/healthz")
 def healthz():
