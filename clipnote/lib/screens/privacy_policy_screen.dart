@@ -61,9 +61,9 @@ class PrivacyPolicyScreen extends StatelessWidget {
             ),
             
             _buildSection(
-              icon: Icons.videocam,
-              title: 'Camera Permission',
-              description: 'Our app requests camera permission to record video during meetings (optional). '
+              //icon: Icons.videocam,
+              //title: 'Camera Permission',
+                  'Our app requests camera permission to record video during meetings (optional). '
                   'You can use ClipNote without granting camera access. Core audio recording and '
                   'transcription features work independently of camera permissions.',
             ),
