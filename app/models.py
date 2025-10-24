@@ -21,6 +21,9 @@ class LicenseTier(str, enum.Enum):
 class License(SQLModel, table=True):
     __tablename__ = "license"
     
+    class Config:
+        extend_existing = True
+    
     id: Optional[int] = Field(default=None, primary_key=True)
     license_key: str = Field(unique=True, index=True)
     tier: str  # Will store LicenseTier enum values
