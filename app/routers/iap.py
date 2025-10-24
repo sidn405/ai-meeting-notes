@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 import requests
 from google.oauth2 import service_account
@@ -21,11 +21,14 @@ router = APIRouter(prefix="/iap", tags=["In-App Purchases"])
 
 
 class IAPVerifyRequest(BaseModel):
-    user_id: str  # Device ID or user identifier
+    user_id: str
     email: Optional[str] = None
-    receipt: str  # Purchase token (Android) or receipt data (iOS)
-    product_id: str  # com_clipnote_pro.monthly or com.clipnote.business.monthly
-    store: str  # "google_play" or "app_store"
+    receipt: str = Field(alias="receipt_data")  # Accept both names
+    product_id: str
+    store: str
+    
+    class Config:
+        populate_by_name = True  # Allow both 'receipt' and 'receipt_data'
 
 
 class IAPVerifyResponse(BaseModel):
