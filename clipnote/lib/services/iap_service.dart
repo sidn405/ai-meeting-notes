@@ -10,8 +10,8 @@ import 'api_service.dart';
 
 /// Store product IDs
 const kStarterMonthlyId  = 'com.clipnote.starter.monthly';
-const kProMonthlyId      = 'clipnote.pro.monthly';
-const kBusinessMonthlyId = 'clipnote.business.monthly';
+const kProMonthlyId      = 'clipnote_pro_monthly';
+const kBusinessMonthlyId = 'clipnote_business_monthly';
 
 class IapService {
   IapService._internal();
@@ -87,6 +87,10 @@ class IapService {
         final resp = await _iap.queryProductDetails({
           kStarterMonthlyId, kProMonthlyId, kBusinessMonthlyId
         });
+        // Helpful debug:
+        if (kDebugMode && resp.notFoundIDs.isNotEmpty) {
+          debugPrint('IAP notFoundIDs: ${resp.notFoundIDs}');
+        }
         if (resp.notFoundIDs.contains(productId)) {
           throw Exception('Product $productId not found. Check store configuration.');
         }
@@ -105,14 +109,24 @@ class IapService {
 
       final param = PurchaseParam(productDetails: product);
       final ok = await _iap.buyNonConsumable(purchaseParam: param);
-      if (!ok) return 'failed_to_start';
+
+      if (!ok) {
+        // <-- IMPORTANT: clear busy if Play didn’t start the flow
+        _purchaseInFlight = false;
+        return 'failed_to_start';
+      }
       return 'pending';
-    } catch (_) {
-      // Let UI surface specific messages if desired
+    } catch (e) {
+      // Clear on exception too
+      _purchaseInFlight = false;
       rethrow;
+    } finally {
+      // When a real purchase update arrives we’ll clear again; harmless if already false.
+      // This guarantees the button isn’t left disabled in edge cases.
+      _purchaseInFlight = false;
     }
-    // NOTE: we clear _purchaseInFlight in _onPurchaseUpdates after the stream event arrives
   }
+
 
   Future<void> restorePurchases() async {
     await init();
