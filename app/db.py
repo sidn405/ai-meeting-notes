@@ -1,7 +1,7 @@
 # app/db.py
 import os
 from sqlmodel import SQLModel, create_engine, Session
-from .models import License, LicenseUsage
+#from .models import License, LicenseUsage
 from sqlalchemy import text
 from pathlib import Path
 
@@ -67,6 +67,7 @@ def ensure_meeting_progress_columns():
 # ========== END NEW ==========
 
 def init_db():
+    from .models import License, LicenseUsage, Meeting  # Import here to register models
     SQLModel.metadata.create_all(_engine)
     ensure_meeting_progress_columns()
 
