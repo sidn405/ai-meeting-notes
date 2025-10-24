@@ -714,15 +714,13 @@ async def email_meeting(
     Expected payload:
     {
         "meeting_id": int,
-        "email": str,
-        "include_transcript": bool (optional, default True),
-        "include_summary": bool (optional, default True)
+        "email": str
+        
     }
     """
     meeting_id = payload.get('meeting_id')
     email = payload.get('email')
-    include_transcript = payload.get('include_transcript', True)
-    include_summary = payload.get('include_summary', True)
+    
     
     if not meeting_id or not email:
         raise HTTPException(400, "meeting_id and email are required")
@@ -738,26 +736,13 @@ async def email_meeting(
     if not meeting:
         raise HTTPException(404, "Meeting not found")
     
-    # Prepare content
-    content = {
-        'title': meeting.title,
-        'meeting_id': meeting.id,
-    }
+    # Verify meeting has a summary
+    if not meeting.summary_path or not Path(meeting.summary_path).exists():
+        raise HTTPException(404, "Meeting summary not found. Ensure the meeting has been processed.")
     
-    if include_transcript and meeting.transcript_path and Path(meeting.transcript_path).exists():
-        content['transcript'] = Path(meeting.transcript_path).read_text(encoding="utf-8")
-    
-    if include_summary and meeting.summary_path and Path(meeting.summary_path).exists():
-        summary_text = Path(meeting.summary_path).read_text(encoding="utf-8")
-        content['summary'] = json.loads(summary_text)
-    
-    # Send email in background
+    # Queue email in background using lambda to wrap the call
     background_tasks.add_task(
-        send_summary_email,
-        email,
-        meeting.title,
-        content.get('transcript', ''),
-        content.get('summary', {})
+        lambda: send_summary_email(meeting_id, email)
     )
     
     return {
