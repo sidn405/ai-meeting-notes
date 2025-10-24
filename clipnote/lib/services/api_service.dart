@@ -186,6 +186,36 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
     
     // Set timeout and send
     final streamedResponse = await request.send().timeout(
+      const Duration(seconds: 30),
+      onTimeout: () {
+        throw Exception('Request timeout after 30 seconds');
+      },
+    );
+    
+    final response = await http.Response.fromStream(streamedResponse);
+    
+    print('[ApiService] Response status: ${response.statusCode}');
+    print('[ApiService] Response headers: ${response.headers}');
+    print('[ApiService] Response body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final licenseKey = data['license_key'];
+      print('[ApiService] ✅ Free tier license received: ${licenseKey.substring(0, 8)}...');
+      return licenseKey;
+    } else {
+      print('[ApiService] ❌ Error generating license: ${response.statusCode} - ${response.body}');
+      return null;
+    }
+  } catch (e) {
+    print('[ApiService] ❌ Network error generating license: $e');
+    print('[ApiService] Error type: ${e.runtimeType}');
+    return null;
+  }
+}
+    
+    // Set timeout and send
+    final streamedResponse = await request.send().timeout(
       const Duration(seconds: 10),
       onTimeout: () {
         throw Exception('Request timeout after 10 seconds');
