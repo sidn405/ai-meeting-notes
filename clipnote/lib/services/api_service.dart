@@ -520,35 +520,40 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
     try {
       print('[ApiService] ⬇️ Preparing download for meeting $meetingId, type: $type');
       
-      // Construct the download URL
+      // Construct the download URL with type as query parameter
       final downloadUrl = '$baseUrl/meetings/$meetingId/download?type=$type';
       print('[ApiService] ⬇️ Download URL: $downloadUrl');
       
-      // Verify the file exists by making a HEAD request first (optional)
-      try {
-        final headResponse = await http.head(
-          Uri.parse(downloadUrl),
-          headers: _getHeaders(),
-        ).timeout(const Duration(seconds: 10));
-        
-        if (headResponse.statusCode != 200) {
-          throw Exception('File not found: ${headResponse.statusCode}');
-        }
-        print('[ApiService] ✅ File exists, ready for download');
-      } catch (e) {
-        print('[ApiService] ⚠️ Could not verify file: $e (will attempt download anyway)');
-      }
+      // Don't verify with HEAD - just return the URL
+      // The browser will handle 404s when the user tries to open it
       
       return {
-        'filename': '${type}_$meetingId.txt',
+        'filename': _getFilenameForType(type, meetingId),
         'download_url': downloadUrl,
         'success': true,
+        'type': type,
       };
     } catch (e) {
       print('[ApiService] ❌ Error preparing download: $e');
       rethrow;
     }
   }
+
+/// Helper to generate appropriate filename based on type
+String _getFilenameForType(String type, int meetingId) {
+  switch (type.toLowerCase()) {
+    case 'transcript':
+      return 'meeting_${meetingId}_transcript.txt';
+    case 'summary':
+      return 'meeting_${meetingId}_summary.txt';
+    case 'pdf':
+      return 'meeting_${meetingId}_report.pdf';
+    case 'all':
+      return 'meeting_${meetingId}_files.zip';
+    default:
+      return 'meeting_${meetingId}_download.txt';
+  }
+}
 
   /// Get meeting statistics
   Future<Map<String, dynamic>> getMeetingStats() async {
