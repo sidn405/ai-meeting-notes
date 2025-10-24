@@ -14,7 +14,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with RouteAware {
-  final _iapService = IapService();
+  late final IapService _iapService;
   final _api = ApiService.I;
   
   Map<String, dynamic>? _licenseInfo;
@@ -24,6 +24,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   @override
   void initState() {
     super.initState();
+    _iapService = IapService();
     _initIAP();
     _initializeLicenseAndLoadData();
   }
