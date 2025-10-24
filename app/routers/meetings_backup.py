@@ -177,7 +177,82 @@ async def upload_meeting(
         "file_size_mb": round(file_size / (1024 * 1024), 2),
         "language": language or "auto-detect",
     }
-
+    
+@router.get("/stats")
+def get_meeting_stats(
+    license_info: tuple = Depends(optional_license),
+    db: Session = Depends(get_session),
+):
+    """
+    Get meeting statistics for the current user
+    Returns counts of total, completed, processing, and current month meetings
+    """
+    license, tier_config = license_info
+    
+    # For now, return global stats (in production, filter by user/license)
+    from datetime import datetime
+    from sqlmodel import func
+    
+    total_meetings = db.exec(
+        select(func.count(Meeting.id))
+    ).one()
+    
+    completed_meetings = db.exec(
+        select(func.count(Meeting.id)).where(Meeting.status == "delivered")
+    ).one()
+    
+    processing_meetings = db.exec(
+        select(func.count(Meeting.id)).where(
+            (Meeting.status == "processing") | (Meeting.status == "queued")
+        )
+    ).one()
+    
+    # Meetings this month
+    now = datetime.now()
+    first_day_of_month = datetime(now.year, now.month, 1)
+    
+    meetings_this_month = db.exec(
+        select(func.count(Meeting.id)).where(
+            Meeting.created_at >= first_day_of_month
+        )
+    ).one()
+    
+    return {
+        "total_meetings": total_meetings,
+        "completed": completed_meetings,
+        "processing": processing_meetings,
+        "meetings_this_month": meetings_this_month,
+        "current_month": now.strftime("%B %Y"),
+    }
+    
+@router.get("/list")
+def list_meetings():
+    """Get all meetings ordered by creation date (newest first)"""
+    try:
+        with get_session() as s:
+            meetings = s.exec(
+                select(Meeting).order_by(Meeting.created_at.desc())
+            ).all()
+            return meetings
+    except Exception as e:
+        print(f"Error fetching meetings: {e}")
+        raise HTTPException(500, f"Failed to fetch meetings: {str(e)}")
+    
+@router.get("/{meeting_id}/status")
+def meeting_status(meeting_id: int):
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m:
+            raise HTTPException(404, "Not found")
+        return {
+            "id": m.id,
+            "title": m.title,
+            "status": m.status,
+            "progress": m.progress or 0,
+            "step": m.step,
+            "has_summary": bool(m.summary_path),
+            "has_transcript": bool(m.transcript_path),
+        }
 
 @router.post("/from-text")
 async def create_from_text(
@@ -218,7 +293,6 @@ async def create_from_text(
         m = s.get(Meeting, mid)
         return {"id": m.id, "status": m.status}
 
-
 @router.post("/from-text-sync")
 async def create_from_text_sync(
     title: str = Form(...),
@@ -229,7 +303,6 @@ async def create_from_text_sync(
 ):
     """Alias for from-text (already synchronous)"""
     return await create_from_text(title, transcript, email_to, license_info, db)
-
 
 @router.post("/transcribe-only")
 async def transcribe_only(
@@ -270,7 +343,6 @@ async def transcribe_only(
         "status": "delivered",
         "message": "Transcript saved successfully"
     }
-
 
 @router.post("/upload-transcribe-only")
 async def upload_transcribe_only(
@@ -340,7 +412,6 @@ async def upload_transcribe_only(
         "mode": "transcribe_only"
     }
 
-
 @router.post("/upload-transcribe-summarize")
 async def upload_transcribe_summarize(
     background_tasks: BackgroundTasks,
@@ -409,7 +480,6 @@ async def upload_transcribe_summarize(
         "mode": "transcribe_and_summarize"
     }
 
-
 @router.post("/create-from-url")
 async def create_from_url(
     background_tasks: BackgroundTasks,
@@ -475,7 +545,6 @@ async def create_from_url(
         "status": "queued",
         "file_size_mb": round(file_size / (1024 * 1024), 2),
     }
-
 
 @router.post("/create-from-url-transcribe-only")
 async def create_from_url_transcribe_only(
@@ -543,21 +612,6 @@ async def create_from_url_transcribe_only(
         "mode": "transcribe_only"
     }
 
-
-@router.get("/list")
-def list_meetings():
-    """Get all meetings ordered by creation date (newest first)"""
-    try:
-        with get_session() as s:
-            meetings = s.exec(
-                select(Meeting).order_by(Meeting.created_at.desc())
-            ).all()
-            return meetings
-    except Exception as e:
-        print(f"Error fetching meetings: {e}")
-        raise HTTPException(500, f"Failed to fetch meetings: {str(e)}")
-
-
 @router.get("/{meeting_id}")
 def get_meeting(meeting_id: int):
     """Get meeting details"""
@@ -581,7 +635,6 @@ def download_transcript(meeting_id: int):
             filename=Path(m.transcript_path).name
         )
 
-
 @router.get("/{meeting_id}/download/summary")
 def download_summary(meeting_id: int):
     """Download meeting summary (as file attachment)"""
@@ -595,7 +648,6 @@ def download_summary(meeting_id: int):
             filename=Path(m.summary_path).name
         )
 
-
 @router.get("/{meeting_id}/summary")
 def get_summary(meeting_id: int):
     """Get meeting summary as JSON (for reading, not downloading)"""
@@ -606,24 +658,6 @@ def get_summary(meeting_id: int):
         
         summary_text = Path(m.summary_path).read_text(encoding="utf-8")
         return json.loads(summary_text)
-
-
-@router.get("/{meeting_id}/status")
-def meeting_status(meeting_id: int):
-    with get_session() as s:
-        m = s.get(Meeting, meeting_id)
-        if not m:
-            raise HTTPException(404, "Not found")
-        return {
-            "id": m.id,
-            "title": m.title,
-            "status": m.status,
-            "progress": m.progress or 0,
-            "step": m.step,
-            "has_summary": bool(m.summary_path),
-            "has_transcript": bool(m.transcript_path),
-        }
-
 
 @router.delete("/{meeting_id}")
 def delete_meeting(meeting_id: int):
@@ -645,3 +679,204 @@ def delete_meeting(meeting_id: int):
         s.commit()
         
         return {"success": True, "message": "Meeting deleted"}
+    
+# Add these endpoints to your meetings.py file
+
+@router.get("/{meeting_id}/transcript")
+def get_transcript(meeting_id: int):
+    """Get meeting transcript as JSON (for reading, not downloading)"""
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        if not (m.transcript_path and Path(m.transcript_path).exists()):
+            raise HTTPException(status_code=404, detail="Transcript not found")
+        
+        transcript_text = Path(m.transcript_path).read_text(encoding="utf-8")
+        
+        return {
+            "transcript": transcript_text,
+            "title": m.title,
+            "meeting_id": m.id,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        }
+
+@router.post("/email")
+async def email_meeting(
+    payload: dict,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_session),
+):
+    """
+    Email meeting content (transcript and/or summary) to a specified address
+    
+    Expected payload:
+    {
+        "meeting_id": int,
+        "email": str,
+        "include_transcript": bool (optional, default True),
+        "include_summary": bool (optional, default True)
+    }
+    """
+    meeting_id = payload.get('meeting_id')
+    email = payload.get('email')
+    include_transcript = payload.get('include_transcript', True)
+    include_summary = payload.get('include_summary', True)
+    
+    if not meeting_id or not email:
+        raise HTTPException(400, "meeting_id and email are required")
+    
+    # Validate email format
+    import re
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, email):
+        raise HTTPException(400, "Invalid email format")
+    
+    # Get meeting
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+    
+    # Prepare content
+    content = {
+        'title': meeting.title,
+        'meeting_id': meeting.id,
+    }
+    
+    if include_transcript and meeting.transcript_path and Path(meeting.transcript_path).exists():
+        content['transcript'] = Path(meeting.transcript_path).read_text(encoding="utf-8")
+    
+    if include_summary and meeting.summary_path and Path(meeting.summary_path).exists():
+        summary_text = Path(meeting.summary_path).read_text(encoding="utf-8")
+        content['summary'] = json.loads(summary_text)
+    
+    # Send email in background
+    background_tasks.add_task(
+        send_summary_email,
+        email,
+        meeting.title,
+        content.get('transcript', ''),
+        content.get('summary', {})
+    )
+    
+    return {
+        "success": True,
+        "message": f"Email will be sent to {email}",
+        "meeting_id": meeting_id
+    }
+
+@router.get("/{meeting_id}/download")
+def download_meeting_file(meeting_id: int, type: str):
+    """
+    Unified download endpoint for different file types
+    
+    Query params:
+        type: 'transcript' | 'summary' | 'pdf' | 'all'
+    """
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        if type == "transcript":
+            if not (m.transcript_path and Path(m.transcript_path).exists()):
+                raise HTTPException(status_code=404, detail="Transcript not found")
+            return FileResponse(
+                m.transcript_path,
+                media_type="text/plain",
+                filename=f"{m.title}_transcript.txt",
+                headers={"Content-Disposition": f'attachment; filename="{m.title}_transcript.txt"'}
+            )
+        
+        elif type == "summary":
+            if not (m.summary_path and Path(m.summary_path).exists()):
+                raise HTTPException(status_code=404, detail="Summary not found")
+            
+            # Convert JSON summary to readable text format
+            summary_json = json.loads(Path(m.summary_path).read_text(encoding="utf-8"))
+            
+            # Format as text
+            text_summary = f"MEETING SUMMARY: {m.title}\n"
+            text_summary += "=" * 60 + "\n\n"
+            
+            if "executive_summary" in summary_json:
+                text_summary += "EXECUTIVE SUMMARY:\n"
+                text_summary += summary_json["executive_summary"] + "\n\n"
+            
+            if "key_decisions" in summary_json and summary_json["key_decisions"]:
+                text_summary += "KEY DECISIONS:\n"
+                for i, decision in enumerate(summary_json["key_decisions"], 1):
+                    text_summary += f"{i}. {decision}\n"
+                text_summary += "\n"
+            
+            if "action_items" in summary_json and summary_json["action_items"]:
+                text_summary += "ACTION ITEMS:\n"
+                for item in summary_json["action_items"]:
+                    task = item.get("task", "")
+                    owner = item.get("owner", "")
+                    priority = item.get("priority", "")
+                    text_summary += f"• {task}\n"
+                    if owner:
+                        text_summary += f"  Owner: {owner}\n"
+                    if priority:
+                        text_summary += f"  Priority: {priority}\n"
+                    text_summary += "\n"
+            
+            # Save as temporary text file
+            temp_path = DATA_DIR / f"{m.title}_summary.txt"
+            temp_path.write_text(text_summary, encoding="utf-8")
+            
+            return FileResponse(
+                str(temp_path),
+                media_type="text/plain",
+                filename=f"{m.title}_summary.txt",
+                headers={"Content-Disposition": f'attachment; filename="{m.title}_summary.txt"'}
+            )
+        
+        elif type == "pdf":
+            # PDF generation placeholder
+            # You would need to implement PDF generation here
+            # For now, return a message
+            raise HTTPException(
+                status_code=501,
+                detail="PDF generation not yet implemented. Use 'transcript' or 'summary' type."
+            )
+        
+        elif type == "all":
+            # Create a zip file with all available files
+            import zipfile
+            import io
+            
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                if m.transcript_path and Path(m.transcript_path).exists():
+                    zip_file.write(
+                        m.transcript_path, 
+                        arcname=f"{m.title}_transcript.txt"
+                    )
+                
+                if m.summary_path and Path(m.summary_path).exists():
+                    zip_file.write(
+                        m.summary_path, 
+                        arcname=f"{m.title}_summary.json"
+                    )
+            
+            zip_buffer.seek(0)
+            
+            from fastapi.responses import StreamingResponse
+            return StreamingResponse(
+                iter([zip_buffer.getvalue()]),
+                media_type="application/zip",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{m.title}_meeting_files.zip"'
+                }
+            )
+        
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid type. Must be 'transcript', 'summary', 'pdf', or 'all'"
+            )
+            
+

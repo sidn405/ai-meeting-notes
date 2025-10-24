@@ -1,13 +1,15 @@
 from fastapi import FastAPI, Request
 from .security import COOKIE_NAME
 from fastapi.middleware.cors import CORSMiddleware
-from app.db import init_db
+from app.db import init_db, DATA_DIR, get_session
 import os
 from fastapi.responses import HTMLResponse
 from .services.branding import render_meeting_notes_email_html
 from pathlib import Path
 from dotenv import load_dotenv
+from sqlmodel import select, Session
 
+from app.models import Meeting
 import warnings
 warnings.filterwarnings("ignore", message="Field .* has conflict with protected namespace 'model_'")
 
@@ -24,6 +26,18 @@ app.add_middleware(
 )
 
 init_db()
+
+# ✅ Run path verification on startup
+@app.on_event("startup")
+async def startup_event():
+    """Run verification on startup to fix any broken file paths"""
+    print("🚀 Application starting up...")
+    try:
+        verify_and_fix_meeting_paths()
+    except Exception as e:
+        print(f"⚠️ Warning: Path verification failed: {e}")
+        print("Continuing with startup anyway...")
+    print("✅ Startup complete\n")
 
 from .routers import meetings, health, auth, license
 from app.routers.storage_b2 import router as storage_router
@@ -45,6 +59,79 @@ app.include_router(admin.router)
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
+  
+def verify_and_fix_meeting_paths():
+    """
+    On startup, check if stored file paths are valid
+    If not, try to find the files in the new persistent directory
+    """
+    print(f"\n{'='*60}")
+    print(f"🔍 STARTUP: Checking meeting file paths")
+    print(f"{'='*60}")
+    print(f"Data directory: {DATA_DIR}\n")
+    
+    with get_session() as db:
+        # Get all meetings with files
+        meetings = db.exec(select(Meeting)).all()
+        
+        if not meetings:
+            print("ℹ️ No meetings found in database")
+            return
+        
+        print(f"Found {len(meetings)} meetings to check\n")
+        
+        fixed_count = 0
+        
+        for meeting in meetings:
+            print(f"Meeting {meeting.id}: {meeting.title}")
+            
+            # Check transcript
+            if meeting.transcript_path:
+                if not Path(meeting.transcript_path).exists():
+                    print(f"  ⚠️ Transcript path missing: {meeting.transcript_path}")
+                    
+                    # Try to find it in the new persistent directory
+                    transcripts_dir = DATA_DIR / "transcripts"
+                    possible_files = list(transcripts_dir.glob(f"{meeting.id}_*"))
+                    
+                    if possible_files:
+                        new_path = str(possible_files[0].resolve())
+                        print(f"  ✅ Found in new location: {new_path}")
+                        meeting.transcript_path = new_path
+                        db.add(meeting)
+                        fixed_count += 1
+                    else:
+                        print(f"  ❌ Could not find transcript file")
+                else:
+                    print(f"  ✅ Transcript: {meeting.transcript_path}")
+            
+            # Check summary
+            if meeting.summary_path:
+                if not Path(meeting.summary_path).exists():
+                    print(f"  ⚠️ Summary path missing: {meeting.summary_path}")
+                    
+                    # Try to find it in the new persistent directory
+                    summaries_dir = DATA_DIR / "summaries"
+                    possible_files = list(summaries_dir.glob(f"{meeting.id}_*"))
+                    
+                    if possible_files:
+                        new_path = str(possible_files[0].resolve())
+                        print(f"  ✅ Found in new location: {new_path}")
+                        meeting.summary_path = new_path
+                        db.add(meeting)
+                        fixed_count += 1
+                    else:
+                        print(f"  ❌ Could not find summary file")
+                else:
+                    print(f"  ✅ Summary: {meeting.summary_path}")
+            
+            print()
+        
+        if fixed_count > 0:
+            print(f"\n🔧 Fixed {fixed_count} file paths")
+            db.commit()
+        
+        print(f"{'='*60}\n")
 
 def _page(title: str, body_html: str) -> HTMLResponse:
     html = f"""<!doctype html><html><head>

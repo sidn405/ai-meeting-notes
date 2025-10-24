@@ -11,7 +11,7 @@ import httpx
 from openai import OpenAI
 from sqlmodel import select
 from sqlalchemy import text as sql_text
-
+import re
 from ..db import get_session, DATA_DIR
 from ..models import Meeting
 from ..utils.storage import save_text
@@ -47,14 +47,18 @@ def _aai_transcribe(audio_path: str, *, language: Optional[str], hints: Optional
     if not api_key:
         raise RuntimeError("ASSEMBLYAI_API_KEY is not set")
 
+    # ✅ Log file info
+    file_size = Path(audio_path).stat().st_size / (1024 * 1024)  # MB
+    print(f"📁 Uploading audio: {audio_path} ({file_size:.2f}MB)")
+
     audio_url = _aai_upload(audio_path, api_key)
+    print(f"✅ Upload complete: {audio_url}")
 
     payload: dict = {"audio_url": audio_url}
     if language:
         payload["language_code"] = language.strip()
 
     if hints:
-        # Accept comma/newline separated terms
         wb = [w.strip() for w in hints.replace("\n", ",").split(",") if w.strip()]
         if wb:
             payload["word_boost"] = wb
@@ -69,18 +73,75 @@ def _aai_transcribe(audio_path: str, *, language: Optional[str], hints: Optional
     )
     create.raise_for_status()
     tid = create.json()["id"]
+    print(f"🎯 Transcription job created: {tid}")
 
     # Poll until done
+    poll_count = 0
     while True:
-        res = httpx.get(f"https://api.assemblyai.com/v2/transcript/{tid}", headers=headers, timeout=None)
+        poll_count += 1
+        res = httpx.get(
+            f"https://api.assemblyai.com/v2/transcript/{tid}", 
+            headers=headers, 
+            timeout=None
+        )
         res.raise_for_status()
         j = res.json()
         status = j.get("status")
+        
+        # ✅ Log polling status
+        if poll_count % 5 == 0:  # Every 15 seconds
+            print(f"⏳ Poll #{poll_count}: status={status}")
+        
         if status == "completed":
-            return j.get("text", "")
+            # ✅ Get full response for debugging
+            full_response = _debug_aai_response(tid, api_key)
+            
+            transcript_text = j.get("text", "")
+            
+            # ✅ CRITICAL: Check full response
+            print(f"\n{'='*60}")
+            print(f"✅ Transcription Complete!")
+            print(f"{'='*60}")
+            print(f"Transcript ID: {tid}")
+            print(f"Text length: {len(transcript_text)} characters")
+            print(f"Word count: {len(transcript_text.split())}")
+            print(f"Audio duration: {j.get('audio_duration', 'unknown')} seconds")
+            print(f"Confidence: {j.get('confidence', 'unknown')}")
+            print(f"\nFirst 300 chars:\n{transcript_text[:300]}")
+            print(f"\nLast 300 chars:\n{transcript_text[-300:]}")
+            print(f"{'='*60}\n")
+            
+            # ✅ Check if transcript seems truncated
+            if transcript_text and not transcript_text[-1] in '.!?':
+                print("⚠️  WARNING: Transcript may be incomplete (doesn't end with punctuation)")
+            
+            if len(transcript_text) < 100:
+                print("⚠️  WARNING: Transcript is very short!")
+            
+            return transcript_text
+            
         if status == "error":
-            raise RuntimeError(f"AssemblyAI error: {j.get('error')}")
+            error_msg = j.get('error', 'Unknown error')
+            print(f"❌ AssemblyAI error: {error_msg}")
+            raise RuntimeError(f"AssemblyAI error: {error_msg}")
+            
         time.sleep(3)
+        
+def _debug_aai_response(tid: str, api_key: str):
+    """Debug helper to see full AssemblyAI response"""
+    headers = {"authorization": api_key}
+    res = httpx.get(f"https://api.assemblyai.com/v2/transcript/{tid}", headers=headers)
+    res.raise_for_status()
+    
+    response_json = res.json()
+    
+    print("\n" + "="*60)
+    print("FULL ASSEMBLYAI RESPONSE:")
+    print("="*60)
+    print(json.dumps(response_json, indent=2))
+    print("="*60 + "\n")
+    
+    return response_json
 
 # ---------- LLM summary (OpenAI) ----------
 
@@ -261,4 +322,126 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
     except Exception as e:
         _set_progress(meeting_id, 100, step=f"Error: {str(e)}", status="failed")
         raise
+    
+def process_meeting_transcribe_only(meeting_id: int, *, language: str | None = None, hints: str | None = None) -> None:
+    """Process meeting for transcription (without summarization)"""
+    _set_progress(meeting_id, 5, step="Starting transcription", status="processing")
 
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m:
+            raise RuntimeError(f"Meeting {meeting_id} not found")
+        
+        meeting_title = m.title
+        audio_path = m.audio_path
+        transcript_path = m.transcript_path
+
+    try:
+        transcript_text = ""
+        
+        if transcript_path and Path(transcript_path).exists():
+            _set_progress(meeting_id, 100, step="Transcript already exists", status="delivered")
+            return
+        
+        elif audio_path and Path(audio_path).exists():
+            _set_progress(meeting_id, 20, step="Uploading audio to AssemblyAI")
+            
+            # ✅ Add timeout protection
+            try:
+                transcript_text = _aai_transcribe(audio_path, language=language, hints=hints)
+                
+                # ✅ Verify we got the full transcript
+                if not transcript_text or len(transcript_text) < 50:
+                    raise RuntimeError(f"Transcript too short: {len(transcript_text)} characters")
+                    
+            except Exception as e:
+                raise RuntimeError(f"Transcription failed: {str(e)}")
+            
+            _set_progress(meeting_id, 90, step="Saving transcript")
+            
+            # Save transcript
+            tpath = save_text(transcript_text, title=meeting_title)
+            
+            # Update database
+            with get_session() as s:
+                mm = s.get(Meeting, meeting_id)
+                mm.transcript_path = tpath
+                s.add(mm)
+                s.commit()
+            
+            _set_progress(meeting_id, 100, step="Transcription without summary complete.", status="delivered")
+        else:
+            raise RuntimeError("No audio file found for transcription.")
+
+    except Exception as e:
+        _set_progress(meeting_id, 100, step=f"Transcription failed: {str(e)}", status="failed")
+        print(f"Transcription failed for meeting {meeting_id}: {e}")
+        raise
+
+def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | None = None, hints: str | None = None) -> None:
+    """Process meeting for transcription AND summarization"""
+    _set_progress(meeting_id, 5, step="Starting", status="processing")
+
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m:
+            raise RuntimeError(f"Meeting {meeting_id} not found")
+        
+        meeting_title = m.title
+        audio_path = m.audio_path
+        transcript_path = m.transcript_path
+        email_to = m.email_to
+
+    try:
+        transcript_text = ""
+        
+        # Step 1: Transcribe
+        if transcript_path and Path(transcript_path).exists():
+            _set_progress(meeting_id, 20, step="Reading existing transcript")
+            transcript_text = Path(transcript_path).read_text(encoding="utf-8")
+        elif audio_path and Path(audio_path).exists():
+            _set_progress(meeting_id, 20, step="Uploading audio to AssemblyAI")
+            transcript_text = _aai_transcribe(audio_path, language=language, hints=hints)
+            
+            if not transcript_text or len(transcript_text) < 50:
+                raise RuntimeError(f"Transcript too short: {len(transcript_text)} characters")
+            
+            _set_progress(meeting_id, 60, step="Saving transcript")
+            tpath = save_text(transcript_text, title=meeting_title)
+            
+            with get_session() as s:
+                mm = s.get(Meeting, meeting_id)
+                mm.transcript_path = tpath
+                s.add(mm)
+                s.commit()
+                transcript_path = tpath
+        else:
+            raise RuntimeError("No audio file found")
+
+        # Step 2: Summarize (THIS IS THE KEY DIFFERENCE)
+        _set_progress(meeting_id, 75, step="Summarizing with AI")
+        summary_json = _summarize_with_openai(transcript_text, meeting_title)
+
+        # Step 3: Save summary
+        base_dir = Path(transcript_path).parent if transcript_path else (DATA_DIR / "summaries")
+        base_dir.mkdir(parents=True, exist_ok=True)
+        spath = str((base_dir / f"summary_{meeting_id}.json").resolve())
+        Path(spath).write_text(json.dumps(summary_json, indent=2), encoding="utf-8")
+
+        with get_session() as s:
+            mm = s.get(Meeting, meeting_id)
+            mm.summary_path = spath
+            s.add(mm)
+            s.commit()
+
+        # Step 4: Email if configured
+        _set_progress(meeting_id, 90, step="Emailing summary")
+        if email_to:
+            _email_with_resend_by_id(meeting_id, summary_json, spath, email_to)
+
+        _set_progress(meeting_id, 100, step="Complete", status="delivered")
+
+    except Exception as e:
+        _set_progress(meeting_id, 100, step=f"Error: {str(e)}", status="failed")
+        print(f"Transcribe+Summarize failed for meeting {meeting_id}: {e}")
+        raise

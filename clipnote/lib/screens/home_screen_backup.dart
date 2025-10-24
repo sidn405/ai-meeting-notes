@@ -14,7 +14,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with RouteAware {
-  final _iapService = IapService();
+  late final IapService _iapService;
   final _api = ApiService.I;
   
   Map<String, dynamic>? _licenseInfo;
@@ -24,8 +24,16 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   @override
   void initState() {
     super.initState();
+    _iapService = IapService();
     _initIAP();
-    _loadData();
+    _initializeLicenseAndLoadData();
+  }
+
+  Future<void> _initializeLicenseAndLoadData() async {
+    // First, ensure user has a license (free tier if new)
+    await _api.ensureUserHasLicense();
+    // Then load all data
+    await _loadData();
   }
 
   @override
@@ -45,23 +53,23 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
 
   @override
   void didPopNext() {
-    print('📱 Returned to HomeScreen - refreshing data...');
+    print('ðŸ"± Returned to HomeScreen - refreshing data...');
     _loadData();
   }
 
   @override
   void didPush() {
-    print('📱 HomeScreen pushed');
+    print('ðŸ"± HomeScreen pushed');
   }
 
   @override
   void didPop() {
-    print('📱 HomeScreen popped');
+    print('ðŸ"± HomeScreen popped');
   }
 
   @override
   void didPushNext() {
-    print('📱 Navigating away from HomeScreen');
+    print('ðŸ"± Navigating away from HomeScreen');
   }
 
   Future<void> _initIAP() async {
@@ -78,16 +86,30 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     try {
       await _api.loadLicenseKey();
       
-      // Load license info
+      // Load license info FIRST and wait for it
       try {
         final licenseInfo = await _api.getLicenseInfo();
+        print('📝 Raw license info: $licenseInfo');
         if (mounted) {
           setState(() {
             _licenseInfo = licenseInfo;
+            print('📝 License info loaded. Tier: ${licenseInfo?['tier']}, Is Paid: $isPaidUser');
           });
         }
       } catch (e) {
-        print('Error loading license info: $e');
+        print('❌ Error loading license info: $e');
+        // Set default free tier if loading fails
+        if (mounted) {
+          setState(() {
+            _licenseInfo = {
+              'tier': 'free',
+              'tier_name': 'Free',
+              'meetings_per_month': 5,
+              'max_file_size_mb': 25,
+              'meetings_used': 0,
+            };
+          });
+        }
       }
       
       // Load meeting stats separately
@@ -236,10 +258,10 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                           children: [
                             const Icon(Icons.check_circle, color: Colors.white, size: 20),
                             const SizedBox(width: 8),
-                            const Expanded(
+                            Expanded(
                               child: Text(
-                                'Premium Active',
-                                style: TextStyle(color: Colors.white, fontSize: 14),
+                                '${planName ?? 'Premium'} Active',
+                                style: const TextStyle(color: Colors.white, fontSize: 14),
                               ),
                             ),
                           ],
@@ -258,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    userEmail!,
+                                    userEmail ?? 'User',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 16,
@@ -315,18 +337,18 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                     ),
                     child: Column(
                       children: [
-                        const Text(
-                          'Free Tier',
-                          style: TextStyle(
+                        Text(
+                          planName ?? 'Free Tier',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const Text(
-                          '5 meetings per month\n25MB max file size',
-                          style: TextStyle(
+                        Text(
+                          '$meetingsLimit meetings per month\n${maxFileSizeMB}MB max file size',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
                           ),
@@ -335,7 +357,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _showUpgradeSheet,
+                            onPressed: _iapService.isBusy ? null : _showUpgradeSheet,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
                               foregroundColor: const Color(0xFF667eea),

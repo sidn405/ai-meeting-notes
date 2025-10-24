@@ -53,28 +53,59 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
 
   @override
   void didPopNext() {
-    print('ðŸ"± Returned to HomeScreen - refreshing data...');
+    print('📱 Returned to HomeScreen - refreshing data...');
     _loadData();
   }
 
   @override
   void didPush() {
-    print('ðŸ"± HomeScreen pushed');
+    print('📱 HomeScreen pushed');
   }
 
   @override
   void didPop() {
-    print('ðŸ"± HomeScreen popped');
+    print('📱 HomeScreen popped');
   }
 
   @override
   void didPushNext() {
-    print('ðŸ"± Navigating away from HomeScreen');
+    print('📱 Navigating away from HomeScreen');
   }
 
   Future<void> _initIAP() async {
     try {
       await _iapService.init();
+      
+      // ✅ Set up callback to refresh UI when purchase succeeds
+      _iapService.setOnPurchaseSuccessCallback((licenseKey, tier) {
+        print('🎉 Purchase callback triggered! New tier: $tier');
+        
+        // Refresh all data to show updated license info
+        _loadData();
+        
+        // Show success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '✅ Subscription activated! You now have $tier tier',
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      });
     } catch (e) {
       print('Failed to initialize IAP: $e');
     }
@@ -260,136 +291,117 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                '${planName ?? 'Premium'} Active',
-                                style: const TextStyle(color: Colors.white, fontSize: 14),
+                                '${planName ?? "Premium"} Plan Active',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            const CircleAvatar(
-                              radius: 24,
-                              backgroundColor: Colors.white,
-                              child: Icon(Icons.person, color: Color(0xFF667eea)),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    userEmail ?? 'User',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  if (planName != null)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.3),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        planName!,
-                                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _statItem('This Month', '$meetingsThisMonth / $meetingsLimit'),
-                            ),
-                            Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
-                            Expanded(
-                              child: _statItem('Max File', '${maxFileSizeMB}MB'),
-                            ),
-                            Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
-                            Expanded(
-                              child: _statItem('Remaining', '${meetingsLimit - meetingsThisMonth}'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                ] else ...[
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          planName ?? 'Free Tier',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                          ),
                         ),
                         const SizedBox(height: 12),
-                        Text(
-                          '$meetingsLimit meetings per month\n${maxFileSizeMB}MB max file size',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                        ),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _iapService.isBusy ? null : _showUpgradeSheet,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: const Color(0xFF667eea),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              elevation: 0,
-                            ),
-                            child: const Text(
-                              'Upgrade',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          child: Text(
+                            userEmail!,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                 ],
                 
+                // Usage summary card
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'This Month',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (!isPaidUser)
+                            TextButton.icon(
+                              onPressed: _showUpgradeSheet,
+                              icon: const Icon(Icons.upgrade, size: 16, color: Colors.white),
+                              label: const Text(
+                                'Upgrade',
+                                style: TextStyle(color: Colors.white, fontSize: 13),
+                              ),
+                              style: TextButton.styleFrom(
+                                backgroundColor: Colors.white.withOpacity(0.2),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _statItem('Used', '$meetingsUsed'),
+                          Container(
+                            height: 40,
+                            width: 1,
+                            color: Colors.white.withOpacity(0.3),
+                          ),
+                          _statItem('Limit', '$meetingsLimit'),
+                          Container(
+                            height: 40,
+                            width: 1,
+                            color: Colors.white.withOpacity(0.3),
+                          ),
+                          _statItem('Max File', '${maxFileSizeMB}MB'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
+                
+                // Upload button
                 SizedBox(
+                  width: double.infinity,
                   height: 56,
                   child: ElevatedButton.icon(
                     onPressed: _navigateToUpload,
-                    icon: const Icon(Icons.add_circle_outline, size: 24),
+                    icon: const Icon(Icons.cloud_upload, size: 24),
                     label: const Text(
-                      'Create Meeting',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      'Upload New Meeting',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
@@ -554,17 +566,17 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                   icon: Icons.verified,
                   title: 'Starter',
                   subtitle: '25 meetings per month\n50MB max file size',
-                  price: _iapService.proProduct?.price ?? '\$29/month',
-                  isPro: true,
+                  price: _iapService.starterProduct?.price ?? '\$29/month',
+                  productType: 'starter',
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 _planTile(
                   context: c,
                   icon: Icons.verified,
                   title: 'Professional',
                   subtitle: '50 meetings per month\n200MB max file size',
                   price: _iapService.proProduct?.price ?? '\$69/month',
-                  isPro: true,
+                  productType: 'pro',
                 ),
                 const SizedBox(height: 12),
                 _planTile(
@@ -573,7 +585,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                   title: 'Business',
                   subtitle: '100 meetings per month\n500MB max file size',
                   price: _iapService.businessProduct?.price ?? '\$119/month',
-                  isPro: false,
+                  productType: 'business',
                 ),
               ],
             ),
@@ -589,7 +601,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     required String title,
     required String subtitle,
     required String price,
-    required bool isPro,
+    required String productType,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -621,19 +633,32 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
           );
           
           try {
-            final result = isPro 
-                ? await _iapService.purchasePro()
-                : await _iapService.purchaseBusiness();
+            String result;
+            switch (productType) {
+              case 'starter':
+                result = await _iapService.purchaseStarter();
+                break;
+              case 'pro':
+                result = await _iapService.purchasePro();
+                break;
+              case 'business':
+                result = await _iapService.purchaseBusiness();
+                break;
+              default:
+                throw Exception('Unknown product type');
+            }
             
             if (!mounted) return;
             Navigator.pop(this.context);
             
-            ScaffoldMessenger.of(this.context).showSnackBar(
-              SnackBar(
-                content: Text('Purchase initiated: $result'),
-                backgroundColor: Colors.green,
-              ),
-            );
+            if (result == 'pending') {
+              ScaffoldMessenger.of(this.context).showSnackBar(
+                const SnackBar(
+                  content: Text('Purchase in progress...'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
           } catch (e) {
             if (!mounted) return;
             Navigator.pop(this.context);
