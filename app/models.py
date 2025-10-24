@@ -18,8 +18,8 @@ class LicenseTier(str, enum.Enum):
     BUSINESS = "business"
 
 # License Model
-class LicenseUsage(SQLModel, table=True):
-    __tablename__ = "license_usage"
+class License(SQLModel, table=True):
+    __tablename__ = "license"
     
     class Config:
         extend_existing = True
@@ -129,3 +129,19 @@ class Meeting(SQLModel, table=True):
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
+    
+class LicenseUsage(SQLModel, table=True):
+    __tablename__ = "license_usage"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    license_key: str = Field(index=True)
+    
+    year: int
+    month: int
+    meetings_used: int = Field(default=0)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        table_args = (
+            {'sqlite_autoincrement': True},
+        )   
