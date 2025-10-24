@@ -18,8 +18,8 @@ class LicenseTier(str, enum.Enum):
     BUSINESS = "business"
 
 # License Model
-class License(SQLModel, table=True):
-    __tablename__ = "license"
+class LicenseUsage(SQLModel, table=True):
+    __tablename__ = "license_usage"
     
     class Config:
         extend_existing = True
