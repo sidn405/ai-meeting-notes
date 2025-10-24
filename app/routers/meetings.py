@@ -1,7 +1,7 @@
 # app/routers/meetings.py
-from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException, Depends, Header
+from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException, Depends, Header, Query
 from typing import Optional
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pathlib import Path
 from sqlmodel import select, Session
 from ..db import get_session, DATA_DIR
@@ -752,77 +752,93 @@ async def email_meeting(
     }
 
 @router.get("/{meeting_id}/download")
-def download_meeting_file(meeting_id: int, type: str):
+def download_meeting_file(
+    meeting_id: int, 
+    type: str = Query(..., description="Type of file: transcript, summary, pdf, or all")
+):
     """
     Unified download endpoint for different file types
     
     Query params:
         type: 'transcript' | 'summary' | 'pdf' | 'all'
     """
+    print(f"📥 Download request: meeting_id={meeting_id}, type={type}")
+    
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
         if not m:
+            print(f"❌ Meeting {meeting_id} not found")
             raise HTTPException(status_code=404, detail="Meeting not found")
         
+        # Transcript download
         if type == "transcript":
             if not (m.transcript_path and Path(m.transcript_path).exists()):
+                print(f"❌ Transcript not found for meeting {meeting_id}")
                 raise HTTPException(status_code=404, detail="Transcript not found")
+            
+            print(f"✅ Serving transcript: {m.transcript_path}")
             return FileResponse(
                 m.transcript_path,
                 media_type="text/plain",
                 filename=f"{m.title}_transcript.txt",
-                headers={"Content-Disposition": f'attachment; filename="{m.title}_transcript.txt"'}
+                headers={
+                    "Content-Disposition": f'attachment; filename="{m.title}_transcript.txt"'
+                }
             )
         
+        # Summary download
         elif type == "summary":
             if not (m.summary_path and Path(m.summary_path).exists()):
+                print(f"❌ Summary not found for meeting {meeting_id}")
                 raise HTTPException(status_code=404, detail="Summary not found")
             
-            # Convert JSON summary to readable text format
-            summary_json = json.loads(Path(m.summary_path).read_text(encoding="utf-8"))
-            
-            # Format as text
-            text_summary = f"MEETING SUMMARY: {m.title}\n"
-            text_summary += "=" * 60 + "\n\n"
-            
-            if "executive_summary" in summary_json:
-                text_summary += "EXECUTIVE SUMMARY:\n"
-                text_summary += summary_json["executive_summary"] + "\n\n"
-            
-            if "key_decisions" in summary_json and summary_json["key_decisions"]:
-                text_summary += "KEY DECISIONS:\n"
-                for i, decision in enumerate(summary_json["key_decisions"], 1):
-                    text_summary += f"{i}. {decision}\n"
-                text_summary += "\n"
-            
-            if "action_items" in summary_json and summary_json["action_items"]:
-                text_summary += "ACTION ITEMS:\n"
-                for item in summary_json["action_items"]:
-                    task = item.get("task", "")
-                    owner = item.get("owner", "")
-                    priority = item.get("priority", "")
-                    text_summary += f"• {task}\n"
-                    if owner:
-                        text_summary += f"  Owner: {owner}\n"
-                    if priority:
-                        text_summary += f"  Priority: {priority}\n"
+            # Read JSON summary and convert to readable text
+            try:
+                summary_json = json.loads(Path(m.summary_path).read_text(encoding="utf-8"))
+                
+                # Format as text
+                text_summary = f"MEETING SUMMARY: {m.title}\n"
+                text_summary += "=" * 60 + "\n\n"
+                
+                if "executive_summary" in summary_json:
+                    text_summary += "EXECUTIVE SUMMARY:\n"
+                    text_summary += summary_json["executive_summary"] + "\n\n"
+                
+                if "key_decisions" in summary_json and summary_json["key_decisions"]:
+                    text_summary += "KEY DECISIONS:\n"
+                    for i, decision in enumerate(summary_json["key_decisions"], 1):
+                        text_summary += f"{i}. {decision}\n"
                     text_summary += "\n"
-            
-            # Save as temporary text file
-            temp_path = DATA_DIR / f"{m.title}_summary.txt"
-            temp_path.write_text(text_summary, encoding="utf-8")
-            
-            return FileResponse(
-                str(temp_path),
-                media_type="text/plain",
-                filename=f"{m.title}_summary.txt",
-                headers={"Content-Disposition": f'attachment; filename="{m.title}_summary.txt"'}
-            )
+                
+                if "action_items" in summary_json and summary_json["action_items"]:
+                    text_summary += "ACTION ITEMS:\n"
+                    for item in summary_json["action_items"]:
+                        task = item.get("task", "")
+                        owner = item.get("owner", "")
+                        priority = item.get("priority", "")
+                        text_summary += f"• {task}\n"
+                        if owner:
+                            text_summary += f"  Owner: {owner}\n"
+                        if priority:
+                            text_summary += f"  Priority: {priority}\n"
+                        text_summary += "\n"
+                
+                # Return as text file
+                from fastapi.responses import PlainTextResponse
+                print(f"✅ Serving summary as text")
+                return PlainTextResponse(
+                    text_summary,
+                    media_type="text/plain",
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{m.title}_summary.txt"'
+                    }
+                )
+            except Exception as e:
+                print(f"❌ Error formatting summary: {e}")
+                raise HTTPException(status_code=500, detail=f"Error formatting summary: {str(e)}")
         
         elif type == "pdf":
-            # PDF generation placeholder
-            # You would need to implement PDF generation here
-            # For now, return a message
+            # PDF generation not yet implemented
             raise HTTPException(
                 status_code=501,
                 detail="PDF generation not yet implemented. Use 'transcript' or 'summary' type."
@@ -833,30 +849,34 @@ def download_meeting_file(meeting_id: int, type: str):
             import zipfile
             import io
             
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                if m.transcript_path and Path(m.transcript_path).exists():
-                    zip_file.write(
-                        m.transcript_path, 
-                        arcname=f"{m.title}_transcript.txt"
-                    )
+            try:
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    if m.transcript_path and Path(m.transcript_path).exists():
+                        zip_file.write(
+                            m.transcript_path, 
+                            arcname=f"{m.title}_transcript.txt"
+                        )
+                    
+                    if m.summary_path and Path(m.summary_path).exists():
+                        zip_file.write(
+                            m.summary_path, 
+                            arcname=f"{m.title}_summary.json"
+                        )
                 
-                if m.summary_path and Path(m.summary_path).exists():
-                    zip_file.write(
-                        m.summary_path, 
-                        arcname=f"{m.title}_summary.json"
-                    )
-            
-            zip_buffer.seek(0)
-            
-            from fastapi.responses import StreamingResponse
-            return StreamingResponse(
-                iter([zip_buffer.getvalue()]),
-                media_type="application/zip",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{m.title}_meeting_files.zip"'
-                }
-            )
+                zip_buffer.seek(0)
+                print(f"✅ Serving all files as zip")
+                
+                return StreamingResponse(
+                    iter([zip_buffer.getvalue()]),
+                    media_type="application/zip",
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{m.title}_meeting_files.zip"'
+                    }
+                )
+            except Exception as e:
+                print(f"❌ Error creating zip: {e}")
+                raise HTTPException(status_code=500, detail=f"Error creating zip: {str(e)}")
         
         else:
             raise HTTPException(
