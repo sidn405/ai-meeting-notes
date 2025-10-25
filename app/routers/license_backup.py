@@ -2,23 +2,22 @@
 License API Router for SQLModel
 Add this as routers/license.py
 """
-from fastapi import APIRouter, Depends, HTTPException, Header, Cookie
+from fastapi import APIRouter, Depends, HTTPException, Header
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import os
+import uuid
 from datetime import datetime
-from ..db import get_session
+from app.db import get_session
+from ..models import License, LicenseUsage, LicenseTier, TIER_LIMITS
 from ..services.license import (
     create_license,
     validate_license,
     get_license_info,
     deactivate_license,
-    LicenseTier
 )
-from ..models import License
-from ..models import License, LicenseUsage, TIER_LIMITS
 
 
 router = APIRouter(prefix="/license", tags=["license"])
@@ -34,6 +33,9 @@ class CreateLicenseRequest(BaseModel):
 class ActivateLicenseRequest(BaseModel):
     license_key: str
 
+class GenerateFreeTierRequest(BaseModel):
+    device_id: str
+
 class LicenseInfoResponse(BaseModel):
     valid: bool
     license_key: Optional[str] = None
@@ -48,10 +50,17 @@ class LicenseInfoResponse(BaseModel):
     is_active: Optional[bool] = None
     error: Optional[str] = None
 
+
+def generate_license_key(prefix: str) -> str:
+    """Generate a unique license key"""
+    return f"{prefix}{uuid.uuid4().hex[:12].upper()}"
+
+
 def verify_admin(x_api_key: Optional[str] = Header(None)):
     """Verify admin API key"""
     if x_api_key != ADMIN_API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
 
 @router.post("/generate")
 def generate_license(
@@ -86,6 +95,64 @@ def generate_license(
         "message": "License created successfully"
     }
 
+
+@router.post("/generate-free-tier")
+def generate_free_tier_license(
+    request: GenerateFreeTierRequest,
+    session: Session = Depends(get_session)
+):
+    """
+    Generate a free tier license for a new device (app)
+    Called on first app launch with device_id
+    """
+    device_id = request.device_id
+    
+    if not device_id:
+        raise HTTPException(status_code=400, detail="device_id required")
+    
+    # Check if this device already has a free tier license
+    existing = session.exec(
+        select(License).where(
+            License.device_id == device_id,
+            License.tier == "free"
+        )
+    ).first()
+    
+    if existing:
+        return {
+            "license_key": existing.license_key,
+            "tier": "free",
+            "tier_name": "Free",
+            "meetings_per_month": 5,
+            "max_file_size_mb": 25,
+        }
+    
+    # Generate new free tier license
+    license_key = generate_license_key("FREE")
+    
+    new_license = License(
+        license_key=license_key,
+        tier="free",
+        email=f"device-{device_id}@free-tier.local",  # Virtual email for free tier
+        device_id=device_id,
+        is_active=True,
+        activated_at=datetime.utcnow(),
+        created_at=datetime.utcnow(),
+    )
+    
+    session.add(new_license)
+    session.commit()
+    session.refresh(new_license)
+    
+    return {
+        "license_key": license_key,
+        "tier": "free",
+        "tier_name": "Free",
+        "meetings_per_month": 5,
+        "max_file_size_mb": 25,
+    }
+
+
 @router.post("/activate")
 def activate_license(
     request: ActivateLicenseRequest,
@@ -119,14 +186,15 @@ def activate_license(
     
     return response
 
+
 @router.get("/info")
-async def get_license_info(
+async def get_license_info_endpoint(
     x_license_key: str = Header(..., alias="X-License-Key"),
-    db: Session = Depends(get_session)
+    session: Session = Depends(get_session)
 ):
     """Get license information and usage stats"""
     
-    license = db.exec(
+    license = session.exec(
         select(License).where(License.license_key == x_license_key)
     ).first()
     
@@ -134,6 +202,7 @@ async def get_license_info(
         # Return free tier info for no license
         return {
             "tier": "free",
+            "tier_name": "Free",
             "max_file_size_mb": 25,
             "meetings_per_month": 5,
             "meetings_used": 0,
@@ -146,7 +215,7 @@ async def get_license_info(
     # Get current month usage
     now = datetime.utcnow()
     
-    usage = db.exec(
+    usage = session.exec(
         select(LicenseUsage).where(
             LicenseUsage.license_key == x_license_key,
             LicenseUsage.year == now.year,
@@ -160,6 +229,7 @@ async def get_license_info(
     
     return {
         "tier": license.tier,
+        "tier_name": tier_config.get("tier_name", "Free"),
         "email": license.email,
         "is_active": license.is_active,
         "expires_at": license.expires_at.isoformat() if license.expires_at else None,
@@ -168,6 +238,7 @@ async def get_license_info(
         "meetings_used": meetings_used,
         "meetings_remaining": max(0, tier_config["meetings_per_month"] - meetings_used),
     }
+
 
 @router.post("/deactivate")
 def deactivate(
@@ -189,6 +260,7 @@ def deactivate(
         "message": "License deactivated"
     }
 
+
 @router.get("/validate/{license_key}")
 def validate_key(
     license_key: str,
@@ -208,6 +280,7 @@ def validate_key(
         "tier": license.tier,
         "email": license.email
     }
+
 
 @router.get("/list")
 def list_licenses(
@@ -229,7 +302,8 @@ def list_licenses(
             "is_active": lic.is_active,
             "activated_at": lic.activated_at.isoformat() if lic.activated_at else None,
             "created_at": lic.created_at.isoformat() if lic.created_at else None,
-            "gumroad_order_id": lic.gumroad_order_id
+            "gumroad_order_id": lic.gumroad_order_id,
+            "device_id": lic.device_id
         }
         for lic in licenses
     ]

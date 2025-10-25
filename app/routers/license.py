@@ -10,7 +10,8 @@ from typing import Optional
 import os
 import uuid
 from datetime import datetime
-from app.db import get_session
+import secrets
+from ..db import get_session
 from ..models import License, LicenseUsage, LicenseTier, TIER_LIMITS
 from ..services.license import (
     create_license,
@@ -110,46 +111,45 @@ def generate_free_tier_license(
     if not device_id:
         raise HTTPException(status_code=400, detail="device_id required")
     
-    # Check if this device already has a free tier license
-    existing = session.exec(
-        select(License).where(
-            License.device_id == device_id,
-            License.tier == "free"
-        )
+    print(f"🔍 Checking for existing license with device_id: {device_id}")
+    
+    # ✅ Check if this device already has a license
+    existing_license = session.exec(  # ← Changed from 'db' to 'session'
+        select(License).where(License.device_id == device_id)
     ).first()
     
-    if existing:
+    if existing_license:
+        print(f"✅ Found existing license: {existing_license.license_key[:20]}...")
+        print(f"   Tier: {existing_license.tier}")
         return {
-            "license_key": existing.license_key,
-            "tier": "free",
-            "tier_name": "Free",
-            "meetings_per_month": 5,
-            "max_file_size_mb": 25,
+            "license_key": existing_license.license_key,
+            "tier": existing_license.tier,
+            "message": "Existing license returned"
         }
     
-    # Generate new free tier license
-    license_key = generate_license_key("FREE")
+    # Generate new free tier license only if none exists
+    license_key = f"lic_{secrets.token_urlsafe(32)}"
+    
+    print(f"🆕 Creating new free tier license")
+    print(f"   Device ID: {device_id}")
     
     new_license = License(
         license_key=license_key,
         tier="free",
-        email=f"device-{device_id}@free-tier.local",  # Virtual email for free tier
         device_id=device_id,
-        is_active=True,
-        activated_at=datetime.utcnow(),
-        created_at=datetime.utcnow(),
+        email=None,
     )
     
-    session.add(new_license)
-    session.commit()
-    session.refresh(new_license)
+    session.add(new_license)      # ← Changed from 'db' to 'session'
+    session.commit()              # ← Changed from 'db' to 'session'
+    session.refresh(new_license)  # ← Changed from 'db' to 'session'
+    
+    print(f"✅ Free tier license created: {license_key[:20]}...")
     
     return {
         "license_key": license_key,
         "tier": "free",
-        "tier_name": "Free",
-        "meetings_per_month": 5,
-        "max_file_size_mb": 25,
+        "message": "New free tier license created"
     }
 
 

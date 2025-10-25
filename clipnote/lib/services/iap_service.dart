@@ -266,7 +266,7 @@ class IapService {
       );
       
       debugPrint('[IapService] ✅ Backend verification successful!');
-      debugPrint('[IapService] License Key: ${licenseKey.substring(0, 20)}...');
+      
       
       // ✅ CRITICAL: Save the license key
       await _api.saveLicenseKey(licenseKey);
