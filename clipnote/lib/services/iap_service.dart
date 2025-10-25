@@ -232,14 +232,14 @@ class IapService {
       debugPrint('[IapService] ✅ Batch processing complete');
     }
   }
-
+  
   /// Send receipt/token to backend to verify and issue/update license
   Future<void> _verifyWithBackend(PurchaseDetails purchase) async {
     try {
       debugPrint('[IapService] 🔐 Verifying purchase with backend...');
       debugPrint('[IapService] Purchase ID: ${purchase.purchaseID}');
       debugPrint('[IapService] Product ID: ${purchase.productID}');
-      
+
       // Get device ID
       final deviceId = await _getDeviceId();
       debugPrint('[IapService] Device ID: $deviceId');
