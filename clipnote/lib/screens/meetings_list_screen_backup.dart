@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:clipnote/services/api_service.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'transcript_screen.dart';
+import 'results_screen.dart';
 
 class MeetingsListScreen extends StatefulWidget {
   final String? initialFilter;
@@ -88,24 +91,26 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Filter by Status',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            _filterOption('All Meetings', 'all'),
-            _filterOption('Delivered', 'delivered'),
-            _filterOption('Processing', 'processing'),
-            _filterOption('This Month', 'this_month'),
-            _filterOption('Failed', 'failed'),
-            const SizedBox(height: 20),
-          ],
+      builder: (context) => SafeArea(
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Filter by Status',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              _filterOption('All Meetings', 'all'),
+              _filterOption('Delivered', 'delivered'),
+              _filterOption('Processing', 'processing'),
+              _filterOption('This Month', 'this_month'),
+              _filterOption('Failed', 'failed'),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
@@ -135,7 +140,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       final difference = now.difference(date);
       
       if (difference.inDays == 0) {
-        // Format time as "Today 3:45 PM"
         final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
         final minute = date.minute.toString().padLeft(2, '0');
         final period = date.hour >= 12 ? 'PM' : 'AM';
@@ -145,7 +149,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       } else if (difference.inDays < 7) {
         return '${difference.inDays} days ago';
       } else {
-        // Format as "Jan 15, 2025"
         final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         return '${months[date.month - 1]} ${date.day}, ${date.year}';
       }
@@ -556,97 +559,120 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (context, scrollController) => SingleChildScrollView(
-          controller: scrollController,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
+      builder: (context) => SafeArea(
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) => SingleChildScrollView(
+            controller: scrollController,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                if (status == 'delivered') ...[
-                  _actionButton(
-                    icon: Icons.description,
-                    label: 'View Transcript',
-                    onPressed: () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(this.context).showSnackBar(
-                        const SnackBar(content: Text('Transcript viewer coming soon')),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  _actionButton(
-                    icon: Icons.auto_awesome,
-                    label: 'View Summary',
-                    onPressed: () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(this.context).showSnackBar(
-                        const SnackBar(content: Text('Summary viewer coming soon')),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  _actionButton(
-                    icon: Icons.download,
-                    label: 'Download Files',
-                    onPressed: () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(this.context).showSnackBar(
-                        const SnackBar(content: Text('Download feature coming soon')),
-                      );
-                    },
-                  ),
-                ] else if (status == 'processing' || status == 'queued') ...[
-                  const Center(
-                    child: Column(
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 16),
-                        Text(
-                          'Processing in progress...',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                      ],
+                  const SizedBox(height: 20),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ] else ...[
-                  const Center(
-                    child: Text(
-                      'This meeting failed to process',
-                      style: TextStyle(color: Colors.red),
+                  const SizedBox(height: 20),
+                  if (status == 'delivered') ...[
+                    _actionButton(
+                      icon: Icons.description,
+                      label: 'View Transcript',
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.of(this.context).push(
+                          MaterialPageRoute(
+                            builder: (_) => TranscriptScreen(meetingId: id),
+                          ),
+                        );
+                      },
                     ),
+                    const SizedBox(height: 12),
+                    _actionButton(
+                      icon: Icons.auto_awesome,
+                      label: 'View Summary',
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.of(this.context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ResultsScreen(meetingId: id),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _actionButton(
+                      icon: Icons.email,
+                      label: 'Email Meeting',
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _emailMeeting(id, title);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _actionButton(
+                      icon: Icons.download,
+                      label: 'Download Files',
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _downloadMeetingFiles(id, title);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _actionButton(
+                      icon: Icons.delete,
+                      label: 'Delete Meeting',
+                      color: Colors.red,
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _deleteMeeting(id, title);
+                      },
+                    ),
+                  ] else if (status == 'processing' || status == 'queued') ...[
+                    const Center(
+                      child: Column(
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 16),
+                          Text(
+                            'Processing in progress...',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    const Center(
+                      child: Text(
+                        'This meeting failed to process',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Center(child: Text('Close')),
                   ),
                 ],
-                const SizedBox(height: 20),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Center(child: Text('Close')),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -654,10 +680,315 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     );
   }
 
+  Future<void> _emailMeeting(int id, String title) async {
+    final emailController = TextEditingController();
+    bool isSending = false;
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Email Meeting'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'Email Address',
+                  hintText: 'Enter email address',
+                  prefixIcon: const Icon(Icons.email, color: Color(0xFF667eea)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Meeting: $title',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSending ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: isSending
+                  ? null
+                  : () async {
+                      final email = emailController.text.trim();
+                      
+                      if (email.isEmpty) {
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please enter an email address'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+
+                      // Basic email validation
+                      if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please enter a valid email address'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() => isSending = true);
+
+                      try {
+                        await _api.sendMeetingEmail(id, email);
+                        
+                        if (!mounted) return;
+                        Navigator.pop(context);
+                        
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          SnackBar(
+                            content: Text('Meeting sent to $email'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      } catch (e) {
+                        print('Error sending email: $e');
+                        setDialogState(() => isSending = false);
+                        
+                        if (!mounted) return;
+                        
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to send email: ${e.toString().replaceAll("Exception: ", "")}'),
+                            backgroundColor: Colors.red,
+                            duration: const Duration(seconds: 4),
+                          ),
+                        );
+                      }
+                    },
+              icon: isSending
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(Icons.send, size: 18),
+              label: Text(isSending ? 'Sending...' : 'Send'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF667eea),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _downloadMeetingFiles(int id, String title) async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Download Files',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFE3F2FD),
+                  child: Icon(Icons.description, color: Color(0xFF667eea)),
+                ),
+                title: const Text('Transcript'),
+                subtitle: const Text('Download as .txt file'),
+                trailing: const Icon(Icons.download),
+                onTap: () {
+                  Navigator.pop(context);
+                  _downloadFile(id, 'transcript', title);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFFFF3E0),
+                  child: Icon(Icons.auto_awesome, color: Colors.orange),
+                ),
+                title: const Text('Summary'),
+                subtitle: const Text('Download as .txt file'),
+                trailing: const Icon(Icons.download),
+                onTap: () {
+                  Navigator.pop(context);
+                  _downloadFile(id, 'summary', title);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFFFEBEE),
+                  child: Icon(Icons.picture_as_pdf, color: Colors.red),
+                ),
+                title: const Text('Full Report'),
+                subtitle: const Text('Download as PDF (if available)'),
+                trailing: const Icon(Icons.download),
+                onTap: () {
+                  Navigator.pop(context);
+                  _downloadFile(id, 'pdf', title);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _downloadFile(int id, String type, String title) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Text('Preparing $type...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final downloadInfo = await _api.downloadMeetingFile(id, type);
+      final url = downloadInfo['download_url'];
+      final uri = Uri.parse(url);
+      
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Download started...'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } else {
+        throw Exception('Could not open download URL');
+      }
+    } catch (e) {
+      print('Error downloading file: $e');
+      
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Download failed: ${e.toString().replaceAll("Exception: ", "")}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteMeeting(int id, String title) async {
+    // Confirm deletion
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Meeting'),
+        content: Text('Are you sure you want to delete "$title"?\n\nThis action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Show deleting dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('Deleting...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      await _api.deleteMeeting(id);
+      
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Meeting deleted successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      
+      // Refresh the list
+      _loadMeetings();
+    } catch (e) {
+      print('Error deleting meeting: $e');
+      
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete meeting: ${e.toString().replaceAll("Exception: ", "")}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
   Widget _actionButton({
     required IconData icon,
     required String label,
     required VoidCallback onPressed,
+    Color? color,
   }) {
     return SizedBox(
       width: double.infinity,
@@ -666,7 +997,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         icon: Icon(icon),
         label: Text(label),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF667eea),
+          backgroundColor: color ?? const Color(0xFF667eea),
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(

@@ -50,7 +50,7 @@ class UserGuideScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            
+
             _guideCard(
               icon: Icons.mic,
               title: 'Recording Meetings',
@@ -86,16 +86,17 @@ class UserGuideScreen extends StatelessWidget {
             _guideCard(
               icon: Icons.cloud_upload,
               title: 'Storage Options',
-              description: 'Free Tier: Saves to your device (5 meetings/month)\n'
-                  'Paid Tiers: Cloud storage with unlimited access and faster processing.',
+              description: 'Free & Starter Tiers: Saves to your device\n'
+                  'Pro & Business Tiers: Cloud storage with unlimited access and faster processing.',
             ),
             const SizedBox(height: 16),
             
             _guideCard(
               icon: Icons.star,
               title: 'Upgrade Benefits',
-              description: 'Professional: Larger uploads, faster processing, cloud storage\n'
-                  'Business: Multiple seats, admin controls, team collaboration.',
+              description: 'Starter: 50MB upload size, 25 meetings\n'
+              'Professional: 200MB uploads, 50 meetings, free cloud storage\n'
+                  'Business: 500MB upload size, free cloud storage, record video, CVS & PDF files.',
             ),
             const SizedBox(height: 16),
             

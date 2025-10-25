@@ -244,7 +244,7 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
       
       final uri = Uri.parse('$baseUrl/iap/verify');
       final body = {
-        'receipt_data': receiptString,
+        'receipt': receiptString,
         'store': store,
         'product_id': productId,
       };
@@ -468,23 +468,46 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
   /// Send meeting email (simplified - backend fetches content)
   Future<void> sendMeetingEmail(int meetingId, String email) async {
     try {
+      print('[ApiService] 📧 Sending email for meeting $meetingId to $email');
+      
       final uri = Uri.parse('$baseUrl/meetings/email');
+      print('[ApiService] 📧 POST endpoint: $uri');
+      
+      final payload = {
+        'meeting_id': meetingId,
+        'email': email,
+        'include_transcript': true,
+        'include_summary': true,
+      };
+      
+      print('[ApiService] 📧 Request payload: ${jsonEncode(payload)}');
+      
       final response = await http.post(
         uri,
-        headers: _getHeaders(),  // ✅ Added license key
-        body: jsonEncode({
-          'meeting_id': meetingId,
-          'email': email,
-          'include_transcript': true,
-          'include_summary': true,
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+          ..._getHeaders(),  // ✅ Include license key if available
+        },
+        body: jsonEncode(payload),
       );
       
-      if (response.statusCode != 200) {
-        throw Exception('Failed to send email: ${response.body}');
+      print('[ApiService] 📧 Response status: ${response.statusCode}');
+      print('[ApiService] 📧 Response body: ${response.body}');
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('[ApiService] ✅ Email queued successfully: ${data['message']}');
+        return;
+      } else if (response.statusCode == 404) {
+        throw Exception('Meeting not found or summary not available');
+      } else if (response.statusCode == 400) {
+        final error = jsonDecode(response.body);
+        throw Exception(error['detail'] ?? 'Invalid request');
+      } else {
+        throw Exception('Failed to send email: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
-      print('[ApiService] Error sending email: $e');
+      print('[ApiService] ❌ Error sending email: $e');
       rethrow;
     }
   }
@@ -495,17 +518,42 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
     String type,
   ) async {
     try {
+      print('[ApiService] ⬇️ Preparing download for meeting $meetingId, type: $type');
+      
+      // Construct the download URL with type as query parameter
       final downloadUrl = '$baseUrl/meetings/$meetingId/download?type=$type';
+      print('[ApiService] ⬇️ Download URL: $downloadUrl');
+      
+      // Don't verify with HEAD - just return the URL
+      // The browser will handle 404s when the user tries to open it
       
       return {
-        'filename': '${type}_$meetingId.txt',
+        'filename': _getFilenameForType(type, meetingId),
         'download_url': downloadUrl,
+        'success': true,
+        'type': type,
       };
     } catch (e) {
-      print('[ApiService] Error downloading file: $e');
+      print('[ApiService] ❌ Error preparing download: $e');
       rethrow;
     }
   }
+
+/// Helper to generate appropriate filename based on type
+String _getFilenameForType(String type, int meetingId) {
+  switch (type.toLowerCase()) {
+    case 'transcript':
+      return 'meeting_${meetingId}_transcript.txt';
+    case 'summary':
+      return 'meeting_${meetingId}_summary.txt';
+    case 'pdf':
+      return 'meeting_${meetingId}_report.pdf';
+    case 'all':
+      return 'meeting_${meetingId}_files.zip';
+    default:
+      return 'meeting_${meetingId}_download.txt';
+  }
+}
 
   /// Get meeting statistics
   Future<Map<String, dynamic>> getMeetingStats() async {

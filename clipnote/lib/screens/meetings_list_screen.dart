@@ -157,6 +157,79 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     }
   }
 
+  Widget _buildStorageBadge(Map<String, dynamic> meeting) {
+    final hasCloudStorage = _api.hasCloudStorage;
+    final status = meeting['status'] ?? '';
+    
+    if (hasCloudStorage) {
+      // Pro/Business - Cloud Storage
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud, size: 12, color: Colors.blue.shade700),
+            const SizedBox(width: 4),
+            Text(
+              'Cloud',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Colors.blue.shade700,
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // Free/Starter - Device Storage
+      Color badgeColor;
+      String badgeText;
+      IconData badgeIcon;
+      
+      if (status == 'ready_for_download' || status == 'processing' || status == 'queued') {
+        badgeColor = Colors.orange;
+        badgeText = 'Saving...';
+        badgeIcon = Icons.downloading;
+      } else if (status == 'downloaded_to_device') {
+        badgeColor = Colors.green;
+        badgeText = 'On Device';
+        badgeIcon = Icons.check_circle;
+      } else {
+        badgeColor = Colors.green;
+        badgeText = 'Device';
+        badgeIcon = Icons.phone_android;
+      }
+      
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: badgeColor.shade50,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(badgeIcon, size: 12, color: badgeColor.shade700),
+            const SizedBox(width: 4),
+            Text(
+              badgeText,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: badgeColor.shade700,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   String _getScreenTitle() {
     switch (_filterStatus) {
       case 'delivered':
@@ -860,6 +933,14 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
   }
 
   Future<void> _downloadFile(int id, String type, String title) async {
+    final isCloudStorage = _api.hasCloudStorage;
+    final loadingMessage = isCloudStorage 
+        ? 'Downloading from cloud...' 
+        : 'Preparing $type...';
+    final successMessage = isCloudStorage
+        ? 'Downloaded from cloud'
+        : 'Saved to device';
+    
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -868,7 +949,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
           children: [
             const CircularProgressIndicator(),
             const SizedBox(width: 20),
-            Text('Preparing $type...'),
+            Text(loadingMessage),
           ],
         ),
       ),
@@ -887,10 +968,10 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Download started...'),
+          SnackBar(
+            content: Text(successMessage),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           ),
         );
       } else {
@@ -1006,5 +1087,126 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         ),
       ),
     );
+  }
+
+Timer? _autoDownloadTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialFilter != null) {
+      _filterStatus = widget.initialFilter!;
+    }
+    _loadMeetings();
+    
+    // Start auto-download polling for Free/Starter tiers
+    _startAutoDownloadPolling();
+  }
+
+  @override
+  void dispose() {
+    _autoDownloadTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startAutoDownloadPolling() {
+    // Only poll for Free/Starter tiers (device storage)
+    if (!_api.shouldAutoDownload) {
+      print('[MeetingsList] Skipping auto-download (cloud storage tier)');
+      return;
+    }
+    
+    print('[MeetingsList] Starting auto-download polling...');
+    
+    // Check immediately
+    _checkForAutoDownloads();
+    
+    // Then check every 10 seconds
+    _autoDownloadTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (timer) => _checkForAutoDownloads(),
+    );
+  }
+
+  Future<void> _checkForAutoDownloads() async {
+    try {
+      final meetings = await _api.getMeetings();
+      
+      for (var meeting in meetings) {
+        if (meeting['status'] == 'ready_for_download') {
+          print('[MeetingsList] 🔽 Auto-downloading meeting ${meeting['id']}');
+          await _autoDownloadMeeting(meeting);
+        }
+      }
+    } catch (e) {
+      print('[MeetingsList] Error checking for auto-downloads: $e');
+    }
+  }
+
+  Future<void> _autoDownloadMeeting(Map<String, dynamic> meeting) async {
+    final int id = meeting['id'];
+    final String title = meeting['title'] ?? 'Untitled';
+    
+    try {
+      print('[MeetingsList] 📥 Auto-downloading: $title');
+      
+      // Download transcript
+      bool transcriptSuccess = false;
+      try {
+        await _downloadFileSilently(id, 'transcript', title);
+        transcriptSuccess = true;
+        print('[MeetingsList] ✅ Transcript downloaded');
+      } catch (e) {
+        print('[MeetingsList] ⚠️ Transcript download failed: $e');
+      }
+      
+      // Download summary
+      bool summarySuccess = false;
+      try {
+        await _downloadFileSilently(id, 'summary', title);
+        summarySuccess = true;
+        print('[MeetingsList] ✅ Summary downloaded');
+      } catch (e) {
+        print('[MeetingsList] ⚠️ Summary download failed: $e');
+      }
+      
+      // If both succeeded, confirm download to backend
+      if (transcriptSuccess && summarySuccess) {
+        await _api.confirmDownloadComplete(id);
+        
+        // Refresh meetings list
+        await _loadMeetings();
+        
+        // Show success notification
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ "$title" saved to device'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('[MeetingsList] ❌ Auto-download failed for $title: $e');
+    }
+  }
+
+  Future<void> _downloadFileSilently(int id, String type, String title) async {
+    try {
+      final downloadInfo = await _api.downloadMeetingFile(id, type);
+      final url = downloadInfo['download_url'];
+      final uri = Uri.parse(url);
+      
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        throw Exception('Could not open download URL');
+      }
+    } catch (e) {
+      print('[MeetingsList] Error downloading $type: $e');
+      rethrow;
+    }
   }
 }
