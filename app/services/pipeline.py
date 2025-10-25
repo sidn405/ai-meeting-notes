@@ -208,67 +208,68 @@ def _email_with_resend_by_id(meeting_id: int, summary_json: dict, summary_path: 
     ai  = summary_json.get("action_items", []) or []
 
     rows = ""
-    for it in ai:
-        rows += f"<tr><td>{it.get('owner','')}</td><td>{it.get('task','')}</td><td>{it.get('due_date','')}</td><td>{it.get('priority','')}</td></tr>"
+    for item in ai:
+        owner = item.get("owner", "TBD")
+        task = item.get("task", "")
+        due = item.get("due_date", "")
+        prio = item.get("priority", "Medium")
+        rows += f'<tr><td style="padding:8px;border:1px solid #ddd">{owner}</td><td style="padding:8px;border:1px solid #ddd">{task}</td><td style="padding:8px;border:1px solid #ddd">{due}</td><td style="padding:8px;border:1px solid #ddd">{prio}</td></tr>'
+
+    dec_bullets = "".join(f"<li>{d}</li>" for d in dec)
+    subject = f"Meeting Notes: {meeting_title}"
 
     html = f"""
-    <h3>Executive Summary</h3>
-    <p style="white-space:pre-wrap">{ex}</p>
-    <h3>Key Decisions</h3>
-    <ul>{"".join(f"<li>{d}</li>" for d in dec)}</ul>
-    <h3>Action Items</h3>
-    <table border="1" cellpadding="6" cellspacing="0">
-      <tr><th>Owner</th><th>Task</th><th>Due Date</th><th>Priority</th></tr>
-      {rows}
-    </table>
-    {links}
+    <html>
+    <body style="font-family: Arial,sans-serif; color:#333;">
+      <h2 style="color:#1a73e8;">Meeting: {meeting_title}</h2>
+      <h3>Executive Summary</h3>
+      <p>{ex}</p>
+      <h3>Key Decisions</h3>
+      <ul>{dec_bullets}</ul>
+      <h3>Action Items</h3>
+      <table style="border-collapse:collapse;width:100%;">
+        <thead><tr style="background:#f0f0f0;"><th style="padding:8px;border:1px solid #ddd">Owner</th><th style="padding:8px;border:1px solid #ddd">Task</th><th style="padding:8px;border:1px solid #ddd">Due Date</th><th style="padding:8px;border:1px solid #ddd">Priority</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+      {links}
+    </body>
+    </html>
     """
 
-    r = httpx.post(
+    payload = {
+        "from": f"{from_name} <{from_email}>",
+        "to": [override_to],
+        "subject": subject,
+        "html": html,
+    }
+    resp = httpx.post(
         "https://api.resend.com/emails",
         headers={"Authorization": f"Bearer {api}", "Content-Type": "application/json"},
-        json={
-            "from": f"{from_name} <{from_email}>",
-            "to": [override_to],
-            "subject": f"Meeting Notes: {meeting_title}",
-            "html": html,
-        },
-        timeout=30,
+        json=payload,
+        timeout=10,
     )
-    r.raise_for_status()
-    
-def send_summary_email(meeting_id: int, to: str):
-    with get_session() as s:
-        m = s.get(Meeting, meeting_id)
-        if not m or not m.summary_path or not Path(m.summary_path).exists():
-            raise RuntimeError("Summary not ready")
-        summary_path = m.summary_path  # Store path before session closes
-    
-    summary_json = json.loads(Path(summary_path).read_text(encoding="utf-8"))
-    _email_with_resend_by_id(meeting_id, summary_json, summary_path, override_to=to)  # ✅ Pass meeting_id, not m
+    resp.raise_for_status()
 
-# ---------- Main pipeline ----------
+# ---------- Progress helpers ----------
 
-def _set_progress(meeting_id: int, progress: int, *, step: str | None = None, status: str | None = None):
+def _set_progress(meeting_id: int, pct: int, step: str = "", status: str = "processing"):
+    """Utility to update DB progress in its own session"""
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
         if not m:
             return
-        m.progress = max(0, min(progress, 100))
-        if step is not None:
-            m.step = step
-        if status is not None:
+        m.progress = pct
+        m.step = step or m.step
+        if status:
             m.status = status
         s.add(m)
         s.commit()
 
 def _get_transcript_path(meeting_id: int, title: str) -> str:
     """Generate persistent transcript path"""
-    # Use meeting_id to ensure uniqueness and easy lookup
     transcripts_dir = DATA_DIR / "transcripts"
     transcripts_dir.mkdir(parents=True, exist_ok=True)
     
-    # Safe filename from title
     safe_title = "".join(c for c in title if c.isalnum() or c in " -_").rstrip()
     safe_title = safe_title[:50] if safe_title else "meeting"
     
@@ -291,6 +292,137 @@ def _get_summary_path(meeting_id: int, title: str) -> str:
     
     print(f"📊 Summary path: {path}")
     return str(path.resolve())
+
+# ---------- B2 UPLOAD AND CLEANUP ----------
+
+def _upload_to_b2_and_cleanup(meeting_id: int):
+    """
+    Upload transcript/summary to B2 for Pro/Business tiers.
+    Set status to ready_for_download for Free/Starter.
+    Always cleanup media file.
+    """
+    with get_session() as db:
+        meeting = db.get(Meeting, meeting_id)
+        if not meeting:
+            print(f"❌ Meeting {meeting_id} not found")
+            return
+        
+        tier = meeting.license.tier.lower() if meeting.license else "free"
+        print(f"\n{'='*60}")
+        print(f"🎯 Finalizing meeting {meeting_id} for {tier} tier")
+        print(f"{'='*60}")
+        
+        try:
+            # For Pro/Business: Upload to B2
+            if tier in ('professional', 'business'):
+                print(f"☁️ Uploading transcript and summary to B2...")
+                _upload_files_to_b2(meeting_id, db)
+            else:
+                # For Free/Starter: Set ready for download
+                print(f"📱 Setting status for device download...")
+                meeting.status = "ready_for_download"
+                meeting.step = "Processing complete. Ready to save to your device."
+                db.add(meeting)
+                db.commit()
+                print(f"✅ Meeting ready for auto-download to device")
+            
+            # Always cleanup media file (audio/video)
+            print(f"🗑️ Cleaning up media file...")
+            _cleanup_media_file(meeting_id, db)
+            
+            print(f"✅ Meeting {meeting_id} finalized successfully")
+            print(f"{'='*60}\n")
+            
+        except Exception as e:
+            print(f"❌ Finalization error: {e}")
+            meeting.status = "failed"
+            meeting.step = f"Finalization failed: {str(e)}"
+            db.add(meeting)
+            db.commit()
+            raise
+
+def _upload_files_to_b2(meeting_id: int, db):
+    """Upload transcript and summary to B2 cloud storage"""
+    from ..routers.storage_b2 import s3_client, get_bucket
+    
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        return
+    
+    s3 = s3_client()
+    bucket = get_bucket()
+    tier_folder = meeting.license.tier.lower() if meeting.license else "free"
+    
+    # Upload transcript
+    if meeting.transcript_path and Path(meeting.transcript_path).exists():
+        transcript_key = f"{tier_folder}/transcripts/transcript_{meeting_id}.txt"
+        
+        with open(meeting.transcript_path, 'rb') as f:
+            s3.upload_fileobj(f, bucket, transcript_key)
+        
+        print(f"  ✅ Transcript uploaded to B2: {transcript_key}")
+        
+        # Update to B2 path and delete local
+        old_path = meeting.transcript_path
+        meeting.transcript_path = f"s3://{bucket}/{transcript_key}"
+        Path(old_path).unlink()
+        print(f"  🗑️ Local transcript deleted: {old_path}")
+    
+    # Upload summary
+    if meeting.summary_path and Path(meeting.summary_path).exists():
+        summary_key = f"{tier_folder}/summaries/summary_{meeting_id}.json"
+        
+        with open(meeting.summary_path, 'rb') as f:
+            s3.upload_fileobj(f, bucket, summary_key)
+        
+        print(f"  ✅ Summary uploaded to B2: {summary_key}")
+        
+        # Update to B2 path and delete local
+        old_path = meeting.summary_path
+        meeting.summary_path = f"s3://{bucket}/{summary_key}"
+        Path(old_path).unlink()
+        print(f"  🗑️ Local summary deleted: {old_path}")
+    
+    # Update status
+    meeting.status = "delivered"
+    meeting.step = "Complete. Files stored in cloud."
+    db.add(meeting)
+    db.commit()
+
+def _cleanup_media_file(meeting_id: int, db):
+    """Delete audio/video file after processing (all tiers)"""
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting or not meeting.audio_path:
+        return
+    
+    try:
+        if meeting.audio_path.startswith("s3://"):
+            # Pro/Business - delete from B2
+            from ..routers.storage_b2 import s3_client, get_bucket
+            s3 = s3_client()
+            bucket = get_bucket()
+            
+            key = meeting.audio_path.replace(f"s3://{bucket}/", "")
+            
+            if "/temp/" in key:
+                s3.delete_object(Bucket=bucket, Key=key)
+                print(f"  🗑️ Media deleted from B2: {key}")
+        else:
+            # Free/Starter - delete local file
+            media_file = Path(meeting.audio_path)
+            if media_file.exists():
+                media_file.unlink()
+                print(f"  🗑️ Local media deleted: {media_file}")
+        
+        # Clear media path
+        meeting.audio_path = None
+        db.add(meeting)
+        db.commit()
+        
+    except Exception as e:
+        print(f"  ⚠️ Failed to cleanup media: {e}")
+
+# ---------- MAIN PROCESSING FUNCTIONS ----------
 
 def process_meeting(meeting_id: int, *, language: str | None = None, hints: str | None = None) -> None:
     """Process meeting with transcript AND summary"""
@@ -322,7 +454,6 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
                 raise RuntimeError(f"Transcript too short: {len(transcript_text)} characters")
             
             _set_progress(meeting_id, 60, step="Saving transcript")
-            # ✅ Use persistent path
             tpath = _get_transcript_path(meeting_id, meeting_title)
             Path(tpath).write_text(transcript_text, encoding="utf-8")
             
@@ -339,7 +470,6 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
         _set_progress(meeting_id, 75, step="Summarizing")
         summary_json = _summarize_with_openai(transcript_text, meeting_title)
 
-        # ✅ Use persistent path
         spath = _get_summary_path(meeting_id, meeting_title)
         Path(spath).write_text(json.dumps(summary_json, indent=2), encoding="utf-8")
 
@@ -354,7 +484,9 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
         if email_to:
             _email_with_resend_by_id(meeting_id, summary_json, spath, email_to)
 
-        _set_progress(meeting_id, 100, step="Done", status="delivered")
+        # Step 4: Upload to B2 (Pro/Business) or prepare for download (Free/Starter)
+        _set_progress(meeting_id, 95, step="Finalizing")
+        _upload_to_b2_and_cleanup(meeting_id)
 
     except Exception as e:
         _set_progress(meeting_id, 100, step=f"Error: {str(e)}", status="failed")
@@ -378,7 +510,8 @@ def process_meeting_transcribe_only(meeting_id: int, *, language: str | None = N
         transcript_text = ""
         
         if transcript_path and Path(transcript_path).exists():
-            _set_progress(meeting_id, 100, step="Transcript already exists", status="delivered")
+            _set_progress(meeting_id, 95, step="Transcript already exists")
+            _upload_to_b2_and_cleanup(meeting_id)
             return
         
         elif audio_path and Path(audio_path).exists():
@@ -395,7 +528,6 @@ def process_meeting_transcribe_only(meeting_id: int, *, language: str | None = N
             
             _set_progress(meeting_id, 90, step="Saving transcript")
             
-            # ✅ Use persistent path
             tpath = _get_transcript_path(meeting_id, meeting_title)
             Path(tpath).write_text(transcript_text, encoding="utf-8")
             
@@ -405,7 +537,9 @@ def process_meeting_transcribe_only(meeting_id: int, *, language: str | None = N
                 s.add(mm)
                 s.commit()
             
-            _set_progress(meeting_id, 100, step="Transcription complete", status="delivered")
+            # Finalize
+            _set_progress(meeting_id, 95, step="Finalizing")
+            _upload_to_b2_and_cleanup(meeting_id)
         else:
             raise RuntimeError("No audio file found for transcription.")
 
@@ -443,7 +577,6 @@ def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | Non
                 raise RuntimeError(f"Transcript too short: {len(transcript_text)} characters")
             
             _set_progress(meeting_id, 60, step="Saving transcript")
-            # ✅ Use persistent path
             tpath = _get_transcript_path(meeting_id, meeting_title)
             Path(tpath).write_text(transcript_text, encoding="utf-8")
             
@@ -460,7 +593,6 @@ def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | Non
         _set_progress(meeting_id, 75, step="Summarizing with AI")
         summary_json = _summarize_with_openai(transcript_text, meeting_title)
 
-        # ✅ Use persistent path
         spath = _get_summary_path(meeting_id, meeting_title)
         Path(spath).write_text(json.dumps(summary_json, indent=2), encoding="utf-8")
 
@@ -475,7 +607,9 @@ def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | Non
         if email_to:
             _email_with_resend_by_id(meeting_id, summary_json, spath, email_to)
 
-        _set_progress(meeting_id, 100, step="Complete", status="delivered")
+        # Step 4: Upload to B2 (Pro/Business) or prepare for download (Free/Starter)
+        _set_progress(meeting_id, 95, step="Finalizing")
+        _upload_to_b2_and_cleanup(meeting_id)
 
     except Exception as e:
         _set_progress(meeting_id, 100, step=f"Error: {str(e)}", status="failed")

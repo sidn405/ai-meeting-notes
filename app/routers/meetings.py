@@ -783,248 +783,105 @@ async def email_meeting(
 # UPDATE the existing download endpoint to handle tier-based logic
 @router.get("/{meeting_id}/download")
 def download_meeting_file(
-    meeting_id: int, 
-    type: str = Query(..., description="Type of file: transcript, summary, or all"),
+    meeting_id: int,
+    type: str = Query(..., description="transcript, summary, or pdf"),
     license_info: tuple = Depends(optional_license),
     db: Session = Depends(get_session)
 ):
-    """
-    Download endpoint for transcripts and summaries
-    
-    Query params:
-        type: 'transcript' | 'summary' | 'all'
-    
-    Free/Starter: Files available for 48 hours, then deleted from server
-                  (Users should have auto-downloaded to device)
-    Pro/Business: Files stored permanently in cloud
-    
-    Note: Audio/video files NOT available for download (any tier)
-    """
-    print(f"📥 Download request: meeting_id={meeting_id}, type={type}")
-    
+    """Download meeting files - from B2 for Pro/Business, from server for Free/Starter"""
     license, tier_config = license_info
-    tier = (license.tier.lower() if license else "free")
+    tier = license.tier.lower() if license else "free"
     
     meeting = db.get(Meeting, meeting_id)
     if not meeting:
-        print(f"❌ Meeting {meeting_id} not found")
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    
-    # Check if expired (Free/Starter after 48h)
-    if meeting.status == "expired":
-        raise HTTPException(
-            410,  # Gone
-            "Files have been deleted from server (48 hour retention for Free/Starter). "
-            "Content should be saved on your device. Upgrade to Pro/Business for permanent cloud storage."
-        )
+        raise HTTPException(404, "Meeting not found")
     
     # Verify ownership
     if license and meeting.email_to != license.email:
-        raise HTTPException(403, "Not authorized to access this meeting")
+        raise HTTPException(403, "Not authorized")
     
-    # Audio/video downloads not available for anyone
-    if type == "audio" or type == "video":
-        raise HTTPException(
-            404,
-            f"{type.title()} files are not available for download. "
-            "All media files are automatically deleted after processing to save storage. "
-            "Transcripts and summaries are retained."
-        )
-    
-    # Transcript download
-    if type == "transcript":
-        if meeting.transcript_path and meeting.transcript_path.startswith("s3://"):
-            # Pro/Business - download from B2
-            s3_path = meeting.transcript_path.replace("s3://", "")
-            parts = s3_path.split("/", 1)
-            if len(parts) != 2:
-                raise HTTPException(500, "Invalid S3 path format")
+    try:
+        if type == "transcript":
+            file_path = meeting.transcript_path
+            if not file_path:
+                raise HTTPException(404, "Transcript not found")
             
-            bucket, key = parts
-            
-            from app.routers.storage_b2 import s3_client
-            s3 = s3_client()
-            url = s3.generate_presigned_url(
-                ClientMethod="get_object",
-                Params={"Bucket": bucket, "Key": key},
-                ExpiresIn=15 * 60,
-            )
-            
-            from fastapi.responses import RedirectResponse
-            return RedirectResponse(url=url)
-        
-        elif meeting.transcript_path and Path(meeting.transcript_path).exists():
-            # Free/Starter - serve from server
-            print(f"✅ Serving transcript from server: {meeting.transcript_path}")
-            return FileResponse(
-                meeting.transcript_path,
-                media_type="text/plain",
-                filename=f"{meeting.title}_transcript.txt",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{meeting.title}_transcript.txt"'
-                }
-            )
-        else:
-            raise HTTPException(404, "Transcript not found or expired")
-    
-    # Summary download  
-    elif type == "summary":
-        if meeting.summary_path and meeting.summary_path.startswith("s3://"):
-            # Pro/Business - download from B2
-            s3_path = meeting.summary_path.replace("s3://", "")
-            parts = s3_path.split("/", 1)
-            if len(parts) != 2:
-                raise HTTPException(500, "Invalid S3 path format")
-            
-            bucket, key = parts
-            
-            from app.routers.storage_b2 import s3_client
-            s3 = s3_client()
-            
-            response = s3.get_object(Bucket=bucket, Key=key)
-            summary_content = response['Body'].read().decode('utf-8')
-            summary_json = json.loads(summary_content)
-            
-        elif meeting.summary_path and Path(meeting.summary_path).exists():
-            # Free/Starter - read from server
-            summary_json = json.loads(Path(meeting.summary_path).read_text(encoding="utf-8"))
-        else:
-            raise HTTPException(404, "Summary not found or expired")
-        
-        # Format summary as text (both tiers)
-        try:
-            text_summary = f"MEETING SUMMARY: {meeting.title}\n"
-            text_summary += "=" * 60 + "\n\n"
-            
-            if "executive_summary" in summary_json:
-                text_summary += "EXECUTIVE SUMMARY:\n"
-                text_summary += summary_json["executive_summary"] + "\n\n"
-            
-            if "key_decisions" in summary_json and summary_json["key_decisions"]:
-                text_summary += "KEY DECISIONS:\n"
-                for i, decision in enumerate(summary_json["key_decisions"], 1):
-                    text_summary += f"{i}. {decision}\n"
-                text_summary += "\n"
-            
-            if "action_items" in summary_json and summary_json["action_items"]:
-                text_summary += "ACTION ITEMS:\n"
-                for item in summary_json["action_items"]:
-                    task = item.get("task", "")
-                    owner = item.get("owner", "")
-                    priority = item.get("priority", "")
-                    text_summary += f"• {task}\n"
-                    if owner:
-                        text_summary += f"  Owner: {owner}\n"
-                    if priority:
-                        text_summary += f"  Priority: {priority}\n"
-                    text_summary += "\n"
-            
-            from fastapi.responses import PlainTextResponse
-            print(f"✅ Serving formatted summary")
-            return PlainTextResponse(
-                text_summary,
-                media_type="text/plain",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{meeting.title}_summary.txt"'
-                }
-            )
-        except Exception as e:
-            print(f"❌ Error formatting summary: {e}")
-            raise HTTPException(500, f"Error formatting summary: {str(e)}")
-    
-    elif type == "all":
-        # Create zip with transcript and summary
-        import zipfile
-        import io
-        
-        try:
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                # Add transcript
-                if meeting.transcript_path:
-                    if meeting.transcript_path.startswith("s3://"):
-                        s3_path = meeting.transcript_path.replace("s3://", "")
-                        parts = s3_path.split("/", 1)
-                        if len(parts) == 2:
-                            bucket, key = parts
-                            from app.routers.storage_b2 import s3_client
-                            s3 = s3_client()
-                            response = s3.get_object(Bucket=bucket, Key=key)
-                            transcript_content = response['Body'].read()
-                            zip_file.writestr(
-                                f"{meeting.title}_transcript.txt",
-                                transcript_content
-                            )
-                    elif Path(meeting.transcript_path).exists():
-                        zip_file.write(
-                            meeting.transcript_path, 
-                            arcname=f"{meeting.title}_transcript.txt"
-                        )
+            # Pro/Business - Generate B2 presigned URL
+            if file_path.startswith("s3://"):
+                from app.routers.storage_b2 import s3_client, get_bucket
                 
-                # Add summary
-                if meeting.summary_path:
-                    summary_json = None
-                    if meeting.summary_path.startswith("s3://"):
-                        s3_path = meeting.summary_path.replace("s3://", "")
-                        parts = s3_path.split("/", 1)
-                        if len(parts) == 2:
-                            bucket, key = parts
-                            from app.routers.storage_b2 import s3_client
-                            s3 = s3_client()
-                            response = s3.get_object(Bucket=bucket, Key=key)
-                            summary_content = response['Body'].read().decode('utf-8')
-                            summary_json = json.loads(summary_content)
-                    elif Path(meeting.summary_path).exists():
-                        summary_json = json.loads(
-                            Path(meeting.summary_path).read_text(encoding="utf-8")
-                        )
-                    
-                    if summary_json:
-                        # Format as text
-                        text_summary = f"MEETING SUMMARY: {meeting.title}\n"
-                        text_summary += "=" * 60 + "\n\n"
-                        
-                        if "executive_summary" in summary_json:
-                            text_summary += "EXECUTIVE SUMMARY:\n"
-                            text_summary += summary_json["executive_summary"] + "\n\n"
-                        
-                        if "key_decisions" in summary_json:
-                            text_summary += "KEY DECISIONS:\n"
-                            for i, decision in enumerate(summary_json["key_decisions"], 1):
-                                text_summary += f"{i}. {decision}\n"
-                            text_summary += "\n"
-                        
-                        if "action_items" in summary_json:
-                            text_summary += "ACTION ITEMS:\n"
-                            for item in summary_json["action_items"]:
-                                text_summary += f"• {item.get('task', '')}\n"
-                                if item.get('owner'):
-                                    text_summary += f"  Owner: {item['owner']}\n"
-                                if item.get('priority'):
-                                    text_summary += f"  Priority: {item['priority']}\n"
-                                text_summary += "\n"
-                        
-                        zip_file.writestr(f"{meeting.title}_summary.txt", text_summary)
-            
-            zip_buffer.seek(0)
-            print(f"✅ Serving all files as zip")
-            
-            return StreamingResponse(
-                iter([zip_buffer.getvalue()]),
-                media_type="application/zip",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{meeting.title}_meeting_files.zip"'
+                s3 = s3_client()
+                bucket = get_bucket()
+                key = file_path.replace(f"s3://{bucket}/", "")
+                
+                # Generate presigned URL (valid for 1 hour)
+                download_url = s3.generate_presigned_url(
+                    'get_object',
+                    Params={'Bucket': bucket, 'Key': key},
+                    ExpiresIn=3600
+                )
+                
+                return {
+                    "download_url": download_url,
+                    "filename": f"meeting_{meeting_id}_transcript.txt",
+                    "storage": "cloud"
                 }
-            )
-        except Exception as e:
-            print(f"❌ Error creating zip: {e}")
-            raise HTTPException(500, f"Error creating zip: {str(e)}")
-    
-    else:
-        raise HTTPException(
-            400,
-            "Invalid type. Must be 'transcript', 'summary', or 'all'"
-        )
+            
+            # Free/Starter - Local file
+            else:
+                if not Path(file_path).exists():
+                    raise HTTPException(404, "Transcript file not found on server")
+                
+                return FileResponse(
+                    file_path,
+                    media_type="text/plain",
+                    filename=f"meeting_{meeting_id}_transcript.txt"
+                )
+        
+        elif type == "summary":
+            file_path = meeting.summary_path
+            if not file_path:
+                raise HTTPException(404, "Summary not found")
+            
+            # Pro/Business - Generate B2 presigned URL
+            if file_path.startswith("s3://"):
+                from app.routers.storage_b2 import s3_client, get_bucket
+                
+                s3 = s3_client()
+                bucket = get_bucket()
+                key = file_path.replace(f"s3://{bucket}/", "")
+                
+                download_url = s3.generate_presigned_url(
+                    'get_object',
+                    Params={'Bucket': bucket, 'Key': key},
+                    ExpiresIn=3600
+                )
+                
+                return {
+                    "download_url": download_url,
+                    "filename": f"meeting_{meeting_id}_summary.txt",
+                    "storage": "cloud"
+                }
+            
+            # Free/Starter - Local file
+            else:
+                if not Path(file_path).exists():
+                    raise HTTPException(404, "Summary file not found on server")
+                
+                return FileResponse(
+                    file_path,
+                    media_type="application/json",
+                    filename=f"meeting_{meeting_id}_summary.json"
+                )
+        
+        else:
+            raise HTTPException(400, f"Invalid download type: {type}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Download error: {e}")
+        raise HTTPException(500, f"Download failed: {str(e)}")
 
 # ADD THIS UTILITY FUNCTION to clean up audio files for Free/Starter after processing
 def cleanup_media_file(meeting_id: int, db: Session):
@@ -1090,6 +947,72 @@ def cleanup_media_file(meeting_id: int, db: Session):
     
     except Exception as e:
         print(f"⚠️ Failed to cleanup media: {e}")
+        
+def upload_transcript_summary_to_b2(meeting_id: int, db: Session):
+    """
+    Upload transcript and summary to B2 for Pro/Business tiers.
+    Called after processing completes.
+    """
+    from app.routers.storage_b2 import s3_client, get_bucket
+    
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        return
+    
+    # Only for Pro/Business with cloud storage
+    if not meeting.license or meeting.license.tier.lower() not in ('professional', 'business'):
+        print(f"⏭️ Skipping B2 upload for {meeting.license.tier if meeting.license else 'free'} tier")
+        return
+    
+    s3 = s3_client()
+    bucket = get_bucket()
+    tier_folder = meeting.license.tier.lower()
+    
+    try:
+        # Upload transcript to B2
+        if meeting.transcript_path and Path(meeting.transcript_path).exists():
+            transcript_key = f"{tier_folder}/transcripts/transcript_{meeting_id}.txt"
+            
+            with open(meeting.transcript_path, 'rb') as f:
+                s3.upload_fileobj(f, bucket, transcript_key)
+            
+            print(f"☁️ Uploaded transcript to B2: {transcript_key}")
+            
+            # Update to B2 path
+            old_path = meeting.transcript_path
+            meeting.transcript_path = f"s3://{bucket}/{transcript_key}"
+            
+            # Delete local file
+            Path(old_path).unlink()
+            print(f"🗑️ Deleted local transcript: {old_path}")
+        
+        # Upload summary to B2
+        if meeting.summary_path and Path(meeting.summary_path).exists():
+            summary_key = f"{tier_folder}/summaries/summary_{meeting_id}.json"
+            
+            with open(meeting.summary_path, 'rb') as f:
+                s3.upload_fileobj(f, bucket, summary_key)
+            
+            print(f"☁️ Uploaded summary to B2: {summary_key}")
+            
+            # Update to B2 path
+            old_path = meeting.summary_path
+            meeting.summary_path = f"s3://{bucket}/{summary_key}"
+            
+            # Delete local file
+            Path(old_path).unlink()
+            print(f"🗑️ Deleted local summary: {old_path}")
+        
+        meeting.status = "delivered"
+        meeting.step = "Complete. Files stored in cloud."
+        db.add(meeting)
+        db.commit()
+        
+        print(f"✅ Meeting {meeting_id} files uploaded to B2 and local copies deleted")
+        
+    except Exception as e:
+        print(f"❌ Failed to upload to B2: {e}")
+        raise       
 
 # MODIFY your existing delete endpoint to handle B2 files
 @router.delete("/{meeting_id}")
