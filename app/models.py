@@ -42,6 +42,11 @@ class License(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
     
+    # ✅ ADD THESE FIELDS:
+    iap_receipt: Optional[str] = Field(default=None)
+    iap_product_id: Optional[str] = Field(default=None)
+    iap_store: Optional[str] = Field(default=None)  # 'google_play' or 'app_store'
+    
 # Tier Limits Configuration
 TIER_LIMITS = {
     LicenseTier.FREE: {
@@ -102,6 +107,7 @@ class Meeting(SQLModel, table=True):
     
     # Status
     is_active: bool = Field(default=True)
+    device_id: Optional[str] = Field(default=None, index=True)  # For app installs
     activated_at: Optional[datetime] = Field(default=None)
     expires_at: Optional[datetime] = Field(default=None)
     
@@ -109,19 +115,10 @@ class Meeting(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
-    # Legacy support
-    gumroad_order_id: Optional[str] = Field(default=None, max_length=128)
-    
     id: Optional[int] = Field(default=None, primary_key=True)
     license_key: str = Field(unique=True, index=True)
     tier: str  # Will store LicenseTier enum values
     email: str
-    
-    # Status
-    is_active: bool = Field(default=True)
-    device_id: Optional[str] = Field(default=None, index=True)  # For app installs
-    activated_at: Optional[datetime] = None
-    expires_at: Optional[datetime] = None
     
     # Gumroad integration
     gumroad_order_id: Optional[str] = Field(default=None, unique=True)

@@ -68,7 +68,9 @@ def ensure_meeting_progress_columns():
 
 def init_db():
     from .models import License, LicenseUsage, Meeting  # Import here to register models
-    SQLModel.metadata.create_all(_engine)
+    engine = create_engine(DATABASE_URL, isolation_level="AUTOCOMMIT")
+    SQLModel.metadata.drop_all(engine)
+    SQLModel.metadata.create_all(engine)
     ensure_meeting_progress_columns()
 
 def get_session():
