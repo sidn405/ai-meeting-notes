@@ -188,7 +188,8 @@ async def upload_meeting(
             audio_path=str(media_path),
             email_to=email_to,
             status="queued",
-            media_type=detected_type
+            media_type=detected_type,
+            license_id=license.id if license else None 
         )
         s.add(m)
         s.commit()
@@ -1127,4 +1128,3 @@ def confirm_download(
     except Exception as e:
         print(f"⚠️ Failed to delete files from server: {e}")
         raise HTTPException(500, f"Failed to delete server files: {str(e)}")
-

@@ -13,7 +13,7 @@ from sqlmodel import select
 from sqlalchemy import text as sql_text
 import re
 from ..db import get_session, DATA_DIR
-from ..models import Meeting
+from ..models import Meeting, License
 from ..utils.storage import save_text
 
 # ---------- ASR (AssemblyAI) ----------
@@ -207,31 +207,120 @@ def _email_with_resend_by_id(meeting_id: int, summary_json: dict, summary_path: 
     dec = summary_json.get("key_decisions", []) or []
     ai  = summary_json.get("action_items", []) or []
 
-    rows = ""
+    # Build action items HTML
+    action_html = ""
     for item in ai:
-        owner = item.get("owner", "TBD")
+        owner = item.get("owner", "Unassigned")
         task = item.get("task", "")
         due = item.get("due_date", "")
-        prio = item.get("priority", "Medium")
-        rows += f'<tr><td style="padding:8px;border:1px solid #ddd">{owner}</td><td style="padding:8px;border:1px solid #ddd">{task}</td><td style="padding:8px;border:1px solid #ddd">{due}</td><td style="padding:8px;border:1px solid #ddd">{prio}</td></tr>'
+        priority = item.get("priority", "Medium")
+        
+        priority_color = {
+            "High": "#ef4444",
+            "Medium": "#f59e0b",
+            "Low": "#10b981"
+        }.get(priority, "#6b7280")
+        
+        due_text = f" · Due: {due}" if due else ""
+        
+        action_html += f'''
+        <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">
+                <div style="margin-bottom: 4px;">
+                    <span style="display: inline-block; padding: 2px 8px; background: {priority_color}; color: white; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 8px;">{priority}</span>
+                    <span style="color: #6b7280; font-size: 14px;">{owner}{due_text}</span>
+                </div>
+                <div style="color: #111827; font-size: 15px;">{task}</div>
+            </td>
+        </tr>
+        '''
 
-    dec_bullets = "".join(f"<li>{d}</li>" for d in dec)
-    subject = f"Meeting Notes: {meeting_title}"
+    # Build decisions HTML
+    decisions_html = ""
+    for decision in dec:
+        decisions_html += f'''
+        <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">
+                <div style="color: #111827; font-size: 15px; line-height: 1.5;">• {decision}</div>
+            </td>
+        </tr>
+        '''
 
     html = f"""
+    <!DOCTYPE html>
     <html>
-    <body style="font-family: Arial,sans-serif; color:#333;">
-      <h2 style="color:#1a73e8;">Meeting: {meeting_title}</h2>
-      <h3>Executive Summary</h3>
-      <p>{ex}</p>
-      <h3>Key Decisions</h3>
-      <ul>{dec_bullets}</ul>
-      <h3>Action Items</h3>
-      <table style="border-collapse:collapse;width:100%;">
-        <thead><tr style="background:#f0f0f0;"><th style="padding:8px;border:1px solid #ddd">Owner</th><th style="padding:8px;border:1px solid #ddd">Task</th><th style="padding:8px;border:1px solid #ddd">Due Date</th><th style="padding:8px;border:1px solid #ddd">Priority</th></tr></thead>
-        <tbody>{rows}</tbody>
-      </table>
-      {links}
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+        <table role="presentation" style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td align="center" style="padding: 40px 20px;">
+                    <table role="presentation" style="max-width: 600px; width: 100%; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <!-- Header -->
+                        <tr>
+                            <td style="padding: 32px 32px 24px; border-bottom: 1px solid #e5e7eb;">
+                                <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #111827;">Meeting Summary</h1>
+                                <p style="margin: 8px 0 0; font-size: 16px; color: #6b7280;">{meeting_title}</p>
+                            </td>
+                        </tr>
+                        
+                        <!-- Executive Summary -->
+                        <tr>
+                            <td style="padding: 24px 32px;">
+                                <h2 style="margin: 0 0 12px; font-size: 18px; font-weight: 600; color: #111827;">Executive Summary</h2>
+                                <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #374151;">{ex}</p>
+                            </td>
+                        </tr>
+                        
+                        <!-- Key Decisions -->
+                        {"" if not dec else f'''
+                        <tr>
+                            <td style="padding: 24px 32px; border-top: 1px solid #e5e7eb;">
+                                <h2 style="margin: 0 0 12px; font-size: 18px; font-weight: 600; color: #111827;">Key Decisions</h2>
+                                <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                                    {decisions_html}
+                                </table>
+                            </td>
+                        </tr>
+                        '''}
+                        
+                        <!-- Action Items -->
+                        {"" if not ai else f'''
+                        <tr>
+                            <td style="padding: 24px 32px; border-top: 1px solid #e5e7eb;">
+                                <h2 style="margin: 0 0 12px; font-size: 18px; font-weight: 600; color: #111827;">Action Items</h2>
+                                <table role="presentation" style="width: 100%; border-collapse: collapse; background: #f9fafb; border-radius: 6px; overflow: hidden;">
+                                    {action_html}
+                                </table>
+                            </td>
+                        </tr>
+                        '''}
+                        
+                        <!-- Downloads -->
+                        {f'''
+                        <tr>
+                            <td style="padding: 24px 32px; border-top: 1px solid #e5e7eb;">
+                                <p style="margin: 0 0 12px; font-size: 14px; color: #6b7280;">Download full documents:</p>
+                                <a href="{app_base}/meetings/{meeting_id}/download/summary" style="display: inline-block; margin-right: 12px; padding: 10px 20px; background: #3b82f6; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500;">Summary (JSON)</a>
+                                <a href="{app_base}/meetings/{meeting_id}/download/transcript" style="display: inline-block; padding: 10px 20px; background: #10b981; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500;">Transcript (TXT)</a>
+                            </td>
+                        </tr>
+                        ''' if app_base else ''}
+                        
+                        <!-- Footer -->
+                        <tr>
+                            <td style="padding: 24px 32px; border-top: 1px solid #e5e7eb; background: #f9fafb;">
+                                <p style="margin: 0; font-size: 13px; color: #6b7280; text-align: center;">
+                                    Sent by {from_name}
+                                </p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
     </body>
     </html>
     """
@@ -239,72 +328,92 @@ def _email_with_resend_by_id(meeting_id: int, summary_json: dict, summary_path: 
     payload = {
         "from": f"{from_name} <{from_email}>",
         "to": [override_to],
-        "subject": subject,
+        "subject": f"Meeting Summary: {meeting_title}",
         "html": html,
     }
-    resp = httpx.post(
-        "https://api.resend.com/emails",
-        headers={"Authorization": f"Bearer {api}", "Content-Type": "application/json"},
-        json=payload,
-        timeout=10,
-    )
-    resp.raise_for_status()
-    
-def send_summary_email(meeting_id: int, to: str):
+
+    try:
+        r = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {api}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=30,
+        )
+        r.raise_for_status()
+        print(f"✅ Email sent to {override_to}")
+    except Exception as e:
+        print(f"❌ Email error: {e}")
+
+def send_summary_email(meeting_id: int, summary_json: dict, summary_path: str, email_to: str):
+    """Wrapper for backward compatibility"""
+    _email_with_resend_by_id(meeting_id, summary_json, summary_path, email_to)
+
+# ---------- Progress tracking ----------
+
+def _set_progress(meeting_id: int, percent: int, step: str, status: str = "processing"):
+    """Update meeting progress in database"""
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
-        if not m or not m.summary_path or not Path(m.summary_path).exists():
-            raise RuntimeError("Summary not ready")
-        summary_path = m.summary_path  # Store path before session closes
-    
-    summary_json = json.loads(Path(summary_path).read_text(encoding="utf-8"))
-    _email_with_resend_by_id(meeting_id, summary_json, summary_path, override_to=to)  # ✅ Pass meeting_id, not m
-
-
-# ---------- Progress helpers ----------
-
-def _set_progress(meeting_id: int, pct: int, step: str = "", status: str = "processing"):
-    """Utility to update DB progress in its own session"""
-    with get_session() as s:
-        m = s.get(Meeting, meeting_id)
-        if not m:
-            return
-        m.progress = pct
-        m.step = step or m.step
-        if status:
+        if m:
+            m.progress = percent
+            m.step = step
             m.status = status
-        s.add(m)
-        s.commit()
+            s.add(m)
+            s.commit()
 
-def _get_transcript_path(meeting_id: int, title: str) -> str:
-    """Generate persistent transcript path"""
+def _get_transcript_path(mid: int, title: str) -> str:
+    """Get standardized transcript path"""
     transcripts_dir = DATA_DIR / "transcripts"
-    transcripts_dir.mkdir(parents=True, exist_ok=True)
+    transcripts_dir.mkdir(exist_ok=True, parents=True)
     
-    safe_title = "".join(c for c in title if c.isalnum() or c in " -_").rstrip()
-    safe_title = safe_title[:50] if safe_title else "meeting"
+    # Sanitize title
+    safe_title = re.sub(r'[^\w\s-]', '', title)[:50]
+    safe_title = re.sub(r'[-\s]+', '_', safe_title)
     
-    filename = f"{meeting_id}_{safe_title}.txt"
+    filename = f"{mid}_{safe_title}.txt"
     path = transcripts_dir / filename
     
     print(f"📝 Transcript path: {path}")
     return str(path.resolve())
 
-def _get_summary_path(meeting_id: int, title: str) -> str:
-    """Generate persistent summary path"""
+def _get_summary_path(mid: int, title: str) -> str:
+    """Get standardized summary path"""
     summaries_dir = DATA_DIR / "summaries"
-    summaries_dir.mkdir(parents=True, exist_ok=True)
+    summaries_dir.mkdir(exist_ok=True, parents=True)
     
-    safe_title = "".join(c for c in title if c.isalnum() or c in " -_").rstrip()
-    safe_title = safe_title[:50] if safe_title else "meeting"
+    # Sanitize title
+    safe_title = re.sub(r'[^\w\s-]', '', title)[:50]
+    safe_title = re.sub(r'[-\s]+', '_', safe_title)
     
-    filename = f"{meeting_id}_{safe_title}.json"
+    filename = f"{mid}_{safe_title}.json"
     path = summaries_dir / filename
     
     print(f"📊 Summary path: {path}")
     return str(path.resolve())
 
 # ---------- B2 UPLOAD AND CLEANUP ----------
+
+def _get_meeting_tier(meeting_id: int, db) -> str:
+    """
+    Get the tier for a meeting by looking up associated license.
+    Returns: 'free', 'starter', 'professional', or 'business'
+    """
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        return "free"
+    
+    # If meeting has license_id stored, fetch license
+    if hasattr(meeting, 'license_id') and meeting.license_id:
+        license = db.get(License, meeting.license_id)
+        if license:
+            return license.tier.lower()
+    
+    # If meeting has license relationship loaded
+    if hasattr(meeting, 'license') and meeting.license:
+        return meeting.license.tier.lower()
+    
+    # Default to free
+    return "free"
 
 def _upload_to_b2_and_cleanup(meeting_id: int):
     """
@@ -318,7 +427,9 @@ def _upload_to_b2_and_cleanup(meeting_id: int):
             print(f"❌ Meeting {meeting_id} not found")
             return
         
-        tier = meeting.license.tier.lower() if meeting.license else "free"
+        # FIX: Use helper function to get tier
+        tier = _get_meeting_tier(meeting_id, db)
+        
         print(f"\n{'='*60}")
         print(f"🎯 Finalizing meeting {meeting_id} for {tier} tier")
         print(f"{'='*60}")
@@ -362,7 +473,9 @@ def _upload_files_to_b2(meeting_id: int, db):
     
     s3 = s3_client()
     bucket = get_bucket()
-    tier_folder = meeting.license.tier.lower() if meeting.license else "free"
+    
+    # FIX: Use helper function to get tier
+    tier_folder = _get_meeting_tier(meeting_id, db)
     
     # Upload transcript
     if meeting.transcript_path and Path(meeting.transcript_path).exists():

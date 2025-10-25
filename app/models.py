@@ -93,12 +93,13 @@ class Meeting(SQLModel, table=True):
     
     status: str = "queued"
     
-    # ✅ MAKE THESE OPTIONAL - FREE USERS DON'T HAVE LICENSE
+    # ✅ MAKE THESE OPTIONAL - FREE USERS DO HAVE LICENSE
     license_key: Optional[str] = Field(default=None, index=True, max_length=64)
     tier: Optional[str] = Field(default=None, max_length=32)
     
     email_to: Optional[str] = None
     slack_channel: Optional[str] = None
+    media_type: str = "audio"
     
     # Progress tracking
     progress: int = 0
@@ -121,6 +122,7 @@ class Meeting(SQLModel, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     license_key: str = Field(unique=True, index=True)
+    license_id: int | None = Field(default=None, foreign_key="license.id")
     tier: str  # Will store LicenseTier enum values
     email: str
     
