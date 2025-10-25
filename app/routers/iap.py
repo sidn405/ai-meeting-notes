@@ -1,4 +1,4 @@
-# app/routers/iap.py - COMPLETE FILE WITH GOOGLE PLAY VERIFICATION
+# app/routers/iap.py - COMPLETE FIXED VERSION
 
 import os
 import json
@@ -19,8 +19,8 @@ router = APIRouter(prefix="/iap", tags=["iap"])
 
 
 class IAPVerifyRequest(BaseModel):
-    receipt: str
-    store: str  # 'google_play' or 'app_store'
+    receipt: str  # ✅ Purchase token from Google Play
+    store: str    # 'google_play' or 'app_store'
     product_id: str
     user_id: Optional[str] = None
     email: Optional[str] = None
@@ -217,7 +217,7 @@ async def verify_iap_purchase(
                 tier=tier,
                 device_id=request.user_id,
                 email=request.email,
-                iap_purchase_token=request.purchase_token,
+                iap_purchase_token=request.receipt,
                 iap_product_id=request.product_id,
                 iap_store=request.store,
             )
