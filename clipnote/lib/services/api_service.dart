@@ -1,6 +1,9 @@
 // lib/services/api_service.dart
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:path_provider/path_provider.dart' as pp;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -419,7 +422,8 @@ Future<void> downloadAndSaveToDevice(int meetingId) async {
 Future<void> _saveToDevice(String filename, List<int> bytes, String title) async {
   try {
     // Get app documents directory
-    final directory = await getApplicationDocumentsDirectory();
+    Future<Directory> getApplicationDocumentsDirectory() => pp.getApplicationDocumentsDirectory();
+
     
     // Create meetings folder
     final meetingsDir = Directory('${directory.path}/meetings');

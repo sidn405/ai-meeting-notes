@@ -278,81 +278,60 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
 
   /// Upload meeting (multipart upload)
   Future<int> uploadMeeting({
+    Uint8List? bytes,
     File? file,
-    List<int>? fileBytes,
-    String? filename,
-    required String title,
-    String? email,
-    String? emailTo,
-    String? language,
-    String? hints,
-    bool transcribeOnly = false,
-    void Function(double)? onProgress,
+    required String filename,
+    required String type, // 'audio' | 'video' | 'transcript' | etc.
+    String? title,
   }) async {
-    try {
-      if (file == null && fileBytes == null) {
-        throw Exception('Either file or fileBytes must be provided');
-      }
-      
-      final emailAddress = email ?? emailTo;
-      
-      final uri = Uri.parse('$baseUrl/meetings/${transcribeOnly ? 'upload-transcribe-only' : 'upload-transcribe-summarize'}');
-      
-      var request = http.MultipartRequest('POST', uri);
-      
-      if (_licenseKey != null) {
-        request.headers['X-License-Key'] = _licenseKey!;
-      }
-      
-      request.fields['title'] = title;
-      if (emailAddress != null) request.fields['email_to'] = emailAddress;
-      if (language != null) request.fields['language'] = language;
-      if (hints != null) request.fields['hints'] = hints;
-      
-      if (file != null) {
-        request.files.add(await http.MultipartFile.fromPath('file', file.path));
-      } else if (fileBytes != null) {
-        final fileName = filename ?? 'upload.${_getExtensionFromBytes(fileBytes)}';
-        request.files.add(http.MultipartFile.fromBytes(
-          'file',
-          fileBytes,
-          filename: fileName,
-        ));
-      }
-      
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-      
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['id'];
-      } else {
-        throw Exception('Upload failed: ${response.body}');
-      }
-    } catch (e) {
-      print('[ApiService] Error uploading meeting: $e');
-      rethrow;
+    if (bytes == null && file == null) {
+      throw ArgumentError('Provide bytes or file');
     }
+
+    final uri = Uri.parse('$baseUrl/meetings/upload');
+    final req = http.MultipartRequest('POST', uri);
+    req.headers.addAll(await _getHeaders());
+    req.fields['type'] = type;
+    if (title != null) req.fields['title'] = title;
+
+    if (file != null) {
+      req.files.add(await http.MultipartFile.fromPath('file', file.path,
+          filename: filename));
+    } else {
+      req.files.add(http.MultipartFile.fromBytes('file', bytes!,
+          filename: filename));
+    }
+
+    final streamed = await req.send();
+    final res = await http.Response.fromStream(streamed);
+
+    if (res.statusCode == 200) {
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return data['meeting_id'] as int;
+    }
+
+    throw Exception('Upload failed: ${res.statusCode} ${res.body}');
   }
 
-  String _getExtensionFromBytes(List<int> bytes) {
-    if (bytes.isEmpty) return 'bin';
-    
-    if (bytes.length >= 4) {
-      if (bytes[0] == 0xFF && bytes[1] == 0xFB) return 'mp3';
-      if (bytes[0] == 0x49 && bytes[1] == 0x44 && bytes[2] == 0x33) return 'mp3';
+
+    String _getExtensionFromBytes(List<int> bytes) {
+      if (bytes.isEmpty) return 'bin';
       
-      if (bytes[4] == 0x66 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70) {
-        return 'm4a';
+      if (bytes.length >= 4) {
+        if (bytes[0] == 0xFF && bytes[1] == 0xFB) return 'mp3';
+        if (bytes[0] == 0x49 && bytes[1] == 0x44 && bytes[2] == 0x33) return 'mp3';
+        
+        if (bytes[4] == 0x66 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70) {
+          return 'm4a';
+        }
+        
+        if (bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46) {
+          return 'wav';
+        }
       }
       
-      if (bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46) {
-        return 'wav';
-      }
+      return 'mp3';
     }
-    
-    return 'mp3';
-  }
 
   /// Submit transcript (text only, no audio)
   Future<int> submitTranscript({

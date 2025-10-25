@@ -3,6 +3,11 @@ import 'package:clipnote/services/api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'transcript_screen.dart';
 import 'results_screen.dart';
+import 'dart:async'; // <-- for Timer
+import 'package:flutter/material.dart';
+
+bool get hasCloudStorage => _cachedTier == 'professional' || _cachedTier == 'business';
+bool get shouldAutoDownload => _autoDownload;
 
 class MeetingsListScreen extends StatefulWidget {
   final String? initialFilter;
@@ -1091,17 +1096,10 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
 
 Timer? _autoDownloadTimer;
 
-  @override
-  void initState() {
-    super.initState();
-    if (widget.initialFilter != null) {
-      _filterStatus = widget.initialFilter!;
-    }
-    _loadMeetings();
-    
-    // Start auto-download polling for Free/Starter tiers
-    _startAutoDownloadPolling();
-  }
+_autoDownloadTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+  // your polling or auto-download code
+});
+ 
 
   @override
   void dispose() {
@@ -1208,5 +1206,13 @@ Timer? _autoDownloadTimer;
       print('[MeetingsList] Error downloading $type: $e');
       rethrow;
     }
+  }
+}
+
+Future<void> confirmDownloadComplete(int meetingId) async {
+  final uri = Uri.parse('$baseUrl/meetings/$meetingId/download/confirm');
+  final res = await http.post(uri, headers: await _getHeaders());
+  if (res.statusCode != 200) {
+    throw Exception('Confirm download failed: ${res.statusCode} ${res.body}');
   }
 }

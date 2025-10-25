@@ -27,6 +27,8 @@ class IapService {
   // Availability and init
   bool _available = false;
   bool get isAvailable => _available;
+  
+
 
   bool _initialized = false;
 
@@ -257,53 +259,43 @@ class IapService {
       
       // Send to backend for verification
       debugPrint('[IapService] 📡 Sending verification request...');
-      final licenseKey = await _api.verifyIapAndGetLicense(
-        userId: deviceId,
-        receipt: receipt,
-        productId: purchase.productID,
-        store: store,
-        email: null, // Can be added if you have user email
-      );
-      
-      debugPrint('[IapService] ✅ Backend verification successful!');
-      
-      
-      // ✅ CRITICAL: Save the license key
-      await _api.saveLicenseKey(licenseKey);
-      debugPrint('[IapService] ✅ License key saved to local storage');
-      
-      // ✅ CRITICAL: Refresh license info immediately
-      debugPrint('[IapService] 🔄 Refreshing license info...');
-      final licenseInfo = await _api.getLicenseInfo();
-      debugPrint('[IapService] ✅ License info refreshed!');
-      debugPrint('[IapService] Tier: ${licenseInfo['tier']}');
-      debugPrint('[IapService] Tier Name: ${licenseInfo['tier_name']}');
-      
-      // ✅ Notify listeners to update UI
-      if (_onPurchaseSuccess != null) {
-        debugPrint('[IapService] 🔔 Notifying listeners...');
-        _onPurchaseSuccess!(licenseKey, licenseInfo['tier']);
-      }
-      
-      debugPrint('[IapService] ✅ Verification complete!');
-      
-    } catch (e, stackTrace) {
-      debugPrint('[IapService] ❌ Backend verification failed: $e');
-      debugPrint('[IapService] Stack trace: $stackTrace');
-      
-      if (e.toString().contains('socket') || 
-          e.toString().contains('network') ||
-          e.toString().contains('connection')) {
-        debugPrint('[IapService] ⚠️ Network error - will retry on next app launch');
-        // Don't complete purchase yet - retry later
-        return;
-      }
-      
-      // For other errors, still complete the purchase
-      // (user paid, even if verification had issues)
-      rethrow;
-    }
+      Future<String> verifyIapAndGetLicense({
+  required String packageName,
+  required String productId,
+  required String purchaseToken,
+  required String userId,
+}) async {
+  final uri = Uri.parse('$baseUrl/google/iap/verify/google');
+  final body = {
+    "user_id": userId,
+    "purchase_token": purchaseToken,
+    "product_id": productId,
+  };
+
+  final res = await http.post(
+    uri,
+    headers: {
+      ...(await _getHeaders()),
+      'Content-Type': 'application/json',
+    },
+    body: jsonEncode(body),
+  );
+
+  if (res.statusCode == 200) {
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    // Expecting: { success, tier, is_active, expires_at, license_key? }
+    final tier = (data['tier'] as String?)?.toLowerCase();
+    if (tier != null) _cachedTier = tier;
+
+    // if your backend returns a license key, pass it back; otherwise synthesize one
+    final licenseKey = (data['license_key'] as String?) ??
+        'LK-${DateTime.now().millisecondsSinceEpoch}';
+    return licenseKey;
   }
+
+  throw Exception('IAP verify failed: ${res.statusCode} ${res.body}');
+}
+
 
   Future<String> _getDeviceId() async {
     final deviceInfo = DeviceInfoPlugin();
