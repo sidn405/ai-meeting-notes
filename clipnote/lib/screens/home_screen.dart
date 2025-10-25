@@ -272,7 +272,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                if (isPaidUser && userEmail != null) ...[
+                if (isPaidUser) ...[
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -309,7 +309,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            userEmail!,
+                            userEmail ?? 'No email',  // ✅ Handle null email
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 13,
