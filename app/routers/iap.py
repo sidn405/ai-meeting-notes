@@ -207,7 +207,7 @@ async def verify_iap_purchase(
             license_obj.device_id = request.user_id
             if request.email:
                 license_obj.email = request.email
-            license_obj.iap_receipt = request.receipt
+            license_obj.iap_purchase_token = request.receipt
             license_obj.iap_product_id = request.product_id
             license_obj.iap_store = request.store
         else:
@@ -217,7 +217,7 @@ async def verify_iap_purchase(
                 tier=tier,
                 device_id=request.user_id,
                 email=request.email,
-                iap_receipt=request.receipt,
+                iap_purchase_token=request.purchase_token,
                 iap_product_id=request.product_id,
                 iap_store=request.store,
             )

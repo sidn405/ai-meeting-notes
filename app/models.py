@@ -43,7 +43,7 @@ class License(SQLModel, table=True):
     updated_at: Optional[datetime] = None
     
     # ✅ ADD THESE FIELDS:
-    iap_receipt: Optional[str] = Field(default=None)
+    iap_purchase_token: Optional[str] = Field(default=None)
     iap_product_id: Optional[str] = Field(default=None)
     iap_store: Optional[str] = Field(default=None)  # 'google_play' or 'app_store'
     
