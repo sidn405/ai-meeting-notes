@@ -249,6 +249,17 @@ def _email_with_resend_by_id(meeting_id: int, summary_json: dict, summary_path: 
         timeout=10,
     )
     resp.raise_for_status()
+    
+def send_summary_email(meeting_id: int, to: str):
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m or not m.summary_path or not Path(m.summary_path).exists():
+            raise RuntimeError("Summary not ready")
+        summary_path = m.summary_path  # Store path before session closes
+    
+    summary_json = json.loads(Path(summary_path).read_text(encoding="utf-8"))
+    _email_with_resend_by_id(meeting_id, summary_json, summary_path, override_to=to)  # ✅ Pass meeting_id, not m
+
 
 # ---------- Progress helpers ----------
 
