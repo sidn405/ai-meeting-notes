@@ -63,7 +63,7 @@ class UserGuideScreen extends StatelessWidget {
               icon: Icons.upload_file,
               title: 'Uploading Files',
               description: 'Choose "Audio/Video File" to upload media files. '
-                  'Free tier saves to your device, while paid tiers offer cloud storage.',
+                  
             ),
             const SizedBox(height: 16),
             

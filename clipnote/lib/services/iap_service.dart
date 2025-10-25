@@ -1,10 +1,12 @@
 // lib/services/iap_service.dart
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:http/http.dart' as http;
 
 import 'api_service.dart';
 
@@ -28,8 +30,6 @@ class IapService {
   bool _available = false;
   bool get isAvailable => _available;
   
-
-
   bool _initialized = false;
 
   // Prevent duplicate purchase attempts
@@ -238,7 +238,7 @@ class IapService {
   /// Send receipt/token to backend to verify and issue/update license
   Future<void> _verifyWithBackend(PurchaseDetails purchase) async {
     try {
-      debugPrint('[IapService] 🔐 Verifying purchase with backend...');
+      debugPrint('[IapService] 🔍 Verifying purchase with backend...');
       debugPrint('[IapService] Purchase ID: ${purchase.purchaseID}');
       debugPrint('[IapService] Product ID: ${purchase.productID}');
 
@@ -257,46 +257,77 @@ class IapService {
       final store = Platform.isAndroid ? 'google_play' : 'app_store';
       debugPrint('[IapService] Store: $store');
       
-      // Send to backend for verification
-      debugPrint('[IapService] 📡 Sending verification request...');
-      Future<String> verifyIapAndGetLicense({
-  required String packageName,
-  required String productId,
-  required String purchaseToken,
-  required String userId,
-}) async {
-  final uri = Uri.parse('$baseUrl/google/iap/verify/google');
-  final body = {
-    "user_id": userId,
-    "purchase_token": purchaseToken,
-    "product_id": productId,
-  };
-
-  final res = await http.post(
-    uri,
-    headers: {
-      ...(await _getHeaders()),
-      'Content-Type': 'application/json',
-    },
-    body: jsonEncode(body),
-  );
-
-  if (res.statusCode == 200) {
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    // Expecting: { success, tier, is_active, expires_at, license_key? }
-    final tier = (data['tier'] as String?)?.toLowerCase();
-    if (tier != null) _cachedTier = tier;
-
-    // if your backend returns a license key, pass it back; otherwise synthesize one
-    final licenseKey = (data['license_key'] as String?) ??
-        'LK-${DateTime.now().millisecondsSinceEpoch}';
-    return licenseKey;
+      // Call backend verification
+      final licenseKey = await _verifyIapAndGetLicense(
+        packageName: Platform.isAndroid ? 'com.yourcompany.clipnote' : 'com.yourcompany.clipnote',
+        productId: purchase.productID,
+        purchaseToken: receipt,
+        userId: deviceId,
+      );
+      
+      debugPrint('[IapService] ✅ Verification successful! License: ${licenseKey.substring(0, 8)}...');
+      
+      // Save license key
+      await _api.saveLicenseKey(licenseKey);
+      
+      // Reload license info to get tier
+      await _api.getLicenseInfo();
+      
+      // Notify callback
+      if (_onPurchaseSuccess != null) {
+        final tier = _api.currentTier ?? 'free';
+        _onPurchaseSuccess!(licenseKey, tier);
+      }
+      
+    } catch (e, stackTrace) {
+      debugPrint('[IapService] ❌ Backend verification failed: $e');
+      debugPrint('[IapService] Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
-  throw Exception('IAP verify failed: ${res.statusCode} ${res.body}');
-}
+  /// Verify IAP with backend and get license key
+  Future<String> _verifyIapAndGetLicense({
+    required String packageName,
+    required String productId,
+    required String purchaseToken,
+    required String userId,
+  }) async {
+    final uri = Uri.parse('${_api.baseUrl}/google/iap/verify/google');
+    final body = {
+      "user_id": userId,
+      "purchase_token": purchaseToken,
+      "product_id": productId,
+    };
 
+    debugPrint('[IapService] 📡 POST $uri');
+    debugPrint('[IapService] Body: ${jsonEncode(body)}');
 
+    final res = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
+
+    debugPrint('[IapService] Response: ${res.statusCode}');
+    debugPrint('[IapService] Response body: ${res.body}');
+
+    if (res.statusCode == 200) {
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      
+      // Expecting: { success, tier, is_active, expires_at, license_key? }
+      final licenseKey = (data['license_key'] as String?) ??
+          'LK-${DateTime.now().millisecondsSinceEpoch}';
+      
+      return licenseKey;
+    }
+
+    throw Exception('IAP verify failed: ${res.statusCode} ${res.body}');
+  }
+
+  /// Get device ID
   Future<String> _getDeviceId() async {
     final deviceInfo = DeviceInfoPlugin();
     if (Platform.isAndroid) {

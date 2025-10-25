@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:clipnote/services/api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 import 'transcript_screen.dart';
 import 'results_screen.dart';
-import 'dart:async'; // <-- for Timer
-import 'package:flutter/material.dart';
-
-bool get hasCloudStorage => _cachedTier == 'professional' || _cachedTier == 'business';
-bool get shouldAutoDownload => _autoDownload;
 
 class MeetingsListScreen extends StatefulWidget {
   final String? initialFilter;
@@ -18,6 +14,9 @@ class MeetingsListScreen extends StatefulWidget {
   State<MeetingsListScreen> createState() => _MeetingsListScreenState();
 }
 
+// Use a MaterialColor so .shade50/.shade700 are valid
+final MaterialColor badgeSwatch = Colors.blue; // <-- rename from badgeColor if needed
+
 class _MeetingsListScreenState extends State<MeetingsListScreen> {
   final _api = ApiService.I;
   List<Map<String, dynamic>> _meetings = [];
@@ -25,6 +24,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
   bool _isLoading = true;
   String _searchQuery = '';
   String _filterStatus = 'all';
+  Timer? _autoDownloadTimer;
 
   @override
   void initState() {
@@ -33,6 +33,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       _filterStatus = widget.initialFilter!;
     }
     _loadMeetings();
+    _startAutoDownloadPolling();
   }
 
   Future<void> _loadMeetings() async {
@@ -171,20 +172,20 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.blue.shade50,
+          color: badgeSwatch.shade50,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud, size: 12, color: Colors.blue.shade700),
+            Icon(Icons.cloud, size: 12, color: badgeSwatch.shade50),
             const SizedBox(width: 4),
             Text(
               'Cloud',
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
-                color: Colors.blue.shade700,
+                color: badgeSwatch.shade700,
               ),
             ),
           ],
@@ -213,20 +214,20 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: badgeColor.shade50,
+          color: badgeSwatch.shade50,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(badgeIcon, size: 12, color: badgeColor.shade700),
+            Icon(badgeIcon, size: 12, color: badgeSwatch.shade700),
             const SizedBox(width: 4),
             Text(
               badgeText,
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
-                color: badgeColor.shade700,
+                color: badgeSwatch.shade700,
               ),
             ),
           ],
@@ -1093,12 +1094,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       ),
     );
   }
-
-Timer? _autoDownloadTimer;
-
-_autoDownloadTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-  // your polling or auto-download code
-});
  
 
   @override
@@ -1206,13 +1201,5 @@ _autoDownloadTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       print('[MeetingsList] Error downloading $type: $e');
       rethrow;
     }
-  }
-}
-
-Future<void> confirmDownloadComplete(int meetingId) async {
-  final uri = Uri.parse('$baseUrl/meetings/$meetingId/download/confirm');
-  final res = await http.post(uri, headers: await _getHeaders());
-  if (res.statusCode != 200) {
-    throw Exception('Confirm download failed: ${res.statusCode} ${res.body}');
   }
 }
