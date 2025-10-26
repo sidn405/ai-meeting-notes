@@ -480,6 +480,7 @@ class ApiService {
   }
 
   /// Download meeting file (transcript, summary, or all)
+  /// Returns the download URL with authentication token
   Future<Map<String, dynamic>> downloadMeetingFile(
     int meetingId,
     String type,
@@ -487,7 +488,10 @@ class ApiService {
     try {
       print('[ApiService] ⬇️ Preparing download for meeting $meetingId, type: $type');
       
-      final downloadUrl = '$baseUrl/meetings/$meetingId/download?type=$type';
+      // Include license key in the URL as a query parameter for direct downloads
+      final downloadUrl = _licenseKey != null
+          ? '$baseUrl/meetings/$meetingId/download?type=$type&license_key=$_licenseKey'
+          : '$baseUrl/meetings/$meetingId/download?type=$type';
       
       return {
         'filename': _getFilenameForType(type, meetingId),
@@ -501,6 +505,49 @@ class ApiService {
     }
   }
 
+  /// Download meeting file directly using Dio with authentication headers
+  /// This method actually downloads the file bytes with proper authentication
+  Future<List<int>> downloadMeetingFileBytes(
+    int meetingId,
+    String type,
+  ) async {
+    try {
+      print('[ApiService] ⬇️ Downloading file for meeting $meetingId, type: $type');
+      
+      final response = await _dio.get(
+        '/meetings/$meetingId/download',
+        queryParameters: {'type': type},
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {
+            if (_licenseKey != null) 'X-License-Key': _licenseKey!,
+          },
+        ),
+      );
+      
+      if (response.statusCode == 200) {
+        print('[ApiService] ✅ File downloaded successfully');
+        return response.data as List<int>;
+      } else {
+        throw Exception('Download failed with status: ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      print('[ApiService] ❌ DioException downloading file: ${e.type}');
+      print('[ApiService] Status code: ${e.response?.statusCode}');
+      print('[ApiService] Response data: ${e.response?.data}');
+      
+      if (e.response?.statusCode == 403) {
+        throw Exception('Permission denied. You may not have access to this meeting.');
+      } else if (e.response?.statusCode == 404) {
+        throw Exception('File not found or meeting does not exist.');
+      } else {
+        throw Exception('Download failed: ${e.message}');
+      }
+    } catch (e) {
+      print('[ApiService] ❌ Error downloading file: $e');
+      rethrow;
+    }
+  }
   /// Helper to generate filename
   String _getFilenameForType(String type, int meetingId) {
     switch (type.toLowerCase()) {

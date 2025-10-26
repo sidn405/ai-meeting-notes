@@ -1473,12 +1473,14 @@ class _UploadScreenState extends State<UploadScreen> {
     required bool saveToCloud,
     required bool transcribeOnly,
   }) async {
-    final Uint8List bytes = file.bytes!;
+    // Use file path instead of loading bytes into memory
+    final filePath = file.path!;
     final filename = file.name;
-    final fileSizeMB = bytes.length / (1024 * 1024);
+    final fileSizeMB = file.size / (1024 * 1024);
     final progressNotifier = ValueNotifier<double>(0.0);
 
     print('Uploading file: $filename (${fileSizeMB.toStringAsFixed(2)} MB)');
+    print('File path: $filePath');
     print('Mode: ${transcribeOnly ? "transcribe-only" : "transcribe-and-summarize"}');
 
     if (!mounted) return;
@@ -1562,8 +1564,7 @@ class _UploadScreenState extends State<UploadScreen> {
     try {
       final meetingId = await api.uploadMeeting(
         title: title.isEmpty ? 'Untitled Meeting' : title,
-        //fileBytes: bytes,
-        filename: filename,
+        filename: filePath,  // Use full file path instead of just filename
         email: email.isEmpty ? null : email,
         language: language == 'auto' ? null : language,
         hints: hints.isEmpty ? null : hints,
