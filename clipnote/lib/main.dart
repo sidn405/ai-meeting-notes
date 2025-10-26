@@ -5,9 +5,16 @@ import 'screens/home_screen.dart';
 import 'screens/activation_screen.dart';
 import 'screens/upload_screen.dart';
 
-void main() {
-  //WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ClipnoteApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // ⚠️ CRITICAL: This loads the license key
+  await ApiService.I.init();
+  
+  // Optional but recommended
+  await ApiService.I.ensureUserHasLicense();
+  
+  runApp(MyApp());
 }
 
 class ClipnoteApp extends StatelessWidget {

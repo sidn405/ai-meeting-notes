@@ -620,20 +620,47 @@ class ApiService {
 
   Future<void> downloadMeeting(int meetingId, String type) async {
     // type can be 'transcript' or 'summary'
-    final response = await _dio.get(
-      '/meetings/$meetingId/download',
-      queryParameters: {'type': type},
-    );
-    
-    // Handle download based on storage location
-    if (response.data is Map && response.data['storage'] == 'cloud') {
-      // It's a cloud file, open the presigned URL
-      final url = response.data['download_url'];
-      // Use url_launcher or in_app_browser to open the URL
-      // You'll need to implement this based on your app's download strategy
-    } else {
-      // It's a local file response, handle accordingly
-      // This might be a direct file download
+    try {
+      print('[ApiService] 🔍 Attempting download - Meeting: $meetingId, Type: $type');
+      print('[ApiService] License key available: ${_licenseKey != null ? "YES (${_licenseKey!.substring(0, 8)}...)" : "NO"}');
+      
+      final response = await _dio.get(
+        '/meetings/$meetingId/download',
+        queryParameters: {'type': type},
+        options: Options(
+          headers: {
+            if (_licenseKey != null) 'X-License-Key': _licenseKey!,
+          },
+        ),
+      );
+      
+      print('[ApiService] Download response status: ${response.statusCode}');
+      
+      // Handle download based on storage location
+      if (response.data is Map && response.data['storage'] == 'cloud') {
+        // It's a cloud file, open the presigned URL
+        final url = response.data['download_url'];
+        print('[ApiService] Cloud file, URL: $url');
+        // Use url_launcher or in_app_browser to open the URL
+        // You'll need to implement this based on your app's download strategy
+      } else {
+        print('[ApiService] Local file response');
+        // It's a local file response, handle accordingly
+        // This might be a direct file download
+      }
+    } on DioException catch (e) {
+      print('[ApiService] ❌ DioException in downloadMeeting: ${e.type}');
+      print('[ApiService] Status code: ${e.response?.statusCode}');
+      print('[ApiService] Response: ${e.response?.data}');
+      print('[ApiService] Request headers: ${e.requestOptions.headers}');
+      
+      if (e.response?.statusCode == 403) {
+        throw Exception('Permission denied. License key issue or no access to this meeting.');
+      }
+      rethrow;
+    } catch (e) {
+      print('[ApiService] ❌ Error in downloadMeeting: $e');
+      rethrow;
     }
   }
 
