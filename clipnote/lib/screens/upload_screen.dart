@@ -5,6 +5,8 @@ import 'package:clipnote/services/api_service.dart';
 import 'package:clipnote/screens/progress_screen.dart';
 import 'package:clipnote/screens/transcript_screen.dart';
 import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
@@ -471,20 +473,14 @@ class _UploadScreenState extends State<UploadScreen> {
                               try {
                                 final result = await FilePicker.platform.pickFiles(
                                   allowMultiple: false,
-                                  withData: true,
+                                  withData: true,  // Changed to true to read file contents
                                   type: FileType.custom,
                                   allowedExtensions: const ['txt', 'doc', 'docx', 'pdf'],
                                 );
                                 
-                                if (result != null && result.files.single.path != null) {
-                                  final file = File(result.files.single.path!);
-                                  
-                                  await ApiService.I.uploadMeeting(
-                                    file: file,  // ← Pass File object instead of bytes
-                                    title: title,
-                                    email: email,
-                                    emailTo: emailTo,
-                                  );
+                                if (result != null && result.files.single.bytes != null) {
+                                  final bytes = result.files.single.bytes!;
+                                  final text = String.fromCharCodes(bytes);
                                   
                                   setModalState(() {
                                     selectedFile = result.files.single;
@@ -841,14 +837,15 @@ class _UploadScreenState extends State<UploadScreen> {
                         try {
                           final result = await FilePicker.platform.pickFiles(
                             allowMultiple: false,
+                            withData: false,
                             type: FileType.custom,
                             allowedExtensions: const ['m4a', 'mp3', 'wav', 'aac', 'mp4', 'mov', 'mkv', 'webm'],
                           );
                           
                           if (result != null && result.files.single.path != null) {
-                            final filePath = result.files.single.path!;  // Just a string
-                            await uploadFile(filePath);  // File stays on disk
-                          }
+                            setModalState(() {
+                              selectedFile = result.files.single;
+                            });
                           }
                         } catch (e) {
                           print('File picker error: $e');
@@ -1565,7 +1562,7 @@ class _UploadScreenState extends State<UploadScreen> {
     try {
       final meetingId = await api.uploadMeeting(
         title: title.isEmpty ? 'Untitled Meeting' : title,
-        fileBytes: bytes,
+        //fileBytes: bytes,
         filename: filename,
         email: email.isEmpty ? null : email,
         language: language == 'auto' ? null : language,
@@ -1703,11 +1700,19 @@ class _UploadScreenState extends State<UploadScreen> {
       ),
     );
 
+    String? tempFilePath;
     try {
+      // Save video bytes to a temporary file to avoid loading entire file into memory
+      final tempDir = await getTemporaryDirectory();
+      tempFilePath = '${tempDir.path}/$filename';
+      final tempFile = File(tempFilePath);
+      await tempFile.writeAsBytes(videoBytes);
+      
+      print('Saved recorded video to temp file: $tempFilePath');
+      
       final meetingId = await api.uploadMeeting(
         title: title.isEmpty ? 'Untitled Video Meeting' : title,
-        fileBytes: videoBytes,
-        filename: filename,
+        filename: tempFilePath,
         email: email.isEmpty ? null : email,
         language: language == 'auto' ? null : language,
         hints: hints.isEmpty ? null : hints,
@@ -1721,6 +1726,17 @@ class _UploadScreenState extends State<UploadScreen> {
 
       if (!mounted) return;
       progressNotifier.dispose();
+      
+      // Clean up temp file
+      if (tempFilePath != null) {
+        try {
+          await File(tempFilePath).delete();
+          print('Deleted temp file: $tempFilePath');
+        } catch (e) {
+          print('Error deleting temp file: $e');
+        }
+      }
+      
       Navigator.pop(context);
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -1731,6 +1747,17 @@ class _UploadScreenState extends State<UploadScreen> {
       print('Upload error: $e');
       if (!mounted) return;
       progressNotifier.dispose();
+      
+      // Clean up temp file in case of error
+      if (tempFilePath != null) {
+        try {
+          await File(tempFilePath).delete();
+          print('Deleted temp file after error: $tempFilePath');
+        } catch (cleanupError) {
+          print('Error deleting temp file after error: $cleanupError');
+        }
+      }
+      
       Navigator.pop(context);
       
       String errorMessage = 'Upload failed: ${e.toString().replaceAll('Exception: ', '')}';

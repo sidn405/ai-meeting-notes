@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 
 class ApiService {
   static final ApiService I = ApiService._();
@@ -256,11 +257,9 @@ class ApiService {
   }
 
   /// Upload meeting (audio or video) - works for all tiers
-  /// Accepts either File or bytes (for recorded media)
+  /// Accepts file path only (no longer loading entire file into memory)
   Future<int> uploadMeeting({
-    File? file,
-    
-    String? filename,
+    required String filename,
     required String title,
     String? email,
     String? emailTo,
@@ -270,10 +269,6 @@ class ApiService {
     void Function(double)? onProgress,
   }) async {
     try {
-      if (file == null && fileBytes == null) {
-        throw Exception('Either file or fileBytes must be provided');
-      }
-      
       final emailAddress = email ?? emailTo;
       
       // All tiers can upload audio/video files
@@ -291,18 +286,10 @@ class ApiService {
       if (language != null) request.fields['language'] = language;
       if (hints != null) request.fields['hints'] = hints;
       
-      if (file != null) {
-        request.files.add(await http.MultipartFile.fromPath('file', file.path));
-      } else if (fileBytes != null) {
-        final fileName = filename ?? 'upload.${_getExtensionFromBytes(fileBytes)}';
-        request.files.add(http.MultipartFile.fromBytes(
-          'file',
-          fileBytes,
-          filename: fileName,
-        ));
-      }
+      // Use fromPath to stream the file instead of loading it into memory
+      request.files.add(await http.MultipartFile.fromPath('file', filename));
       
-      print('[ApiService] Sending upload request...');
+      print('[ApiService] Sending upload request for file: $filename');
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
       
