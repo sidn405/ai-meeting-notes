@@ -27,6 +27,12 @@ class _ProgressScreenState extends State<ProgressScreen> {
   bool _hasTranscript = false;
   bool _hasSummary = false;
 
+  // Helper to check if processing is complete
+  bool get _isComplete {
+    final completedStatuses = ['delivered', 'completed', 'complete', 'done', 'finished'];
+    return completedStatuses.contains(_status.toLowerCase()) || _progress >= 100;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -59,9 +65,15 @@ class _ProgressScreenState extends State<ProgressScreen> {
         _hasSummary = status['has_summary'] ?? false;
       });
 
+      // Debug logging
+      print('[ProgressScreen] Status: $_status, Progress: $_progress%, Step: $_step');
+      print('[ProgressScreen] Has Transcript: $_hasTranscript, Has Summary: $_hasSummary');
+      print('[ProgressScreen] Is Complete: $_isComplete');
+
       // Stop polling when done or failed
-      if (_status == 'delivered' || _status == 'failed') {
+      if (_isComplete || _status == 'failed') {
         _pollTimer?.cancel();
+        print('[ProgressScreen] Polling stopped. Final status: $_status');
       }
     } catch (e) {
       print('Error polling status: $e');
@@ -125,7 +137,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
                           color: Colors.white,
                         ),
                       )
-                    else if (_status == 'delivered')
+                    else if (_isComplete)
                       Container(
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
@@ -173,7 +185,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
                     Text(
                       _hasError
                           ? 'Processing Failed'
-                          : _status == 'delivered'
+                          : _isComplete
                               ? 'Processing Complete!'
                               : 'Processing Your Meeting',
                       style: const TextStyle(
@@ -206,7 +218,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
                     const SizedBox(height: 40),
                     
                     // Action buttons when complete
-                    if (_status == 'delivered') ...[
+                    if (_isComplete) ...[
                       if (_hasTranscript)
                         SizedBox(
                           width: double.infinity,

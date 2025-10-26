@@ -82,6 +82,9 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
           }
         } else if (_filterStatus == 'processing') {
           matchesStatus = meeting['status'] == 'processing' || meeting['status'] == 'queued';
+        } else if (_filterStatus == 'delivered') {
+          // Match any completed status
+          matchesStatus = _isCompletedStatus(meeting['status'] ?? '');
         } else {
           matchesStatus = meeting['status'] == _filterStatus;
         }
@@ -589,43 +592,68 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
   }
 
   IconData _getStatusIcon(String status) {
+    if (_isCompletedStatus(status)) {
+      return Icons.check_circle;
+    }
+    
     switch (status.toLowerCase()) {
-      case 'delivered':
-        return Icons.check_circle;
       case 'processing':
       case 'queued':
         return Icons.hourglass_empty;
       case 'failed':
         return Icons.error;
+      case 'ready_for_download':
+        return Icons.downloading;
       default:
         return Icons.help;
     }
   }
 
+  // Helper method to check if status represents a completed meeting
+  bool _isCompletedStatus(String status) {
+    final completedStatuses = [
+      'delivered',
+      'completed',
+      'complete',
+      'done',
+      'finished',
+      'downloaded_to_device',
+    ];
+    return completedStatuses.contains(status.toLowerCase());
+  }
+
   String _getStatusLabel(String status) {
+    if (_isCompletedStatus(status)) {
+      return 'DONE';
+    }
+    
     switch (status.toLowerCase()) {
-      case 'delivered':
-        return 'DONE';
       case 'processing':
         return 'PROCESSING';
       case 'queued':
         return 'QUEUED';
       case 'failed':
         return 'FAILED';
+      case 'ready_for_download':
+        return 'READY';
       default:
         return status.toUpperCase();
     }
   }
 
   Color _getStatusColor(String status) {
+    if (_isCompletedStatus(status)) {
+      return Colors.green;
+    }
+    
     switch (status.toLowerCase()) {
-      case 'delivered':
-        return Colors.green;
       case 'processing':
       case 'queued':
         return const Color(0xFF667eea);
       case 'failed':
         return Colors.red;
+      case 'ready_for_download':
+        return Colors.orange;
       default:
         return Colors.grey;
     }
