@@ -698,7 +698,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  if (status == 'delivered') ...[
+                  if (_isCompletedStatus(status)) ...[
                     _actionButton(
                       icon: Icons.description,
                       label: 'View Transcript',
@@ -765,11 +765,45 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                         ],
                       ),
                     ),
+                  ] else if (status == 'failed') ...[
+                    Center(
+                      child: Column(
+                        children: [
+                          Icon(Icons.error_outline, color: Colors.red, size: 48),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'This meeting failed to process',
+                            style: TextStyle(color: Colors.red, fontSize: 16),
+                          ),
+                          const SizedBox(height: 20),
+                          _actionButton(
+                            icon: Icons.delete,
+                            label: 'Delete Meeting',
+                            color: Colors.red,
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _deleteMeeting(id, title);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
                   ] else ...[
-                    const Center(
-                      child: Text(
-                        'This meeting failed to process',
-                        style: TextStyle(color: Colors.red),
+                    Center(
+                      child: Column(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.orange, size: 48),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Status: ${_getStatusLabel(status)}',
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'This meeting is in an unknown state',
+                            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                          ),
+                        ],
                       ),
                     ),
                   ],
