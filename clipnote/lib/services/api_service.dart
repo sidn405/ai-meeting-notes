@@ -606,17 +606,27 @@ class ApiService {
   /// Delete meeting
   Future<void> deleteMeeting(int meetingId) async {
     try {
-      final uri = Uri.parse('$baseUrl/meetings/$meetingId');
-      final response = await http.delete(
-        uri,
-        headers: _getHeaders(),
-      );
+      print('[ApiService] 🗑️ Attempting to delete meeting $meetingId');
+      print('[ApiService] License key: ${_licenseKey != null ? "${_licenseKey!.substring(0, 8)}..." : "NONE"}');
       
-      if (response.statusCode != 200) {
-        throw Exception('Failed to delete meeting: ${response.statusCode}');
+      final response = await _dio.delete('/meetings/$meetingId');
+      
+      print('[ApiService] ✅ Meeting $meetingId deleted successfully');
+    } on DioException catch (e) {
+      print('[ApiService] ❌ DioException deleting meeting: ${e.type}');
+      print('[ApiService] Status code: ${e.response?.statusCode}');
+      print('[ApiService] Response data: ${e.response?.data}');
+      print('[ApiService] Request headers: ${e.requestOptions.headers}');
+      
+      if (e.response?.statusCode == 403) {
+        throw Exception('Permission denied. You may not have access to delete this meeting.');
+      } else if (e.response?.statusCode == 404) {
+        throw Exception('Meeting not found or already deleted.');
+      } else {
+        throw Exception('Failed to delete meeting: ${e.response?.statusCode ?? "Network error"}');
       }
     } catch (e) {
-      print('[ApiService] Error deleting meeting: $e');
+      print('[ApiService] ❌ Error deleting meeting: $e');
       rethrow;
     }
   }
