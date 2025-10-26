@@ -4,13 +4,35 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:dio/dio.dart';
 
 class ApiService {
   static final ApiService I = ApiService._();
-  ApiService._();
+  ApiService._() {
+    // Initialize Dio with base options
+    _dio = Dio(BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+    ));
+    
+    // Add interceptor to include license key in headers
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        options.headers['Content-Type'] = 'application/json';
+        if (_licenseKey != null) {
+          options.headers['X-License-Key'] = _licenseKey!;
+        }
+        return handler.next(options);
+      },
+    ));
+  }
 
   // Base URL - update this to your backend URL
   final String baseUrl = 'https://ai-meeting-notes-production-81d7.up.railway.app';
+  
+  // Dio instance for API calls
+  late final Dio _dio;
   
   String? _licenseKey;
   String? _currentTier;
@@ -599,4 +621,3 @@ class ApiService {
     }
   }
 }
-

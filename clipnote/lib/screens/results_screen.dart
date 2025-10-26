@@ -16,19 +16,18 @@ class _ResultsScreenState extends State<ResultsScreen> {
   final _apiService = ApiService.I;
   Summary? _summary;
   bool _isLoading = true;
-  bool _isUploading = false;  // ✅ ADD THIS
-  String? _storageLocation;     // ✅ ADD THIS
-  bool _canUploadToCloud = false; // ✅ ADD THIS
-  String? _userTier;            // ✅ ADD THIS
+  bool _isUploading = false;
+  String? _storageLocation;
+  bool _canUploadToCloud = false;
+  String? _userTier;
 
   @override
   void initState() {
     super.initState();
     _fetchSummary();
-    _checkCloudStatus(); // ✅ ADD THIS
+    _checkCloudStatus();
   }
 
-  // ✅ ADD THIS METHOD
   Future<void> _checkCloudStatus() async {
     try {
       final status = await _apiService.getCloudStatus(widget.meetingId);
@@ -42,7 +41,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
     }
   }
 
-  // ✅ ADD THIS METHOD
   Future<void> _uploadToCloud() async {
     setState(() => _isUploading = true);
     
@@ -79,7 +77,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
     }
   }
 
-  // ✅ ADD THIS METHOD
   Future<void> _downloadTranscript() async {
     try {
       await _apiService.downloadMeeting(widget.meetingId, 'transcript');
@@ -106,7 +103,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
     }
   }
 
-  // ✅ ADD THIS METHOD
   Future<void> _downloadSummary() async {
     try {
       await _apiService.downloadMeeting(widget.meetingId, 'summary');
@@ -161,7 +157,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
-        // ✅ ADD ACTIONS FOR DOWNLOAD/CLOUD BUTTONS
         actions: [
           // Storage location indicator
           if (_storageLocation != null)
@@ -231,7 +226,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   ],
                 ),
               ),
-              // ✅ SHOW UPLOAD TO CLOUD FOR PRO/BUSINESS
+              // Show upload to cloud for Pro/Business
               if (_canUploadToCloud && (_userTier == 'professional' || _userTier == 'business'))
                 const PopupMenuItem(
                   value: 'upload_to_cloud',
@@ -246,7 +241,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
             ],
           ),
         ],
-      ),
       ),
       extendBodyBehindAppBar: true,
       body: Container(
@@ -290,7 +284,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   : Stack(
                       children: [
                         _buildSummaryContent(_summary!),
-                        // ✅ SHOW UPLOADING OVERLAY
+                        // Show uploading overlay
                         if (_isUploading)
                           Container(
                             color: Colors.black54,
@@ -315,20 +309,35 @@ class _ResultsScreenState extends State<ResultsScreen> {
                           ),
                       ],
                     ),
-                ),
-              ),
-              // ✅ ADD FLOATING ACTION BUTTON FOR QUICK ACTIONS
-              floatingActionButton: _canUploadToCloud && !_isUploading
-                  ? FloatingActionButton.extended(
-                      onPressed: _uploadToCloud,
-                      backgroundColor: Colors.blue,
-                      icon: const Icon(Icons.cloud_upload),
-                      label: const Text('Upload to Cloud'),
-                    )
-                  : null,
-            );
-        },
-                  
+        ),
+      ),
+      floatingActionButton: _canUploadToCloud && !_isUploading
+          ? FloatingActionButton.extended(
+              onPressed: _uploadToCloud,
+              backgroundColor: Colors.blue,
+              icon: const Icon(Icons.cloud_upload),
+              label: const Text('Upload to Cloud'),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildSummaryContent(Summary summary) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _buildSection(
+          'Executive Summary',
+          summary.executiveSummary,
+          Icons.summarize,
+        ),
+        const SizedBox(height: 16),
+        _buildDecisionsSection(summary),
+        const SizedBox(height: 16),
+        _buildActionItemsSection(summary),
+      ],
+    );
+  }
 
   Widget _buildSection(String title, String content, IconData icon) {
     return Container(
