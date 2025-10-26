@@ -476,9 +476,15 @@ class _UploadScreenState extends State<UploadScreen> {
                                   allowedExtensions: const ['txt', 'doc', 'docx', 'pdf'],
                                 );
                                 
-                                if (result != null && result.files.single.bytes != null) {
-                                  final bytes = result.files.single.bytes!;
-                                  final text = String.fromCharCodes(bytes);
+                                if (result != null && result.files.single.path != null) {
+                                  final file = File(result.files.single.path!);
+                                  
+                                  await ApiService.I.uploadMeeting(
+                                    file: file,  // ← Pass File object instead of bytes
+                                    title: title,
+                                    email: email,
+                                    emailTo: emailTo,
+                                  );
                                   
                                   setModalState(() {
                                     selectedFile = result.files.single;
@@ -835,15 +841,14 @@ class _UploadScreenState extends State<UploadScreen> {
                         try {
                           final result = await FilePicker.platform.pickFiles(
                             allowMultiple: false,
-                            withData: true,
                             type: FileType.custom,
                             allowedExtensions: const ['m4a', 'mp3', 'wav', 'aac', 'mp4', 'mov', 'mkv', 'webm'],
                           );
                           
-                          if (result != null && result.files.single.bytes != null) {
-                            setModalState(() {
-                              selectedFile = result.files.single;
-                            });
+                          if (result != null && result.files.single.path != null) {
+                            final filePath = result.files.single.path!;  // Just a string
+                            await uploadFile(filePath);  // File stays on disk
+                          }
                           }
                         } catch (e) {
                           print('File picker error: $e');

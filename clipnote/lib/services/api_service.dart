@@ -259,7 +259,7 @@ class ApiService {
   /// Accepts either File or bytes (for recorded media)
   Future<int> uploadMeeting({
     File? file,
-    List<int>? fileBytes,
+    
     String? filename,
     required String title,
     String? email,
