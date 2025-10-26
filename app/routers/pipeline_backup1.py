@@ -277,63 +277,33 @@ def get_meeting_stats(
     }
     
 @router.get("/list")
-def list_meetings(db: Session = Depends(get_session)):
-    """Get all meetings ordered by creation date (newest first) with storage info"""
+def list_meetings():
+    """Get all meetings ordered by creation date (newest first)"""
     try:
-        meetings = db.exec(
-            select(Meeting).order_by(Meeting.created_at.desc())
-        ).all()
-        
-        # Add storage info to each meeting
-        result = []
-        for m in meetings:
-            transcript_in_cloud = m.transcript_path and m.transcript_path.startswith("s3://")
-            summary_in_cloud = m.summary_path and m.summary_path.startswith("s3://")
-            
-            meeting_dict = {
-                "id": m.id,
-                "title": m.title,
-                "status": m.status,
-                "progress": m.progress or 0,
-                "step": m.step,
-                "has_summary": bool(m.summary_path),
-                "has_transcript": bool(m.transcript_path),
-                "created_at": m.created_at.isoformat() if m.created_at else None,
-                "storage_location": "cloud" if (transcript_in_cloud or summary_in_cloud) else "local",
-                "transcript_in_cloud": transcript_in_cloud,
-                "summary_in_cloud": summary_in_cloud,
-                "media_type": m.media_type if hasattr(m, 'media_type') else "audio",
-            }
-            result.append(meeting_dict)
-        
-        return result
+        with get_session() as s:
+            meetings = s.exec(
+                select(Meeting).order_by(Meeting.created_at.desc())
+            ).all()
+            return meetings
     except Exception as e:
         print(f"Error fetching meetings: {e}")
         raise HTTPException(500, f"Failed to fetch meetings: {str(e)}")
     
 @router.get("/{meeting_id}/status")
-def meeting_status(meeting_id: int, db: Session = Depends(get_session)):
-    """Get meeting status with cloud storage info"""
-    m = db.get(Meeting, meeting_id)
-    if not m:
-        raise HTTPException(404, "Not found")
-    
-    # Check if files are in cloud
-    transcript_in_cloud = m.transcript_path and m.transcript_path.startswith("s3://")
-    summary_in_cloud = m.summary_path and m.summary_path.startswith("s3://")
-    
-    return {
-        "id": m.id,
-        "title": m.title,
-        "status": m.status,
-        "progress": m.progress or 0,
-        "step": m.step,
-        "has_summary": bool(m.summary_path),
-        "has_transcript": bool(m.transcript_path),
-        "storage_location": "cloud" if (transcript_in_cloud or summary_in_cloud) else "local",
-        "transcript_in_cloud": transcript_in_cloud,
-        "summary_in_cloud": summary_in_cloud,
-    }
+def meeting_status(meeting_id: int):
+    with get_session() as s:
+        m = s.get(Meeting, meeting_id)
+        if not m:
+            raise HTTPException(404, "Not found")
+        return {
+            "id": m.id,
+            "title": m.title,
+            "status": m.status,
+            "progress": m.progress or 0,
+            "step": m.step,
+            "has_summary": bool(m.summary_path),
+            "has_transcript": bool(m.transcript_path),
+        }
 
 @router.post("/from-text")
 async def create_from_text(
@@ -913,151 +883,6 @@ def download_meeting_file(
     except Exception as e:
         print(f"Download error: {e}")
         raise HTTPException(500, f"Download failed: {str(e)}")
-    
-# ============================================================
-# ADD THESE NEW ENDPOINTS TO YOUR meetings.py
-# ============================================================
-
-# Add this after the download endpoints (around line 900)
-
-@router.post("/{meeting_id}/upload-to-cloud")
-def upload_meeting_to_cloud(
-    meeting_id: int,
-    license_info: tuple = Depends(optional_license),
-    db: Session = Depends(get_session)
-):
-    """
-    ✅ NEW: Manual cloud upload for Pro/Business tiers.
-    Uploads transcript and summary to B2, then deletes local copies.
-    """
-    license, tier_config = license_info
-    tier = license.tier.lower() if license else "free"
-    
-    # Only Pro/Business can upload to cloud
-    if tier not in ("professional", "business"):
-        raise HTTPException(
-            403,
-            "Cloud storage is only available for Professional and Business tiers"
-        )
-    
-    meeting = db.get(Meeting, meeting_id)
-    if not meeting:
-        raise HTTPException(404, "Meeting not found")
-    
-    # Verify ownership
-    if license and meeting.email_to != license.email:
-        raise HTTPException(403, "Not authorized")
-    
-    # Check if files are already in cloud
-    if meeting.transcript_path and meeting.transcript_path.startswith("s3://"):
-        return {
-            "ok": True,
-            "message": "Files already uploaded to cloud",
-            "status": "already_uploaded"
-        }
-    
-    try:
-        from app.routers.storage_b2 import s3_client, get_bucket
-        from pathlib import Path
-        
-        s3 = s3_client()
-        bucket = get_bucket()
-        tier_folder = tier
-        
-        uploaded_files = []
-        
-        # Upload transcript to B2
-        if meeting.transcript_path and Path(meeting.transcript_path).exists():
-            transcript_key = f"{tier_folder}/transcripts/transcript_{meeting_id}.txt"
-            
-            with open(meeting.transcript_path, 'rb') as f:
-                s3.upload_fileobj(f, bucket, transcript_key)
-            
-            print(f"☁️ Uploaded transcript to B2: {transcript_key}")
-            uploaded_files.append("transcript")
-            
-            # Update to B2 path and delete local
-            old_path = meeting.transcript_path
-            meeting.transcript_path = f"s3://{bucket}/{transcript_key}"
-            Path(old_path).unlink()
-            print(f"🗑️ Deleted local transcript: {old_path}")
-        
-        # Upload summary to B2
-        if meeting.summary_path and Path(meeting.summary_path).exists():
-            summary_key = f"{tier_folder}/summaries/summary_{meeting_id}.json"
-            
-            with open(meeting.summary_path, 'rb') as f:
-                s3.upload_fileobj(f, bucket, summary_key)
-            
-            print(f"☁️ Uploaded summary to B2: {summary_key}")
-            uploaded_files.append("summary")
-            
-            # Update to B2 path and delete local
-            old_path = meeting.summary_path
-            meeting.summary_path = f"s3://{bucket}/{summary_key}"
-            Path(old_path).unlink()
-            print(f"🗑️ Deleted local summary: {old_path}")
-        
-        # Update status
-        meeting.status = "uploaded_to_cloud"
-        meeting.step = "Files uploaded to cloud storage"
-        db.add(meeting)
-        db.commit()
-        
-        return {
-            "ok": True,
-            "message": f"Successfully uploaded {', '.join(uploaded_files)} to cloud",
-            "uploaded_files": uploaded_files,
-            "status": "uploaded"
-        }
-        
-    except Exception as e:
-        print(f"❌ Failed to upload to cloud: {e}")
-        raise HTTPException(500, f"Failed to upload to cloud: {str(e)}")
-
-
-@router.get("/{meeting_id}/cloud-status")
-def get_cloud_status(
-    meeting_id: int,
-    license_info: tuple = Depends(optional_license),
-    db: Session = Depends(get_session)
-):
-    """
-    ✅ NEW: Check if meeting files are stored in cloud or locally.
-    Returns storage location and whether upload is available.
-    """
-    license, tier_config = license_info
-    tier = license.tier.lower() if license else "free"
-    
-    meeting = db.get(Meeting, meeting_id)
-    if not meeting:
-        raise HTTPException(404, "Meeting not found")
-    
-    # Check storage locations
-    transcript_in_cloud = meeting.transcript_path and meeting.transcript_path.startswith("s3://")
-    summary_in_cloud = meeting.summary_path and meeting.summary_path.startswith("s3://")
-    
-    # Determine overall storage status
-    if transcript_in_cloud or summary_in_cloud:
-        storage_location = "cloud"
-    else:
-        storage_location = "local"
-    
-    # Can upload to cloud if: Pro/Business tier + files are local + meeting is complete
-    can_upload_to_cloud = (
-        tier in ("professional", "business") and
-        storage_location == "local" and
-        meeting.status in ("completed", "delivered")
-    )
-    
-    return {
-        "storage_location": storage_location,
-        "transcript_in_cloud": transcript_in_cloud,
-        "summary_in_cloud": summary_in_cloud,
-        "can_upload_to_cloud": can_upload_to_cloud,
-        "tier": tier,
-        "status": meeting.status
-    }
 
 # ADD THIS UTILITY FUNCTION to clean up audio files for Free/Starter after processing
 def cleanup_media_file(meeting_id: int, db: Session):

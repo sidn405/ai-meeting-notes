@@ -552,6 +552,35 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> getCloudStatus(int meetingId) async {
+    final response = await _dio.get('/meetings/$meetingId/cloud-status');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> uploadMeetingToCloud(int meetingId) async {
+    final response = await _dio.post('/meetings/$meetingId/upload-to-cloud');
+    return response.data;
+  }
+
+  Future<void> downloadMeeting(int meetingId, String type) async {
+    // type can be 'transcript' or 'summary'
+    final response = await _dio.get(
+      '/meetings/$meetingId/download',
+      queryParameters: {'type': type},
+    );
+    
+    // Handle download based on storage location
+    if (response.data is Map && response.data['storage'] == 'cloud') {
+      // It's a cloud file, open the presigned URL
+      final url = response.data['download_url'];
+      // Use url_launcher or in_app_browser to open the URL
+      // You'll need to implement this based on your app's download strategy
+    } else {
+      // It's a local file response, handle accordingly
+      // This might be a direct file download
+    }
+  }
+
   /// Delete meeting
   Future<void> deleteMeeting(int meetingId) async {
     try {
@@ -570,3 +599,4 @@ class ApiService {
     }
   }
 }
+

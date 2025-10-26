@@ -16,11 +16,121 @@ class _ResultsScreenState extends State<ResultsScreen> {
   final _apiService = ApiService.I;
   Summary? _summary;
   bool _isLoading = true;
+  bool _isUploading = false;  // ✅ ADD THIS
+  String? _storageLocation;     // ✅ ADD THIS
+  bool _canUploadToCloud = false; // ✅ ADD THIS
+  String? _userTier;            // ✅ ADD THIS
 
   @override
   void initState() {
     super.initState();
     _fetchSummary();
+    _checkCloudStatus(); // ✅ ADD THIS
+  }
+
+  // ✅ ADD THIS METHOD
+  Future<void> _checkCloudStatus() async {
+    try {
+      final status = await _apiService.getCloudStatus(widget.meetingId);
+      setState(() {
+        _storageLocation = status['storage_location'];
+        _canUploadToCloud = status['can_upload_to_cloud'] ?? false;
+        _userTier = status['tier'];
+      });
+    } catch (e) {
+      print('Error checking cloud status: $e');
+    }
+  }
+
+  // ✅ ADD THIS METHOD
+  Future<void> _uploadToCloud() async {
+    setState(() => _isUploading = true);
+    
+    try {
+      final result = await _apiService.uploadMeetingToCloud(widget.meetingId);
+      
+      setState(() {
+        _isUploading = false;
+        _storageLocation = 'cloud';
+        _canUploadToCloud = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? 'Uploaded to cloud successfully!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isUploading = false);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to upload to cloud: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  // ✅ ADD THIS METHOD
+  Future<void> _downloadTranscript() async {
+    try {
+      await _apiService.downloadMeeting(widget.meetingId, 'transcript');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Transcript downloaded successfully!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to download: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  // ✅ ADD THIS METHOD
+  Future<void> _downloadSummary() async {
+    try {
+      await _apiService.downloadMeeting(widget.meetingId, 'summary');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Summary downloaded successfully!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to download: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _fetchSummary() async {
@@ -51,6 +161,92 @@ class _ResultsScreenState extends State<ResultsScreen> {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
+        // ✅ ADD ACTIONS FOR DOWNLOAD/CLOUD BUTTONS
+        actions: [
+          // Storage location indicator
+          if (_storageLocation != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _storageLocation == 'cloud' 
+                        ? Colors.blue.withOpacity(0.2)
+                        : Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _storageLocation == 'cloud' ? Icons.cloud_done : Icons.phone_android,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _storageLocation == 'cloud' ? 'Cloud' : 'Local',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          // Options menu
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) {
+              if (value == 'download_transcript') {
+                _downloadTranscript();
+              } else if (value == 'download_summary') {
+                _downloadSummary();
+              } else if (value == 'upload_to_cloud') {
+                _uploadToCloud();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'download_transcript',
+                child: Row(
+                  children: [
+                    Icon(Icons.download, size: 20),
+                    SizedBox(width: 12),
+                    Text('Download Transcript'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'download_summary',
+                child: Row(
+                  children: [
+                    Icon(Icons.download, size: 20),
+                    SizedBox(width: 12),
+                    Text('Download Summary'),
+                  ],
+                ),
+              ),
+              // ✅ SHOW UPLOAD TO CLOUD FOR PRO/BUSINESS
+              if (_canUploadToCloud && (_userTier == 'professional' || _userTier == 'business'))
+                const PopupMenuItem(
+                  value: 'upload_to_cloud',
+                  child: Row(
+                    children: [
+                      Icon(Icons.cloud_upload, size: 20, color: Colors.blue),
+                      SizedBox(width: 12),
+                      Text('Upload to Cloud', style: TextStyle(color: Colors.blue)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
       ),
       extendBodyBehindAppBar: true,
       body: Container(
@@ -91,28 +287,48 @@ class _ResultsScreenState extends State<ResultsScreen> {
                         ],
                       ),
                     )
-                  : _buildSummaryContent(_summary!),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSummaryContent(Summary summary) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildSection(
-          'Executive Summary',
-          summary.executiveSummary,
-          Icons.summarize,
-        ),
-        const SizedBox(height: 16),
-        _buildDecisionsSection(summary),
-        const SizedBox(height: 16),
-        _buildActionItemsSection(summary),
-      ],
-    );
-  }
+                  : Stack(
+                      children: [
+                        _buildSummaryContent(_summary!),
+                        // ✅ SHOW UPLOADING OVERLAY
+                        if (_isUploading)
+                          Container(
+                            color: Colors.black54,
+                            child: const Center(
+                              child: Card(
+                                child: Padding(
+                                  padding: EdgeInsets.all(24.0),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      CircularProgressIndicator(),
+                                      SizedBox(height: 16),
+                                      Text(
+                                        'Uploading to Cloud...',
+                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                ),
+              ),
+              // ✅ ADD FLOATING ACTION BUTTON FOR QUICK ACTIONS
+              floatingActionButton: _canUploadToCloud && !_isUploading
+                  ? FloatingActionButton.extended(
+                      onPressed: _uploadToCloud,
+                      backgroundColor: Colors.blue,
+                      icon: const Icon(Icons.cloud_upload),
+                      label: const Text('Upload to Cloud'),
+                    )
+                  : null,
+            );
+        },
+                  
 
   Widget _buildSection(String title, String content, IconData icon) {
     return Container(

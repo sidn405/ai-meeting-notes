@@ -391,15 +391,13 @@ def _get_summary_path(mid: int, title: str) -> str:
     print(f"📊 Summary path: {path}")
     return str(path.resolve())
 
-# ---------- HELPER FUNCTIONS ----------
+# ---------- B2 UPLOAD AND CLEANUP ----------
 
 def _get_meeting_tier(meeting_id: int, db) -> str:
     """
     Get the tier for a meeting by looking up associated license.
     Returns: 'free', 'starter', 'professional', or 'business'
     """
-    from sqlmodel import select
-    
     meeting = db.get(Meeting, meeting_id)
     if not meeting:
         return "free"
@@ -414,49 +412,14 @@ def _get_meeting_tier(meeting_id: int, db) -> str:
     if hasattr(meeting, 'license') and meeting.license:
         return meeting.license.tier.lower()
     
-    # TEMPORARY: Look up license by email_to (until license_id column is added)
-    if meeting.email_to:
-        license = db.exec(
-            select(License).where(License.email == meeting.email_to)
-        ).first()
-        if license:
-            return license.tier.lower()
-    
     # Default to free
     return "free"
 
-# ---------- CLEANUP ONLY (NO AUTO-UPLOAD) ----------
-
-def _cleanup_media_file(meeting_id: int):
+def _upload_to_b2_and_cleanup(meeting_id: int):
     """
-    Delete audio/video file after processing (all tiers).
-    This only cleans up the media file, NOT transcript/summary.
-    """
-    with get_session() as db:
-        meeting = db.get(Meeting, meeting_id)
-        if not meeting or not meeting.audio_path:
-            return
-        
-        try:
-            # Only delete local media files (not transcript/summary)
-            if not meeting.audio_path.startswith("s3://"):
-                media_file = Path(meeting.audio_path)
-                if media_file.exists():
-                    media_file.unlink()
-                    print(f"  🗑️ Local media deleted: {media_file}")
-                    
-                    # Clear media path
-                    meeting.audio_path = None
-                    db.add(meeting)
-                    db.commit()
-            
-        except Exception as e:
-            print(f"  ⚠️ Failed to cleanup media: {e}")
-
-def _finalize_meeting(meeting_id: int):
-    """
-    ✅ NEW: Finalize meeting by keeping files LOCAL for all tiers.
-    No automatic upload to B2. Pro/Business users can manually upload later.
+    Upload transcript/summary to B2 for Pro/Business tiers.
+    Set status to ready_for_download for Free/Starter.
+    Always cleanup media file.
     """
     with get_session() as db:
         meeting = db.get(Meeting, meeting_id)
@@ -464,6 +427,7 @@ def _finalize_meeting(meeting_id: int):
             print(f"❌ Meeting {meeting_id} not found")
             return
         
+        # FIX: Use helper function to get tier
         tier = _get_meeting_tier(meeting_id, db)
         
         print(f"\n{'='*60}")
@@ -471,18 +435,22 @@ def _finalize_meeting(meeting_id: int):
         print(f"{'='*60}")
         
         try:
-            # ✅ ALL TIERS: Keep files local, mark as complete
-            print(f"📱 Keeping files local for viewing...")
-            meeting.status = "completed"
-            meeting.step = "Processing complete. Files ready to view."
-            meeting.progress = 100
-            db.add(meeting)
-            db.commit()
-            print(f"✅ Meeting ready for viewing (files stored locally)")
+            # For Pro/Business: Upload to B2
+            if tier in ('professional', 'business'):
+                print(f"☁️ Uploading transcript and summary to B2...")
+                _upload_files_to_b2(meeting_id, db)
+            else:
+                # For Free/Starter: Set ready for download
+                print(f"📱 Setting status for device download...")
+                meeting.status = "ready_for_download"
+                meeting.step = "Processing complete. Ready to save to your device."
+                db.add(meeting)
+                db.commit()
+                print(f"✅ Meeting ready for auto-download to device")
             
-            # Cleanup media file only (not transcript/summary)
+            # Always cleanup media file (audio/video)
             print(f"🗑️ Cleaning up media file...")
-            _cleanup_media_file(meeting_id)
+            _cleanup_media_file(meeting_id, db)
             
             print(f"✅ Meeting {meeting_id} finalized successfully")
             print(f"{'='*60}\n")
@@ -494,6 +462,89 @@ def _finalize_meeting(meeting_id: int):
             db.add(meeting)
             db.commit()
             raise
+
+def _upload_files_to_b2(meeting_id: int, db):
+    """Upload transcript and summary to B2 cloud storage"""
+    from ..routers.storage_b2 import s3_client, get_bucket
+    
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        return
+    
+    s3 = s3_client()
+    bucket = get_bucket()
+    
+    # FIX: Use helper function to get tier
+    tier_folder = _get_meeting_tier(meeting_id, db)
+    
+    # Upload transcript
+    if meeting.transcript_path and Path(meeting.transcript_path).exists():
+        transcript_key = f"{tier_folder}/transcripts/transcript_{meeting_id}.txt"
+        
+        with open(meeting.transcript_path, 'rb') as f:
+            s3.upload_fileobj(f, bucket, transcript_key)
+        
+        print(f"  ✅ Transcript uploaded to B2: {transcript_key}")
+        
+        # Update to B2 path and delete local
+        old_path = meeting.transcript_path
+        meeting.transcript_path = f"s3://{bucket}/{transcript_key}"
+        Path(old_path).unlink()
+        print(f"  🗑️ Local transcript deleted: {old_path}")
+    
+    # Upload summary
+    if meeting.summary_path and Path(meeting.summary_path).exists():
+        summary_key = f"{tier_folder}/summaries/summary_{meeting_id}.json"
+        
+        with open(meeting.summary_path, 'rb') as f:
+            s3.upload_fileobj(f, bucket, summary_key)
+        
+        print(f"  ✅ Summary uploaded to B2: {summary_key}")
+        
+        # Update to B2 path and delete local
+        old_path = meeting.summary_path
+        meeting.summary_path = f"s3://{bucket}/{summary_key}"
+        Path(old_path).unlink()
+        print(f"  🗑️ Local summary deleted: {old_path}")
+    
+    # Update status
+    meeting.status = "delivered"
+    meeting.step = "Complete. Files stored in cloud."
+    db.add(meeting)
+    db.commit()
+
+def _cleanup_media_file(meeting_id: int, db):
+    """Delete audio/video file after processing (all tiers)"""
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting or not meeting.audio_path:
+        return
+    
+    try:
+        if meeting.audio_path.startswith("s3://"):
+            # Pro/Business - delete from B2
+            from ..routers.storage_b2 import s3_client, get_bucket
+            s3 = s3_client()
+            bucket = get_bucket()
+            
+            key = meeting.audio_path.replace(f"s3://{bucket}/", "")
+            
+            if "/temp/" in key:
+                s3.delete_object(Bucket=bucket, Key=key)
+                print(f"  🗑️ Media deleted from B2: {key}")
+        else:
+            # Free/Starter - delete local file
+            media_file = Path(meeting.audio_path)
+            if media_file.exists():
+                media_file.unlink()
+                print(f"  🗑️ Local media deleted: {media_file}")
+        
+        # Clear media path
+        meeting.audio_path = None
+        db.add(meeting)
+        db.commit()
+        
+    except Exception as e:
+        print(f"  ⚠️ Failed to cleanup media: {e}")
 
 # ---------- MAIN PROCESSING FUNCTIONS ----------
 
@@ -557,9 +608,9 @@ def process_meeting(meeting_id: int, *, language: str | None = None, hints: str 
         if email_to:
             _email_with_resend_by_id(meeting_id, summary_json, spath, email_to)
 
-        # Step 4: ✅ NEW - Finalize (keep files local, no auto-upload)
+        # Step 4: Upload to B2 (Pro/Business) or prepare for download (Free/Starter)
         _set_progress(meeting_id, 95, step="Finalizing")
-        _finalize_meeting(meeting_id)
+        _upload_to_b2_and_cleanup(meeting_id)
 
     except Exception as e:
         _set_progress(meeting_id, 100, step=f"Error: {str(e)}", status="failed")
@@ -584,7 +635,7 @@ def process_meeting_transcribe_only(meeting_id: int, *, language: str | None = N
         
         if transcript_path and Path(transcript_path).exists():
             _set_progress(meeting_id, 95, step="Transcript already exists")
-            _finalize_meeting(meeting_id)
+            _upload_to_b2_and_cleanup(meeting_id)
             return
         
         elif audio_path and Path(audio_path).exists():
@@ -612,7 +663,7 @@ def process_meeting_transcribe_only(meeting_id: int, *, language: str | None = N
             
             # Finalize
             _set_progress(meeting_id, 95, step="Finalizing")
-            _finalize_meeting(meeting_id)
+            _upload_to_b2_and_cleanup(meeting_id)
         else:
             raise RuntimeError("No audio file found for transcription.")
 
@@ -680,9 +731,9 @@ def process_meeting_transcribe_summarize(meeting_id: int, *, language: str | Non
         if email_to:
             _email_with_resend_by_id(meeting_id, summary_json, spath, email_to)
 
-        # Step 4: ✅ NEW - Finalize (keep files local, no auto-upload)
+        # Step 4: Upload to B2 (Pro/Business) or prepare for download (Free/Starter)
         _set_progress(meeting_id, 95, step="Finalizing")
-        _finalize_meeting(meeting_id)
+        _upload_to_b2_and_cleanup(meeting_id)
 
     except Exception as e:
         _set_progress(meeting_id, 100, step=f"Error: {str(e)}", status="failed")
