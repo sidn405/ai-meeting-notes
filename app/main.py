@@ -13,6 +13,9 @@ from app.models import Meeting
 import warnings
 warnings.filterwarnings("ignore", message="Field .* has conflict with protected namespace 'model_'")
 
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
 load_dotenv()  # ✅ This loads your .env file
 
 os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]

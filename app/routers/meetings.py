@@ -181,20 +181,19 @@ async def upload_meeting(
     media_path = temp_dir / f"{Path(file.filename).stem}.uploaded{ext}"
     media_path.write_bytes(file_content)
 
-    # Create meeting record
-    with get_session() as s:
-        m = Meeting(
-            title=title,
-            audio_path=str(media_path),
-            email_to=email_to,
-            status="queued",
-            media_type=detected_type,
-            license_id=license.id if license else None 
-        )
-        s.add(m)
-        s.commit()
-        s.refresh(m)
-        mid = m.id
+    # Create meeting record using the existing db session
+    m = Meeting(
+        title=title,
+        audio_path=str(media_path),
+        email_to=email_to,
+        status="queued",
+        media_type=detected_type,
+        license_id=license.id if license else None 
+    )
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    mid = m.id
 
     # Track usage for paid users only
     if license:
@@ -1204,9 +1203,21 @@ def delete_meeting(
     if not meeting:
         raise HTTPException(status_code=404, detail="Not found")
     
-    # Verify ownership if license provided
-    if license and meeting.email_to != license.email:
-        raise HTTPException(403, "Not authorized to delete this meeting")
+    # Verify ownership - check if meeting belongs to this license
+    if license:
+        # User has a license - verify they own this meeting
+        if meeting.license_id != license.id:
+            raise HTTPException(
+                status_code=403, 
+                detail="Cannot delete meeting belonging to another user"
+            )
+    else:
+        # No license provided - only allow if meeting has no license (legacy/free)
+        if meeting.license_id is not None:
+            raise HTTPException(
+                status_code=403,
+                detail="License required to delete this meeting"
+            )
     
     # Delete B2 files if Professional/Business tier
     if meeting.audio_path and meeting.audio_path.startswith("s3://"):
