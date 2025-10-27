@@ -832,9 +832,15 @@ def download_meeting_file(
     if not meeting:
         raise HTTPException(404, "Meeting not found")
     
-    # Verify ownership
-    if license and meeting.email_to != license.email:
-        raise HTTPException(403, "Not authorized")
+    # Verify ownership - check if meeting belongs to this license
+    if license:
+        # User has a license - verify they own this meeting
+        if meeting.license_id != license.id:
+            raise HTTPException(403, "Not authorized")
+    else:
+        # No license provided - only allow if meeting has no license (legacy/free)
+        if meeting.license_id is not None:
+            raise HTTPException(403, "License required to access this meeting")
     
     try:
         if type == "transcript":
@@ -949,8 +955,8 @@ def upload_meeting_to_cloud(
     if not meeting:
         raise HTTPException(404, "Meeting not found")
     
-    # Verify ownership
-    if license and meeting.email_to != license.email:
+    # Verify ownership - check if meeting belongs to this license
+    if meeting.license_id != license.id:
         raise HTTPException(403, "Not authorized")
     
     # Check if files are already in cloud
@@ -1286,9 +1292,14 @@ def confirm_download(
     if not meeting:
         raise HTTPException(404, "Meeting not found")
     
-    # Verify ownership
-    if license and meeting.email_to != license.email:
-        raise HTTPException(403, "Not authorized")
+    # Verify ownership - check if meeting belongs to this license
+    if license:
+        if meeting.license_id != license.id:
+            raise HTTPException(403, "Not authorized")
+    else:
+        # No license but meeting has one - not authorized
+        if meeting.license_id is not None:
+            raise HTTPException(403, "Not authorized")
     
     try:
         # Delete transcript from server
