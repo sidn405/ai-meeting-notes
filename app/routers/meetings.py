@@ -43,6 +43,34 @@ def get_license_from_key(
     
     return license
 
+def require_license(
+    x_license_key: str = Header(..., alias="X-License-Key"),  # Required, not optional
+    db: Session = Depends(get_session)
+):
+    """
+    Required license check - blocks users without valid license
+    Use this for premium features like cloud storage
+    """
+    from app.services.license import validate_license, TIER_LIMITS
+    
+    if not x_license_key:
+        raise HTTPException(
+            status_code=401,
+            detail="No license key found. Please activate your license at /activate"
+        )
+    
+    # Validate license
+    is_valid, license, error = validate_license(db, x_license_key)
+    
+    if not is_valid:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Invalid license: {error}"
+        )
+    
+    tier_config = TIER_LIMITS[license.tier]
+    return license, tier_config
+
 def track_meeting_usage(db: Session, license_key: str):
     """
     Check quota and increment usage
