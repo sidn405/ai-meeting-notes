@@ -4,17 +4,17 @@ import 'utils/route_observer.dart';
 import 'screens/home_screen.dart';
 import 'screens/activation_screen.dart';
 import 'screens/upload_screen.dart';
+import 'package:clipnote/services/api_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // ⚠️ CRITICAL: This loads the license key
+  // Initialize API service to load license key
   await ApiService.I.init();
   
-  // Optional but recommended
+  // Ensure user has a license
   await ApiService.I.ensureUserHasLicense();
-  
-  runApp(MyApp());
+  runApp(const ClipnoteApp());
 }
 
 class ClipnoteApp extends StatelessWidget {
