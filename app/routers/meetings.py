@@ -354,16 +354,16 @@ async def create_from_text(
             audio_path=None,
             email_to=email_to,
             transcript_path=str(tpath),
-            status="queued"
+            status="queued",
+            license_id=license.id  # Set license_id
         )
         s.add(m)
         s.commit()
         s.refresh(m)
         mid = m.id
 
-    # Track usage for paid users only
-    if license:  # ✅ ADDED CHECK
-        track_meeting_usage(db, license.license_key)
+    # Track usage (all users have licenses now)
+    track_meeting_usage(db, license.license_key)
 
     # Process meeting
     process_meeting(mid)
@@ -405,16 +405,16 @@ async def transcribe_only(
             transcript_path=str(tpath),
             status="delivered",
             progress=100,
-            step="Transcript saved"
+            step="Transcript saved",
+            license_id=license.id  # Set license_id
         )
         s.add(m)
         s.commit()
         s.refresh(m)
         mid = m.id
 
-    # Track usage for paid users only
-    if license:  # ✅ ADDED CHECK
-        track_meeting_usage(db, license.license_key)
+    # Track usage (all users have licenses now)
+    track_meeting_usage(db, license.license_key)
 
     return {
         "id": mid, 
@@ -463,16 +463,16 @@ async def upload_transcribe_only(
             title=title, 
             audio_path=str(audio_path), 
             email_to=email_to, 
-            status="queued"
+            status="queued",
+            license_id=license.id  # Set license_id
         )
         s.add(m)
         s.commit()
         s.refresh(m)
         mid = m.id
 
-    # Track usage for paid users only
-    if license:  # ✅ ADDED CHECK
-        track_meeting_usage(db, license.license_key)
+    # Track usage (all users have licenses now)
+    track_meeting_usage(db, license.license_key)
 
     background_tasks.add_task(
         process_meeting_transcribe_only,
@@ -531,16 +531,16 @@ async def upload_transcribe_summarize(
             title=title, 
             audio_path=str(audio_path), 
             email_to=email_to, 
-            status="queued"
+            status="queued",
+            license_id=license.id  # Set license_id
         )
         s.add(m)
         s.commit()
         s.refresh(m)
         mid = m.id
 
-    # Track usage for paid users only
-    if license:  # ✅ ADDED CHECK
-        track_meeting_usage(db, license.license_key)
+    # Track usage (all users have licenses now)
+    track_meeting_usage(db, license.license_key)
 
     background_tasks.add_task(
         process_meeting_transcribe_summarize,
@@ -600,16 +600,16 @@ async def create_from_url(
             title=title or 'Untitled Meeting',
             audio_path=str(audio_path),
             email_to=email_to,
-            status="queued"
+            status="queued",
+            license_id=license.id  # Set license_id
         )
         s.add(m)
         s.commit()
         s.refresh(m)
         mid = m.id
     
-    # Track usage for paid users only
-    if license:  # ✅ ADDED CHECK
-        track_meeting_usage(db, license.license_key)
+    # Track usage (all users have licenses now)
+    track_meeting_usage(db, license.license_key)
     
     background_tasks.add_task(
         process_meeting_transcribe_summarize,
@@ -665,16 +665,16 @@ async def create_from_url_transcribe_only(
             title=title or 'Untitled Meeting',
             audio_path=str(audio_path),
             email_to=email_to,
-            status="queued"
+            status="queued",
+            license_id=license.id  # Set license_id
         )
         s.add(m)
         s.commit()
         s.refresh(m)
         mid = m.id
     
-    # Track usage for paid users only
-    if license:  # ✅ ADDED CHECK
-        track_meeting_usage(db, license.license_key)
+    # Track usage (all users have licenses now)
+    track_meeting_usage(db, license.license_key)
     
     background_tasks.add_task(
         process_meeting_transcribe_only,
