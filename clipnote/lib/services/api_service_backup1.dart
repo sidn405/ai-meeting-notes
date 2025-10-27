@@ -10,7 +10,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:clipnote/services/local_db.dart';
 import 'package:clipnote/services/offline_storage.dart';
 import 'package:clipnote/services/sync_service.dart';
-import 'package:path_provider/path_provider.dart';
 
 
 class ApiService {
@@ -592,44 +591,7 @@ class ApiService {
       rethrow;
     }
   }
-
-  /// Download offline package for a meeting
-  /// 
-  /// Returns download URL for HTML viewer or ZIP archive
-  /// 
-  /// Parameters:
-  /// - meetingId: The meeting ID
-  /// - format: 'html' or 'zip'
-  /// 
-  /// Returns: Map with 'download_url' key
-  /// 
-  /// Example:
-  /// ```dart
-  /// final result = await apiService.downloadOfflinePackage(123, 'html');
-  /// final url = result['download_url'];
-  /// ```
-  Future<Map<String, dynamic>> downloadOfflinePackage(int meetingId, String format) async {
-    try {
-      print('[ApiService] 📦 Preparing offline download - Meeting: $meetingId, Format: $format');
-      
-      // Construct the full URL for url_launcher to open
-      final downloadUrl = '$baseUrl/meetings/$meetingId/download-all?format=$format';
-      
-      print('[ApiService] Download URL: $downloadUrl');
-      
-      // Return the URL for the UI to open with url_launcher
-      // The backend will handle authentication via the X-License-Key header
-      return {
-        'download_url': downloadUrl,
-        'format': format,
-        'meeting_id': meetingId,
-      };
-    } catch (e) {
-      print('[ApiService] ❌ Error preparing offline download: $e');
-      rethrow;
-    }
-  }
-
+  
   /// Helper to generate filename
   String _getFilenameForType(String type, int meetingId) {
     switch (type.toLowerCase()) {
