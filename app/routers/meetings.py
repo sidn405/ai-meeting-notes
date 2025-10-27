@@ -127,8 +127,10 @@ async def upload_meeting(
     - File upload (audio/video): ALL tiers ✅
     - Live video recording: Business tier only (UI feature) 🎥
     
-    Free/Starter: Content auto-saved to device after processing
-    Pro/Business: Content stored permanently in B2 cloud
+    Storage architecture:
+    - All tiers: Files initially saved to device after processing
+    - Free/Starter: Device storage only (auto-delete from server after download)
+    - Pro/Business: Device storage initially, with optional cloud upload for permanent storage
     """
     tier = license.tier.lower()
     tier_config = TIER_LIMITS[license.tier]
@@ -218,13 +220,15 @@ async def upload_meeting(
     }
 
     if tier in ("free", "starter"):
-        retention_note = "Will be saved to your device automatically after processing. Not stored on server."
+        retention_note = "Will be saved to your device after processing. Server deletes files after download confirmation."
         response_data["auto_download_required"] = True
         response_data["storage_location"] = "device"
-    else:
-        retention_note = "Stored permanently in cloud after processing."
-        response_data["auto_download_required"] = False
-        response_data["storage_location"] = "cloud"
+        response_data["cloud_upload_available"] = False
+    else:  # Pro/Business
+        retention_note = "Will be saved to your device after processing. You can optionally upload to cloud for permanent storage."
+        response_data["auto_download_required"] = True  # All tiers download to device first
+        response_data["storage_location"] = "device"  # Initially on device
+        response_data["cloud_upload_available"] = True
 
     response_data["retention"] = retention_note
     return response_data
@@ -801,9 +805,9 @@ async def email_meeting(
     
     # Send email directly (not queued) with correct parameter order
     try:
-        # Fix parameter order: meeting_id, email_to, summary_path (or transcript_path if no summary)
+        # Correct parameter order: meeting_id, file_path, email_to
         file_path = meeting.summary_path if has_summary else meeting.transcript_path
-        send_summary_email(meeting_id, email, file_path)
+        send_summary_email(meeting_id, file_path, email)
         
         return {
             "success": True,
@@ -1268,10 +1272,15 @@ def confirm_download(
     db: Session = Depends(get_session)
 ):
     """
-    FREE/STARTER ONLY: Confirm files have been downloaded to device.
+    ALL TIERS: Confirm files have been downloaded to device.
     After confirmation, server deletes all local copies.
     
-    This endpoint ensures "nothing is stored locally" for Free/Starter tiers.
+    - All tiers download files to device initially
+    - Free/Starter: Files stay on device only
+    - Pro/Business: Files on device, with optional cloud upload
+    
+    This endpoint is for confirming local server files can be deleted.
+    Cannot be used for files already in cloud storage.
     """
     
     meeting = db.get(Meeting, meeting_id)
@@ -1286,14 +1295,15 @@ def confirm_download(
     if not meeting_license or meeting_license.license_key != x_license_key:
         raise HTTPException(403, "Not authorized")
     
-    tier = meeting_license.tier.lower()
+    # Check if files are in cloud - if so, can't confirm local download
+    transcript_in_cloud = meeting.transcript_path and meeting.transcript_path.startswith("s3://")
+    summary_in_cloud = meeting.summary_path and meeting.summary_path.startswith("s3://")
     
-    # Only Free/Starter should use this
-    if tier not in ("free", "starter"):
+    if transcript_in_cloud or summary_in_cloud:
         raise HTTPException(
             400,
-            "This endpoint is for Free/Starter tiers only. "
-            "Pro/Business tiers use cloud storage."
+            "Cannot confirm download for cloud-stored files. "
+            "Files are already permanently stored in cloud."
         )
     
     try:
