@@ -803,11 +803,10 @@ async def email_meeting(
     if not has_transcript and not has_summary:
         raise HTTPException(404, "Meeting has no transcript or summary. Ensure the meeting has been processed.")
     
-    # Send email directly (not queued) with correct parameter order
+    # Send email directly (not queued)
     try:
-        # Correct parameter order: meeting_id, file_path, email_to
-        file_path = meeting.summary_path if has_summary else meeting.transcript_path
-        send_summary_email(meeting_id, file_path, email)
+        # send_summary_email expects: meeting_id, email_to (it retrieves file paths internally)
+        send_summary_email(meeting_id, email_to=email)
         
         return {
             "success": True,
