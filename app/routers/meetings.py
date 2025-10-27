@@ -805,8 +805,17 @@ async def email_meeting(
     
     # Send email directly (not queued)
     try:
-        # send_summary_email expects: meeting_id, email_to (it retrieves file paths internally)
-        send_summary_email(meeting_id, email_to=email)
+        # Load summary JSON if available
+        summary_json = None
+        if has_summary and meeting.summary_path:
+            with open(meeting.summary_path, 'r') as f:
+                summary_json = json.load(f)
+        
+        # Get the appropriate file path
+        file_path = meeting.summary_path if has_summary else meeting.transcript_path
+        
+        # send_summary_email expects: meeting_id, summary_json, summary_path, email_to
+        send_summary_email(meeting_id, summary_json, file_path, email)
         
         return {
             "success": True,
