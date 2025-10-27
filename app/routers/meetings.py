@@ -801,7 +801,7 @@ async def email_meeting(
     
     # Queue email in background using lambda to wrap the call
     background_tasks.add_task(
-        lambda: send_summary_email(meeting_id, email)
+        lambda: send_summary_email(meeting_id, meeting.summary_path, email)
     )
     
     return {
