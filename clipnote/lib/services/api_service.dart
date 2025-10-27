@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:clipnote/services/local_db.dart';
 import 'package:clipnote/services/offline_storage.dart';
 import 'package:clipnote/services/sync_service.dart';
+import 'package:path_provider/path_provider.dart';
 
 
 class ApiService {
@@ -591,6 +592,73 @@ class ApiService {
       rethrow;
     }
   }
+  // Add this method to your ApiService class (api_service.dart)
+
+  /// Download offline package for a meeting
+  /// 
+  /// Returns download URL for HTML viewer or ZIP archive
+  /// 
+  /// Parameters:
+  /// - meetingId: The meeting ID
+  /// - format: 'html' or 'zip'
+  /// 
+  /// Returns: Map with 'download_url' key
+  /// 
+  /// Example:
+  /// ```dart
+  /// final result = await apiService.downloadOfflinePackage(123, 'html');
+  /// final url = result['download_url'];
+  /// ```
+  Future<Map<String, dynamic>> downloadOfflinePackage(int meetingId, String format) async {
+    final response = await _request(
+      'GET',
+      '/meetings/$meetingId/download-all?format=$format',
+    );
+    
+    if (response.statusCode == 200) {
+      // For downloads, the response might be a direct file or a URL
+      // Check if it's a redirect or direct download
+      final contentType = response.headers['content-type'] ?? '';
+      
+      if (contentType.contains('application/json')) {
+        // Cloud storage - returns download URL
+        final data = json.decode(response.body);
+        return data as Map<String, dynamic>;
+      } else {
+        // Local storage - returns file directly
+        // In this case, we need to handle the file download differently
+        // For mobile, we'll save the file and return a local path
+        
+        final filename = 'meeting_${meetingId}_${DateTime.now().millisecondsSinceEpoch}.$format';
+        final file = await _saveResponseToFile(response, filename);
+        
+        return {
+          'download_url': file.path,
+          'storage': 'local',
+          'filename': filename,
+        };
+      }
+    } else if (response.statusCode == 400) {
+      final error = json.decode(response.body);
+      throw Exception(error['detail'] ?? 'Cannot download offline package for cloud-stored files');
+    } else if (response.statusCode == 404) {
+      final error = json.decode(response.body);
+      throw Exception(error['detail'] ?? 'Meeting not found or no files available');
+    } else if (response.statusCode == 403) {
+      throw Exception('Not authorized to download this meeting');
+    } else {
+      throw Exception('Failed to download offline package (${response.statusCode})');
+    }
+  }
+
+  /// Helper method to save HTTP response to file
+  Future<File> _saveResponseToFile(http.Response response, String filename) async {
+    final directory = await getApplicationDocumentsDirectory();
+    final file = File('${directory.path}/$filename');
+    await file.writeAsBytes(response.bodyBytes);
+    return file;
+  }
+
   /// Helper to generate filename
   String _getFilenameForType(String type, int meetingId) {
     switch (type.toLowerCase()) {

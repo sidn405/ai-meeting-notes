@@ -999,44 +999,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                   _downloadFile(id, 'pdf', title);
                 },
               ),
-              const Divider(height: 30),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8.0),
-                child: Text(
-                  'Offline Packages',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey,
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFE8F5E9),
-                  child: Icon(Icons.web, color: Colors.green),
-                ),
-                title: const Text('HTML Viewer'),
-                subtitle: const Text('Beautiful offline viewer'),
-                trailing: const Icon(Icons.offline_bolt),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadOfflinePackage(id, 'html', title);
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFFCE4EC),
-                  child: Icon(Icons.folder_zip, color: Colors.pink),
-                ),
-                title: const Text('ZIP Archive'),
-                subtitle: const Text('Complete package with all files'),
-                trailing: const Icon(Icons.offline_bolt),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadOfflinePackage(id, 'zip', title);
-                },
-              ),
 
             ],
           ),
@@ -1101,76 +1063,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
           content: Text('Download failed: ${e.toString().replaceAll("Exception: ", "")}'),
           backgroundColor: Colors.red,
           duration: const Duration(seconds: 4),
-        ),
-      );
-    }
-  }
-  
-  Future<void> _downloadOfflinePackage(int id, String format, String title) async {
-    final formatLabel = format == 'html' ? 'HTML Viewer' : 'ZIP Archive';
-    
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        content: Row(
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(width: 20),
-            Text('Preparing $formatLabel...'),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      final downloadInfo = await _api.downloadOfflinePackage(id, format);
-      final url = downloadInfo['download_url'];
-      final uri = Uri.parse(url);
-      
-      if (!mounted) return;
-      Navigator.pop(context);
-      
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.offline_bolt, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text('$formatLabel ready for offline use'),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      } else {
-        throw Exception('Could not open download URL');
-      }
-    } catch (e) {
-      print('Error downloading offline package: $e');
-      
-      if (!mounted) return;
-      Navigator.pop(context);
-      
-      String errorMessage = e.toString().replaceAll("Exception: ", "");
-      
-      // Handle specific error cases
-      if (errorMessage.contains('cloud-stored')) {
-        errorMessage = 'This meeting is in cloud storage.\nUse individual download options instead.';
-      }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Download failed: $errorMessage'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
         ),
       );
     }
