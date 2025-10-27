@@ -6,6 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:clipnote/services/local_db.dart';
+import 'package:clipnote/services/offline_storage.dart';
+import 'package:clipnote/services/sync_service.dart';
+
 
 class ApiService {
   static final ApiService I = ApiService._();
@@ -27,7 +31,12 @@ class ApiService {
         return handler.next(options);
       },
     ));
-  }
+
+    // 🔁 Start background outbox sync (once)
+      _sync = SyncService(this);
+      _sync.start();
+      _syncStarted = true;
+    }
 
   // Base URL - update this to your backend URL
   final String baseUrl = 'https://ai-meeting-notes-production-81d7.up.railway.app';
@@ -492,6 +501,31 @@ class ApiService {
       final downloadUrl = _licenseKey != null
           ? '$baseUrl/meetings/$meetingId/download?type=$type&license_key=$_licenseKey'
           : '$baseUrl/meetings/$meetingId/download?type=$type';
+
+      // Persist offline
+      final saved = await saveMeetingBytes(
+        meetingId: meetingId,
+        filename: filename,
+        bytes: response.bodyBytes,
+      );
+
+      // Track in local DB
+      await localDb.open();
+      await localDb.upsertFile(
+        meetingId: meetingId,
+        filename: filename,
+        path: saved.path,
+        contentType: response.headers['content-type'],
+        sizeBytes: response.bodyBytes.length,
+      );
+
+      // Try to confirm with backend; if offline, queue it
+      try {
+        await confirmDownloadComplete(meetingId);
+      } catch (_) {
+        await enqueueConfirmDownload(meetingId);
+      }
+
       
       return {
         'filename': _getFilenameForType(type, meetingId),

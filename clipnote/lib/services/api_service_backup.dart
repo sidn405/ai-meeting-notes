@@ -4,19 +4,62 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 
 class ApiService {
   static final ApiService I = ApiService._();
-  ApiService._();
+  ApiService._() {
+    // Initialize Dio with base options
+    _dio = Dio(BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+    ));
+    
+    // Add interceptor to include license key in headers
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        options.headers['Content-Type'] = 'application/json';
+        if (_licenseKey != null) {
+          options.headers['X-License-Key'] = _licenseKey!;
+        }
+        return handler.next(options);
+      },
+    ));
+  }
 
   // Base URL - update this to your backend URL
   final String baseUrl = 'https://ai-meeting-notes-production-81d7.up.railway.app';
+  
+  // Dio instance for API calls
+  late final Dio _dio;
   
   String? _licenseKey;
   String? _currentTier;
 
   /// Public getter for current tier
   String? get currentTier => _currentTier;
+
+  /// Check if current tier has cloud storage (Pro/Business)
+  bool get hasCloudStorage {
+    if (_currentTier == null) return false;
+    final tier = _currentTier!.toLowerCase();
+    return tier == 'professional' || tier == 'business';
+  }
+
+  /// Check if content should auto-download for this tier (Free/Starter)
+  bool get shouldAutoDownload {
+    if (_currentTier == null) return true;
+    final tier = _currentTier!.toLowerCase();
+    return tier == 'free' || tier == 'starter';
+  }
+
+  /// Check if current tier can record live video (Business only)
+  bool get canRecordLiveVideo {
+    if (_currentTier == null) return false;
+    return _currentTier!.toLowerCase() == 'business';
+  }
 
   /// Initialize and load saved license key
   Future<void> init() async {
@@ -115,223 +158,174 @@ class ApiService {
   }
 
   Future<void> ensureUserHasLicense() async {
-  try {
-    // Check if license key already exists
-    await loadLicenseKey();
-    
-    if (_licenseKey != null) {
-      print('[ApiService] ✅ License key already exists: ${_licenseKey!.substring(0, 8)}...');
-      return;
-    }
-    
-    print('[ApiService] 📱 No license key found. Generating free tier license...');
-    
-    // Generate a device ID
-    final deviceId = await _getDeviceId();
-    
-    // Request free tier license from backend
-    final licenseKey = await _generateFreeTierLicense(deviceId);
-    
-    if (licenseKey != null) {
-      await saveLicenseKey(licenseKey);
-      print('[ApiService] ✅ Free tier license generated and saved!');
-    } else {
-      print('[ApiService] ⚠️ Failed to generate license, user will see free tier');
-    }
-  } catch (e) {
-    print('[ApiService] ⚠️ Error ensuring license: $e');
-    // Continue anyway - user gets free tier as fallback
-  }
-}
-
-/// Get unique device identifier
-Future<String> _getDeviceId() async {
-  try {
-    final deviceInfo = DeviceInfoPlugin();
-    
-    if (Platform.isAndroid) {
-      final androidInfo = await deviceInfo.androidInfo;
-      return androidInfo.id; // Android device ID
-    } else if (Platform.isIOS) {
-      final iosInfo = await deviceInfo.iosInfo;
-      return iosInfo.identifierForVendor ?? 'ios-unknown';
-    }
-    
-    return 'unknown-device';
-  } catch (e) {
-    print('[ApiService] Error getting device ID: $e');
-    return 'error-device-id';
-  }
-}
-
-/// Request free tier license from backend
-Future<String?> _generateFreeTierLicense(String deviceId) async {
-  try {
-    final uri = Uri.parse('$baseUrl/license/generate-free-tier');
-    
-    print('[ApiService] 🔍 Attempting free tier request...');
-    print('[ApiService] Base URL: $baseUrl');
-    print('[ApiService] Full URI: $uri');
-    print('[ApiService] Device ID: $deviceId');
-    
-    final request = http.Request('POST', uri);
-    request.headers.addAll({
-      'Content-Type': 'application/json',
-      'User-Agent': 'Clipnote-App/1.0',
-    });
-    request.body = jsonEncode({'device_id': deviceId});
-    
-    print('[ApiService] Request headers: ${request.headers}');
-    print('[ApiService] Request body: ${request.body}');
-    
-    // Set timeout and send (30 seconds for slow Railway)
-    final streamedResponse = await request.send().timeout(
-      const Duration(seconds: 30),
-      onTimeout: () {
-        throw Exception('Request timeout after 30 seconds');
-      },
-    );
-    
-    final response = await http.Response.fromStream(streamedResponse);
-    
-    print('[ApiService] Response status: ${response.statusCode}');
-    print('[ApiService] Response headers: ${response.headers}');
-    print('[ApiService] Response body: ${response.body}');
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final licenseKey = data['license_key'];
-      print('[ApiService] ✅ Free tier license received: ${licenseKey.substring(0, 8)}...');
-      return licenseKey;
-    } else {
-      print('[ApiService] ❌ Error generating license: ${response.statusCode} - ${response.body}');
-      return null;
-    }
-  } catch (e) {
-    print('[ApiService] ❌ Network error generating license: $e');
-    print('[ApiService] Error type: ${e.runtimeType}');
-    return null;
-  }
-}
-
-  /// Check backend health
-  Future<bool> checkHealth() async {
     try {
-      final uri = Uri.parse('$baseUrl/healthz');
-      final response = await http.get(uri);
-      return response.statusCode == 200;
+      // Check if license key already exists
+      await loadLicenseKey();
+      
+      if (_licenseKey != null) {
+        print('[ApiService] ✅ License key already exists: ${_licenseKey!.substring(0, 8)}...');
+        return;
+      }
+      
+      print('[ApiService] 📱 No license key found. Generating free tier license...');
+      
+      // Generate a device ID
+      final deviceId = await _getDeviceId();
+      
+      // Request free tier license from backend
+      final licenseKey = await _generateFreeTierLicense(deviceId);
+      
+      if (licenseKey != null) {
+        await saveLicenseKey(licenseKey);
+        print('[ApiService] ✅ Free tier license generated and saved!');
+      } else {
+        print('[ApiService] ⚠️ Failed to generate license, user will see free tier');
+      }
     } catch (e) {
-      print('[ApiService] Health check failed: $e');
-      return false;
+      print('[ApiService] ⚠️ Error ensuring license: $e');
+      // Continue anyway - user gets free tier as fallback
     }
   }
 
-  /// Verify IAP receipt and get license key
-  Future<String> verifyIapAndGetLicense({
-    String? receipt,
-    String? receiptData,
-    required String productId,
-    String? userId,
-    String? store,
-    String? email,
-  }) async {
+  /// Get unique device identifier
+  Future<String> _getDeviceId() async {
     try {
-      final receiptString = receipt ?? receiptData;
+      final deviceInfo = DeviceInfoPlugin();
       
-      if (receiptString == null) {
-        throw Exception('Receipt data is required');
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        return androidInfo.id;
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        return iosInfo.identifierForVendor ?? 'ios-unknown';
       }
       
-      final uri = Uri.parse('$baseUrl/iap/verify');
-      final body = {
-        'receipt': receiptString,
-        'store': store,
-        'product_id': productId,
-      };
+      return 'unknown-device';
+    } catch (e) {
+      print('[ApiService] Error getting device ID: $e');
+      return 'error-device-id';
+    }
+  }
+
+  /// Request free tier license from backend
+  Future<String?> _generateFreeTierLicense(String deviceId) async {
+    try {
+      final uri = Uri.parse('$baseUrl/license/generate-free-tier');
       
-      if (userId != null) {
-        body['user_id'] = userId;
-      }
+      print('[ApiService] 🔍 Attempting free tier request...');
+      print('[ApiService] Base URL: $baseUrl');
+      print('[ApiService] Full URI: $uri');
+      print('[ApiService] Device ID: $deviceId');
       
-      final response = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(body),
+      final request = http.Request('POST', uri);
+      request.headers.addAll({
+        'Content-Type': 'application/json',
+        'User-Agent': 'Clipnote-App/1.0',
+      });
+      request.body = jsonEncode({'device_id': deviceId});
+      
+      print('[ApiService] Request headers: ${request.headers}');
+      print('[ApiService] Request body: ${request.body}');
+      
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Request timeout after 30 seconds');
+        },
       );
+      
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      print('[ApiService] Response status: ${response.statusCode}');
+      print('[ApiService] Response headers: ${response.headers}');
+      print('[ApiService] Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final licenseKey = data['license_key'];
-        
-        await saveLicenseKey(licenseKey);
-        _currentTier = data['tier'] ?? 'free';
-        
+        print('[ApiService] ✅ Free tier license received: ${licenseKey.substring(0, 8)}...');
         return licenseKey;
       } else {
-        throw Exception('Failed to verify purchase: ${response.body}');
+        print('[ApiService] ❌ Error generating license: ${response.statusCode} - ${response.body}');
+        return null;
       }
     } catch (e) {
-      print('[ApiService] Error verifying IAP: $e');
+      print('[ApiService] ❌ Network error generating license: $e');
+      print('[ApiService] Error type: ${e.runtimeType}');
+      return null;
+    }
+  }
+
+  /// Upload meeting (audio or video) - works for all tiers
+  /// Accepts file path only (no longer loading entire file into memory)
+  Future<int> uploadMeeting({
+    required String filename,
+    required String title,
+    String? email,
+    String? emailTo,
+    String? language,
+    String? hints,
+    bool transcribeOnly = false,
+    void Function(double)? onProgress,
+  }) async {
+    try {
+      final emailAddress = email ?? emailTo;
+      
+      // All tiers can upload audio/video files
+      // Only live video RECORDING is Business-only (handled in UI)
+      final uri = Uri.parse('$baseUrl/meetings/upload');
+      
+      var request = http.MultipartRequest('POST', uri);
+      
+      if (_licenseKey != null) {
+        request.headers['X-License-Key'] = _licenseKey!;
+      }
+      
+      request.fields['title'] = title;
+      if (emailAddress != null) request.fields['email_to'] = emailAddress;
+      if (language != null) request.fields['language'] = language;
+      if (hints != null) request.fields['hints'] = hints;
+      
+      // Use fromPath to stream the file instead of loading it into memory
+      request.files.add(await http.MultipartFile.fromPath('file', filename));
+      
+      print('[ApiService] Sending upload request for file: $filename');
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      print('[ApiService] Upload response: ${response.statusCode}');
+      print('[ApiService] Upload body: ${response.body}');
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['id'];
+      } else {
+        throw Exception('Upload failed: ${response.body}');
+      }
+    } catch (e) {
+      print('[ApiService] Error uploading meeting: $e');
       rethrow;
     }
   }
 
-  /// Upload meeting (multipart upload)
-  Future<int> uploadMeeting({
-    Uint8List? bytes,
-    File? file,
-    required String filename,
-    required String type, // 'audio' | 'video' | 'transcript' | etc.
-    String? title,
-  }) async {
-    if (bytes == null && file == null) {
-      throw ArgumentError('Provide bytes or file');
-    }
-
-    final uri = Uri.parse('$baseUrl/meetings/upload');
-    final req = http.MultipartRequest('POST', uri);
-    req.headers.addAll(await _getHeaders());
-    req.fields['type'] = type;
-    if (title != null) req.fields['title'] = title;
-
-    if (file != null) {
-      req.files.add(await http.MultipartFile.fromPath('file', file.path,
-          filename: filename));
-    } else {
-      req.files.add(http.MultipartFile.fromBytes('file', bytes!,
-          filename: filename));
-    }
-
-    final streamed = await req.send();
-    final res = await http.Response.fromStream(streamed);
-
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      return data['meeting_id'] as int;
-    }
-
-    throw Exception('Upload failed: ${res.statusCode} ${res.body}');
-  }
-
-
-    String _getExtensionFromBytes(List<int> bytes) {
-      if (bytes.isEmpty) return 'bin';
+  String _getExtensionFromBytes(List<int> bytes) {
+    if (bytes.isEmpty) return 'bin';
+    
+    if (bytes.length >= 4) {
+      if (bytes[0] == 0xFF && bytes[1] == 0xFB) return 'mp3';
+      if (bytes[0] == 0x49 && bytes[1] == 0x44 && bytes[2] == 0x33) return 'mp3';
       
-      if (bytes.length >= 4) {
-        if (bytes[0] == 0xFF && bytes[1] == 0xFB) return 'mp3';
-        if (bytes[0] == 0x49 && bytes[1] == 0x44 && bytes[2] == 0x33) return 'mp3';
-        
-        if (bytes[4] == 0x66 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70) {
-          return 'm4a';
-        }
-        
-        if (bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46) {
-          return 'wav';
-        }
+      if (bytes.length >= 8 && bytes[4] == 0x66 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70) {
+        return 'm4a';
       }
       
-      return 'mp3';
+      if (bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46) {
+        return 'wav';
+      }
     }
+    
+    return 'mp3';
+  }
 
   /// Submit transcript (text only, no audio)
   Future<int> submitTranscript({
@@ -373,7 +367,7 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
       final uri = Uri.parse('$baseUrl/meetings/$meetingId/status');
       final response = await http.get(
         uri,
-        headers: _getHeaders(),  // ✅ Added license key
+        headers: _getHeaders(),
       );
       
       if (response.statusCode == 200) {
@@ -392,7 +386,7 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
       final uri = Uri.parse('$baseUrl/meetings/list');
       final response = await http.get(
         uri,
-        headers: _getHeaders(),  // ✅ Added license key
+        headers: _getHeaders(),
       );
       
       if (response.statusCode == 200) {
@@ -412,7 +406,7 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
       final uri = Uri.parse('$baseUrl/meetings/$meetingId/summary');
       final response = await http.get(
         uri,
-        headers: _getHeaders(),  // ✅ Added license key
+        headers: _getHeaders(),
       );
       
       if (response.statusCode == 200) {
@@ -431,7 +425,7 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
       final uri = Uri.parse('$baseUrl/meetings/$meetingId/transcript');
       final response = await http.get(
         uri,
-        headers: _getHeaders(),  // ✅ Added license key
+        headers: _getHeaders(),
       );
       
       if (response.statusCode == 200) {
@@ -444,13 +438,12 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
     }
   }
 
-  /// Send meeting email (simplified - backend fetches content)
+  /// Send meeting email
   Future<void> sendMeetingEmail(int meetingId, String email) async {
     try {
       print('[ApiService] 📧 Sending email for meeting $meetingId to $email');
       
       final uri = Uri.parse('$baseUrl/meetings/email');
-      print('[ApiService] 📧 POST endpoint: $uri');
       
       final payload = {
         'meeting_id': meetingId,
@@ -459,23 +452,18 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
         'include_summary': true,
       };
       
-      print('[ApiService] 📧 Request payload: ${jsonEncode(payload)}');
-      
       final response = await http.post(
         uri,
         headers: {
           'Content-Type': 'application/json',
-          ..._getHeaders(),  // ✅ Include license key if available
+          ..._getHeaders(),
         },
         body: jsonEncode(payload),
       );
       
-      print('[ApiService] 📧 Response status: ${response.statusCode}');
-      print('[ApiService] 📧 Response body: ${response.body}');
-      
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print('[ApiService] ✅ Email queued successfully: ${data['message']}');
+        print('[ApiService] ✅ Email queued: ${data['message']}');
         return;
       } else if (response.statusCode == 404) {
         throw Exception('Meeting not found or summary not available');
@@ -483,7 +471,7 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
         final error = jsonDecode(response.body);
         throw Exception(error['detail'] ?? 'Invalid request');
       } else {
-        throw Exception('Failed to send email: ${response.statusCode} - ${response.body}');
+        throw Exception('Failed to send email: ${response.statusCode}');
       }
     } catch (e) {
       print('[ApiService] ❌ Error sending email: $e');
@@ -491,7 +479,8 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
     }
   }
 
-  /// Download meeting file
+  /// Download meeting file (transcript, summary, or all)
+  /// Returns the download URL with authentication token
   Future<Map<String, dynamic>> downloadMeetingFile(
     int meetingId,
     String type,
@@ -499,12 +488,10 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
     try {
       print('[ApiService] ⬇️ Preparing download for meeting $meetingId, type: $type');
       
-      // Construct the download URL with type as query parameter
-      final downloadUrl = '$baseUrl/meetings/$meetingId/download?type=$type';
-      print('[ApiService] ⬇️ Download URL: $downloadUrl');
-      
-      // Don't verify with HEAD - just return the URL
-      // The browser will handle 404s when the user tries to open it
+      // Include license key in the URL as a query parameter for direct downloads
+      final downloadUrl = _licenseKey != null
+          ? '$baseUrl/meetings/$meetingId/download?type=$type&license_key=$_licenseKey'
+          : '$baseUrl/meetings/$meetingId/download?type=$type';
       
       return {
         'filename': _getFilenameForType(type, meetingId),
@@ -518,21 +505,85 @@ Future<String?> _generateFreeTierLicense(String deviceId) async {
     }
   }
 
-/// Helper to generate appropriate filename based on type
-String _getFilenameForType(String type, int meetingId) {
-  switch (type.toLowerCase()) {
-    case 'transcript':
-      return 'meeting_${meetingId}_transcript.txt';
-    case 'summary':
-      return 'meeting_${meetingId}_summary.txt';
-    case 'pdf':
-      return 'meeting_${meetingId}_report.pdf';
-    case 'all':
-      return 'meeting_${meetingId}_files.zip';
-    default:
-      return 'meeting_${meetingId}_download.txt';
+  /// Download meeting file directly using Dio with authentication headers
+  /// This method actually downloads the file bytes with proper authentication
+  Future<List<int>> downloadMeetingFileBytes(
+    int meetingId,
+    String type,
+  ) async {
+    try {
+      print('[ApiService] ⬇️ Downloading file for meeting $meetingId, type: $type');
+      
+      final response = await _dio.get(
+        '/meetings/$meetingId/download',
+        queryParameters: {'type': type},
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {
+            if (_licenseKey != null) 'X-License-Key': _licenseKey!,
+          },
+        ),
+      );
+      
+      if (response.statusCode == 200) {
+        print('[ApiService] ✅ File downloaded successfully');
+        return response.data as List<int>;
+      } else {
+        throw Exception('Download failed with status: ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      print('[ApiService] ❌ DioException downloading file: ${e.type}');
+      print('[ApiService] Status code: ${e.response?.statusCode}');
+      print('[ApiService] Response data: ${e.response?.data}');
+      
+      if (e.response?.statusCode == 403) {
+        throw Exception('Permission denied. You may not have access to this meeting.');
+      } else if (e.response?.statusCode == 404) {
+        throw Exception('File not found or meeting does not exist.');
+      } else {
+        throw Exception('Download failed: ${e.message}');
+      }
+    } catch (e) {
+      print('[ApiService] ❌ Error downloading file: $e');
+      rethrow;
+    }
   }
-}
+  /// Helper to generate filename
+  String _getFilenameForType(String type, int meetingId) {
+    switch (type.toLowerCase()) {
+      case 'transcript':
+        return 'meeting_${meetingId}_transcript.txt';
+      case 'summary':
+        return 'meeting_${meetingId}_summary.txt';
+      case 'all':
+        return 'meeting_${meetingId}_files.zip';
+      default:
+        return 'meeting_${meetingId}_download.txt';
+    }
+  }
+
+  /// Confirm download complete for Free/Starter tiers
+  Future<void> confirmDownloadComplete(int meetingId) async {
+    try {
+      print('[ApiService] 📱 Confirming download for meeting $meetingId');
+      
+      final uri = Uri.parse('$baseUrl/meetings/$meetingId/confirm-download');
+      final response = await http.post(
+        uri,
+        headers: _getHeaders(),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('[ApiService] ✅ Download confirmed: ${data['message']}');
+      } else {
+        print('[ApiService] ⚠️ Failed to confirm: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('[ApiService] ❌ Error confirming download: $e');
+      // Don't throw - this is cleanup, not critical
+    }
+  }
 
   /// Get meeting statistics
   Future<Map<String, dynamic>> getMeetingStats() async {
@@ -540,7 +591,7 @@ String _getFilenameForType(String type, int meetingId) {
       final uri = Uri.parse('$baseUrl/meetings/stats');
       final response = await http.get(
         uri,
-        headers: _getHeaders(),  // ✅ Added license key
+        headers: _getHeaders(),
       );
       
       if (response.statusCode == 200) {
@@ -548,8 +599,8 @@ String _getFilenameForType(String type, int meetingId) {
         print('[ApiService] Meeting stats loaded: $data');
         return data;
       } else {
-        print('[ApiService] Failed to get stats: ${response.statusCode} - ${response.body}');
-        throw Exception('Failed to get meeting stats: ${response.statusCode}');
+        print('[ApiService] Failed to get stats: ${response.statusCode}');
+        throw Exception('Failed to get meeting stats');
       }
     } catch (e) {
       print('[ApiService] Error getting stats: $e');
@@ -557,20 +608,86 @@ String _getFilenameForType(String type, int meetingId) {
     }
   }
 
+  Future<Map<String, dynamic>> getCloudStatus(int meetingId) async {
+    final response = await _dio.get('/meetings/$meetingId/cloud-status');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> uploadMeetingToCloud(int meetingId) async {
+    final response = await _dio.post('/meetings/$meetingId/upload-to-cloud');
+    return response.data;
+  }
+
+  Future<void> downloadMeeting(int meetingId, String type) async {
+    // type can be 'transcript' or 'summary'
+    try {
+      print('[ApiService] 🔍 Attempting download - Meeting: $meetingId, Type: $type');
+      print('[ApiService] License key available: ${_licenseKey != null ? "YES (${_licenseKey!.substring(0, 8)}...)" : "NO"}');
+      
+      final response = await _dio.get(
+        '/meetings/$meetingId/download',
+        queryParameters: {'type': type},
+        options: Options(
+          headers: {
+            if (_licenseKey != null) 'X-License-Key': _licenseKey!,
+          },
+        ),
+      );
+      
+      print('[ApiService] Download response status: ${response.statusCode}');
+      
+      // Handle download based on storage location
+      if (response.data is Map && response.data['storage'] == 'cloud') {
+        // It's a cloud file, open the presigned URL
+        final url = response.data['download_url'];
+        print('[ApiService] Cloud file, URL: $url');
+        // Use url_launcher or in_app_browser to open the URL
+        // You'll need to implement this based on your app's download strategy
+      } else {
+        print('[ApiService] Local file response');
+        // It's a local file response, handle accordingly
+        // This might be a direct file download
+      }
+    } on DioException catch (e) {
+      print('[ApiService] ❌ DioException in downloadMeeting: ${e.type}');
+      print('[ApiService] Status code: ${e.response?.statusCode}');
+      print('[ApiService] Response: ${e.response?.data}');
+      print('[ApiService] Request headers: ${e.requestOptions.headers}');
+      
+      if (e.response?.statusCode == 403) {
+        throw Exception('Permission denied. License key issue or no access to this meeting.');
+      }
+      rethrow;
+    } catch (e) {
+      print('[ApiService] ❌ Error in downloadMeeting: $e');
+      rethrow;
+    }
+  }
+
   /// Delete meeting
   Future<void> deleteMeeting(int meetingId) async {
     try {
-      final uri = Uri.parse('$baseUrl/meetings/$meetingId');
-      final response = await http.delete(
-        uri,
-        headers: _getHeaders(),  // ✅ Added license key
-      );
+      print('[ApiService] 🗑️ Attempting to delete meeting $meetingId');
+      print('[ApiService] License key: ${_licenseKey != null ? "${_licenseKey!.substring(0, 8)}..." : "NONE"}');
       
-      if (response.statusCode != 200) {
-        throw Exception('Failed to delete meeting: ${response.statusCode}');
+      final response = await _dio.delete('/meetings/$meetingId');
+      
+      print('[ApiService] ✅ Meeting $meetingId deleted successfully');
+    } on DioException catch (e) {
+      print('[ApiService] ❌ DioException deleting meeting: ${e.type}');
+      print('[ApiService] Status code: ${e.response?.statusCode}');
+      print('[ApiService] Response data: ${e.response?.data}');
+      print('[ApiService] Request headers: ${e.requestOptions.headers}');
+      
+      if (e.response?.statusCode == 403) {
+        throw Exception('Permission denied. You may not have access to delete this meeting.');
+      } else if (e.response?.statusCode == 404) {
+        throw Exception('Meeting not found or already deleted.');
+      } else {
+        throw Exception('Failed to delete meeting: ${e.response?.statusCode ?? "Network error"}');
       }
     } catch (e) {
-      print('[ApiService] Error deleting meeting: $e');
+      print('[ApiService] ❌ Error deleting meeting: $e');
       rethrow;
     }
   }
