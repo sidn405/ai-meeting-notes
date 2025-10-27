@@ -821,26 +821,31 @@ async def email_meeting(
 def download_meeting_file(
     meeting_id: int,
     type: str = Query(..., description="transcript, summary, or pdf"),
-    license_info: tuple = Depends(optional_license),
+    x_license_key: str | None = Header(None, alias="X-License-Key"),
     db: Session = Depends(get_session)
 ):
     """Download meeting files - from B2 for Pro/Business, from server for Free/Starter"""
-    license, tier_config = license_info
-    tier = license.tier.lower() if license else "free"
     
     meeting = db.get(Meeting, meeting_id)
     if not meeting:
         raise HTTPException(404, "Meeting not found")
     
-    # Verify ownership - check if meeting belongs to this license
-    if license:
-        # User has a license - verify they own this meeting
-        if meeting.license_id != license.id:
-            raise HTTPException(403, "Not authorized")
+    # Verify ownership by comparing license keys directly
+    if meeting.license_id:
+        # Meeting has a license - verify the key matches
+        if not x_license_key:
+            raise HTTPException(403, "License key required to access this meeting")
+        
+        # Look up the meeting's license and compare keys
+        meeting_license = db.get(License, meeting.license_id)
+        if not meeting_license or meeting_license.license_key != x_license_key:
+            raise HTTPException(403, "Not authorized - license key does not match")
+        
+        # Set tier from the meeting's license
+        tier = meeting_license.tier.lower()
     else:
-        # No license provided - only allow if meeting has no license (legacy/free)
-        if meeting.license_id is not None:
-            raise HTTPException(403, "License required to access this meeting")
+        # Meeting has no license (legacy/free tier meeting)
+        tier = "free"
     
     try:
         if type == "transcript":
@@ -934,15 +939,27 @@ def download_meeting_file(
 @router.post("/{meeting_id}/upload-to-cloud")
 def upload_meeting_to_cloud(
     meeting_id: int,
-    license_info: tuple = Depends(optional_license),
+    x_license_key: str = Header(..., alias="X-License-Key"),
     db: Session = Depends(get_session)
 ):
     """
     ✅ NEW: Manual cloud upload for Pro/Business tiers.
     Uploads transcript and summary to B2, then deletes local copies.
     """
-    license, tier_config = license_info
-    tier = license.tier.lower() if license else "free"
+    
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+    
+    # Verify ownership and tier
+    if not meeting.license_id:
+        raise HTTPException(403, "This meeting has no license")
+    
+    meeting_license = db.get(License, meeting.license_id)
+    if not meeting_license or meeting_license.license_key != x_license_key:
+        raise HTTPException(403, "Not authorized - license key does not match")
+    
+    tier = meeting_license.tier.lower()
     
     # Only Pro/Business can upload to cloud
     if tier not in ("professional", "business"):
@@ -950,14 +967,6 @@ def upload_meeting_to_cloud(
             403,
             "Cloud storage is only available for Professional and Business tiers"
         )
-    
-    meeting = db.get(Meeting, meeting_id)
-    if not meeting:
-        raise HTTPException(404, "Meeting not found")
-    
-    # Verify ownership - check if meeting belongs to this license
-    if meeting.license_id != license.id:
-        raise HTTPException(403, "Not authorized")
     
     # Check if files are already in cloud
     if meeting.transcript_path and meeting.transcript_path.startswith("s3://"):
@@ -1205,31 +1214,23 @@ def upload_transcript_summary_to_b2(meeting_id: int, db: Session):
 @router.delete("/{meeting_id}")
 def delete_meeting(
     meeting_id: int,
-    license_info: tuple = Depends(optional_license),
+    x_license_key: str | None = Header(None, alias="X-License-Key"),
     db: Session = Depends(get_session)
 ):
     """Delete a meeting and its associated files (local and B2)"""
-    license, tier_config = license_info
     
     meeting = db.get(Meeting, meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Not found")
     
-    # Verify ownership - check if meeting belongs to this license
-    if license:
-        # User has a license - verify they own this meeting
-        if meeting.license_id != license.id:
-            raise HTTPException(
-                status_code=403, 
-                detail="Cannot delete meeting belonging to another user"
-            )
-    else:
-        # No license provided - only allow if meeting has no license (legacy/free)
-        if meeting.license_id is not None:
-            raise HTTPException(
-                status_code=403,
-                detail="License required to delete this meeting"
-            )
+    # Verify ownership
+    if meeting.license_id:
+        if not x_license_key:
+            raise HTTPException(403, "License key required")
+        
+        meeting_license = db.get(License, meeting.license_id)
+        if not meeting_license or meeting_license.license_key != x_license_key:
+            raise HTTPException(403, "Cannot delete meeting belonging to another user")
     
     # Delete B2 files if Professional/Business tier
     if meeting.audio_path and meeting.audio_path.startswith("s3://"):
@@ -1268,7 +1269,7 @@ def delete_meeting(
 @router.post("/{meeting_id}/confirm-download")
 def confirm_download(
     meeting_id: int,
-    license_info: tuple = Depends(optional_license),
+    x_license_key: str | None = Header(None, alias="X-License-Key"),
     db: Session = Depends(get_session)
 ):
     """
@@ -1277,8 +1278,24 @@ def confirm_download(
     
     This endpoint ensures "nothing is stored locally" for Free/Starter tiers.
     """
-    license, tier_config = license_info
-    tier = license.tier.lower() if license else "free"
+    
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+    
+    # Verify ownership and get tier
+    if meeting.license_id:
+        if not x_license_key:
+            raise HTTPException(403, "License key required")
+        
+        meeting_license = db.get(License, meeting.license_id)
+        if not meeting_license or meeting_license.license_key != x_license_key:
+            raise HTTPException(403, "Not authorized")
+        
+        tier = meeting_license.tier.lower()
+    else:
+        # Legacy free tier meeting with no license
+        tier = "free"
     
     # Only Free/Starter should use this
     if tier not in ("free", "starter"):
@@ -1287,19 +1304,6 @@ def confirm_download(
             "This endpoint is for Free/Starter tiers only. "
             "Pro/Business tiers use cloud storage."
         )
-    
-    meeting = db.get(Meeting, meeting_id)
-    if not meeting:
-        raise HTTPException(404, "Meeting not found")
-    
-    # Verify ownership - check if meeting belongs to this license
-    if license:
-        if meeting.license_id != license.id:
-            raise HTTPException(403, "Not authorized")
-    else:
-        # No license but meeting has one - not authorized
-        if meeting.license_id is not None:
-            raise HTTPException(403, "Not authorized")
     
     try:
         # Delete transcript from server
