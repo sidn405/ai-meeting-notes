@@ -339,51 +339,39 @@ async def create_from_text(
     title: str = Form(...),
     transcript: str = Form(...),
     email_to: str | None = Form(None),
-    license_info: tuple = Depends(optional_license),
+    license_info: tuple = Depends(optional_license),  # ✅ CHANGED
     db = Depends(get_session),
 ):
-    """
-    Create a meeting from raw transcript text (no audio/video uploaded).
-    """
-    license, tier_cfg = license_info
-
-    safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", (title or "").strip()) or "meeting"
-    tpath = DATA_DIR / f"textonly_{safe_stem}.transcript.txt"
-    tpath.write_text(transcript or "", encoding="utf-8")
+    """Create meeting from text transcript (no audio)"""
+    license, tier_config = license_info
+    
+    safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", title.strip()) or "meeting"
+    tpath = DATA_DIR / f"from_text_{safe_stem}.transcript.txt"
+    tpath.write_text(transcript, encoding="utf-8")
 
     with get_session() as s:
         m = Meeting(
             title=title,
+            audio_path=None,
             email_to=email_to,
             transcript_path=str(tpath),
-            audio_path=None,
-            video_path=None,
-            status="delivered",
-            progress=100,
-            step="Transcript saved",
-            # ✅ attach ownership so auth works on download
-            license_id=license.id if license else None,
+            status="queued"
         )
         s.add(m)
         s.commit()
         s.refresh(m)
-        meeting_id = m.id
+        mid = m.id
 
-    # optional usage tracking
-    if license:
+    # Track usage for paid users only
+    if license:  # ✅ ADDED CHECK
         track_meeting_usage(db, license.license_key)
 
-    # ✅ send completion email even for transcript-only
-    if email_to:
-        background_tasks = BackgroundTasks()
-        background_tasks.add_task(send_summary_email, meeting_id, m.transcript_path, email_to)
+    # Process meeting
+    process_meeting(mid)
 
-    return {
-        "id": meeting_id,
-        "status": "delivered",
-        "message": "Transcript saved successfully",
-    }
-
+    with get_session() as s:
+        m = s.get(Meeting, mid)
+        return {"id": m.id, "status": m.status}
 
 @router.post("/from-text-sync")
 async def create_from_text_sync(
@@ -401,102 +389,108 @@ async def transcribe_only(
     title: str = Form(...),
     transcript: str = Form(...),
     email_to: str | None = Form(None),
-    license_info: tuple = Depends(optional_license),
+    license_info: tuple = Depends(optional_license),  # ✅ CHANGED
     db = Depends(get_session),
 ):
-    """
-    Save a 'transcript-only' meeting that already has transcript text.
-    """
-    license, tier_cfg = license_info
-
-    safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", (title or "").strip()) or "meeting"
+    """Save transcript without summarization"""
+    license, tier_config = license_info
+    
+    safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", title.strip()) or "meeting"
     tpath = DATA_DIR / f"transcribe_only_{safe_stem}.transcript.txt"
-    tpath.write_text(transcript or "", encoding="utf-8")
+    tpath.write_text(transcript, encoding="utf-8")
 
     with get_session() as s:
         m = Meeting(
             title=title,
+            audio_path=None,
             email_to=email_to,
             transcript_path=str(tpath),
-            audio_path=None,
-            video_path=None,
             status="delivered",
             progress=100,
-            step="Transcript saved",
-            # ✅ attach ownership
-            license_id=license.id if license else None,
+            step="Transcript saved"
         )
         s.add(m)
         s.commit()
         s.refresh(m)
-        meeting_id = m.id
+        mid = m.id
 
-    if license:
+    # Track usage for paid users only
+    if license:  # ✅ ADDED CHECK
         track_meeting_usage(db, license.license_key)
 
-    # ✅ email for transcript-only
-    if email_to:
-        background_tasks = BackgroundTasks()
-        background_tasks.add_task(send_summary_email, meeting_id, m.transcript_path, email_to)
-
     return {
-        "id": meeting_id,
+        "id": mid, 
         "status": "delivered",
-        "message": "Transcript saved successfully",
+        "message": "Transcript saved successfully"
     }
-
 
 @router.post("/upload-transcribe-only")
 async def upload_transcribe_only(
+    background_tasks: BackgroundTasks,
     title: str = Form(...),
-    file: UploadFile = File(...),   # text file
     email_to: str | None = Form(None),
-    license_info: tuple = Depends(optional_license),
+    file: UploadFile = File(...),
+    language: str | None = Form(None),
+    hints: str | None = Form(None),
+    license_info: tuple = Depends(optional_license),  # ✅ CHANGED
     db = Depends(get_session),
 ):
-    """
-    Upload a text file that represents the transcript (no audio/video).
-    """
-    license, tier_cfg = license_info
+    """Upload and transcribe ONLY (no summarization)"""
+    license, tier_config = license_info
+    
+    if language == "":
+        language = None
+    if hints:
+        hints = hints.strip() or None
+    
+    ext = Path(file.filename).suffix.lower()
+    if ext not in {".mp3", ".m4a", ".wav", ".mp4", ".mov", ".mkv", ".webm"}:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
 
-    safe_stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", (title or "").strip()) or "meeting"
-    tpath = DATA_DIR / f"upload_transcribe_only_{safe_stem}.transcript.txt"
-
-    content = await file.read()
-    tpath.write_bytes(content or b"")
+    file_content = await file.read()
+    file_size = len(file_content)
+    
+    if file_size == 0:
+        raise HTTPException(status_code=400, detail="File is empty")
+    
+    is_valid, error_msg = validate_file_size(file_size, tier_config)
+    if not is_valid:
+        raise HTTPException(status_code=413, detail=error_msg)
+    
+    audio_path = DATA_DIR / f"{Path(file.filename).stem}.uploaded{ext}"
+    audio_path.write_bytes(file_content)
 
     with get_session() as s:
         m = Meeting(
-            title=title,
-            email_to=email_to,
-            transcript_path=str(tpath),
-            audio_path=None,
-            video_path=None,
-            status="delivered",
-            progress=100,
-            step="Transcript saved",
-            # ✅ attach ownership
-            license_id=license.id if license else None,
+            title=title, 
+            audio_path=str(audio_path), 
+            email_to=email_to, 
+            status="queued"
         )
         s.add(m)
         s.commit()
         s.refresh(m)
-        meeting_id = m.id
+        mid = m.id
 
-    if license:
+    # Track usage for paid users only
+    if license:  # ✅ ADDED CHECK
         track_meeting_usage(db, license.license_key)
 
-    # ✅ email for transcript-only
-    if email_to:
-        background_tasks = BackgroundTasks()
-        background_tasks.add_task(send_summary_email, meeting_id, m.transcript_path, email_to)
-
+    background_tasks.add_task(
+        process_meeting_transcribe_only,
+        mid,
+        language=language,
+        hints=hints
+    )
+    
     return {
-        "id": meeting_id,
-        "status": "delivered",
-        "message": "Transcript saved successfully",
+        "id": mid, 
+        "status": "queued",
+        "tier": license.tier if license else "free",
+        "file_size_mb": round(file_size / (1024 * 1024), 2),
+        "language": language or "auto-detect",
+        "mode": "transcribe_only"
     }
-
 
 @router.post("/upload-transcribe-summarize")
 async def upload_transcribe_summarize(
