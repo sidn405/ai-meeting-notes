@@ -13,6 +13,8 @@ import 'package:clipnote/services/sync_service.dart';
 
 class ApiService {
   static final ApiService I = ApiService._();
+  late final SyncService _sync;
+  bool _syncStarted = false;
   ApiService._() {
     // Initialize Dio with base options
     _dio = Dio(BaseOptions(
@@ -36,7 +38,7 @@ class ApiService {
       _sync = SyncService(this);
       _sync.start();
       _syncStarted = true;
-    }
+  }
 
   // Base URL - update this to your backend URL
   final String baseUrl = 'https://ai-meeting-notes-production-81d7.up.railway.app';
@@ -502,11 +504,17 @@ class ApiService {
           ? '$baseUrl/meetings/$meetingId/download?type=$type&license_key=$_licenseKey'
           : '$baseUrl/meetings/$meetingId/download?type=$type';
 
+      // Generate filename for this type
+      final filename = _getFilenameForType(type, meetingId);
+      
+      // Download the file bytes
+      final bytes = await downloadMeetingFileBytes(meetingId, type);
+
       // Persist offline
       final saved = await saveMeetingBytes(
         meetingId: meetingId,
         filename: filename,
-        bytes: response.bodyBytes,
+        bytes: bytes,
       );
 
       // Track in local DB
@@ -515,8 +523,8 @@ class ApiService {
         meetingId: meetingId,
         filename: filename,
         path: saved.path,
-        contentType: response.headers['content-type'],
-        sizeBytes: response.bodyBytes.length,
+        contentType: _getContentTypeForType(type),
+        sizeBytes: bytes.length,
       );
 
       // Try to confirm with backend; if offline, queue it
@@ -593,6 +601,19 @@ class ApiService {
         return 'meeting_${meetingId}_files.zip';
       default:
         return 'meeting_${meetingId}_download.txt';
+    }
+  }
+
+  /// Helper to get content type for the file type
+  String _getContentTypeForType(String type) {
+    switch (type.toLowerCase()) {
+      case 'transcript':
+      case 'summary':
+        return 'text/plain';
+      case 'all':
+        return 'application/zip';
+      default:
+        return 'application/octet-stream';
     }
   }
 

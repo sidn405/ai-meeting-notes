@@ -6,6 +6,7 @@ import 'transcript_screen.dart';
 import 'results_screen.dart';
 import 'package:clipnote/services/local_db.dart';
 import 'package:clipnote/services/offline_storage.dart';
+import 'package:clipnote/services/sync_service.dart';
 
 
 class MeetingsListScreen extends StatefulWidget {
@@ -24,6 +25,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
   final _api = ApiService.I;
   List<Map<String, dynamic>> _meetings = [];
   List<Map<String, dynamic>> _filteredMeetings = [];
+  
   bool _isLoading = true;
   String _searchQuery = '';
   String _filterStatus = 'all';
@@ -997,84 +999,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                   _downloadFile(id, 'pdf', title);
                 },
               ),
-              class LocalFilesSection extends StatefulWidget {
-                const LocalFilesSection({super.key, required this.meetingId});
-                final int meetingId;
-
-                @override
-                State<LocalFilesSection> createState() => _LocalFilesSectionState();
-              }
-
-              class _LocalFilesSectionState extends State<LocalFilesSection> {
-                Future<List<Map<String, Object?>>> _load() => localDb.listByMeeting(widget.meetingId);
-
-                @override
-                Widget build(BuildContext context) {
-                  return FutureBuilder<List<Map<String, Object?>>>(
-                    future: _load(),
-                    builder: (context, snap) {
-                      final items = snap.data ?? const [];
-                      if (items.isEmpty) {
-                        return const SizedBox.shrink(); // nothing saved yet
-                      }
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 8),
-                          const Text('Saved on device', style: TextStyle(fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 8),
-                          ...items.map((r) {
-                            final filename = (r['filename'] as String?) ?? 'file';
-                            final path = (r['path'] as String?) ?? '';
-                            final size = (r['size_bytes'] as int?) ?? 0;
-                            return ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.insert_drive_file),
-                              title: Text(filename, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              subtitle: Text('${size}B'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.open_in_new),
-                                    onPressed: () => openLocalFile(path),
-                                    tooltip: 'Open',
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_forever),
-                                    onPressed: () async {
-                                      await deleteSingleFile(path);
-                                      if (mounted) setState(() {});
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Deleted $filename')),
-                                      );
-                                    },
-                                    tooltip: 'Delete',
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-                          const SizedBox(height: 8),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton.icon(
-                              icon: const Icon(Icons.delete_sweep),
-                              label: const Text('Delete all for this meeting'),
-                              onPressed: () async {
-                                await deleteMeetingFiles(widget.meetingId);
-                                await localDb.removeByMeeting(widget.meetingId);
-                                if (mounted) setState(() {});
-                              },
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                }
-              }
 
             ],
           ),
@@ -1346,5 +1270,80 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       print('[MeetingsList] Error downloading $type: $e');
       rethrow;
     }
+  }
+}
+class LocalFilesSection extends StatefulWidget {
+  const LocalFilesSection({super.key, required this.meetingId});
+  final int meetingId;
+  @override
+  State<LocalFilesSection> createState() => _LocalFilesSectionState();
+}
+class _LocalFilesSectionState extends State<LocalFilesSection> {
+  Future<List<Map<String, Object?>>> _load() => localDb.listByMeeting(widget.meetingId);
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, Object?>>>(
+      future: _load(),
+      builder: (context, snap) {
+        final items = snap.data ?? const [];
+        if (items.isEmpty) {
+          return const SizedBox.shrink(); // nothing saved yet
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
+            const Text('Saved on device', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            ...items.map((r) {
+              final filename = (r['filename'] as String?) ?? 'file';
+              final path = (r['path'] as String?) ?? '';
+              final size = (r['size_bytes'] as int?) ?? 0;
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.insert_drive_file),
+                title: Text(filename, maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text('${size}B'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.open_in_new),
+                      onPressed: () => openLocalFile(path),
+                      tooltip: 'Open',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_forever),
+                      onPressed: () async {
+                        await deleteSingleFile(path);
+                        if (mounted) setState(() {});
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Deleted $filename')),
+                        );
+                      },
+                      tooltip: 'Delete',
+                    ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                icon: const Icon(Icons.delete_sweep),
+                label: const Text('Delete all for this meeting'),
+                onPressed: () async {
+                  await deleteMeetingFiles(widget.meetingId);
+                  await localDb.removeByMeeting(widget.meetingId);
+                  if (mounted) setState(() {});
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
