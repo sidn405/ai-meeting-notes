@@ -1,6 +1,7 @@
 // lib/services/api_service.dart
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -514,7 +515,7 @@ class ApiService {
       final saved = await saveMeetingBytes(
         meetingId: meetingId,
         filename: filename,
-        bytes: bytes,
+        bytes: Uint8List.fromList(bytes),
       );
 
       // Track in local DB
