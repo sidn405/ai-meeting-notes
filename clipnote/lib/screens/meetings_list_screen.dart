@@ -953,7 +953,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         child: Container(
           padding: const EdgeInsets.all(20),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
                 'Download Files',
