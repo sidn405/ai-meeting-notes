@@ -764,7 +764,6 @@ def get_transcript(meeting_id: int):
 @router.post("/email")
 async def email_meeting(
     payload: dict,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_session),
 ):
     """
@@ -795,20 +794,27 @@ async def email_meeting(
     if not meeting:
         raise HTTPException(404, "Meeting not found")
     
-    # Verify meeting has a summary
-    if not meeting.summary_path or not Path(meeting.summary_path).exists():
-        raise HTTPException(404, "Meeting summary not found. Ensure the meeting has been processed.")
+    # Check if meeting has transcript or summary
+    has_transcript = meeting.transcript_path and Path(meeting.transcript_path).exists()
+    has_summary = meeting.summary_path and Path(meeting.summary_path).exists()
     
-    # Queue email in background using lambda to wrap the call
-    background_tasks.add_task(
-        lambda: send_summary_email(meeting_id, meeting.summary_path, email)
-    )
+    if not has_transcript and not has_summary:
+        raise HTTPException(404, "Meeting has no transcript or summary. Ensure the meeting has been processed.")
     
-    return {
-        "success": True,
-        "message": f"Email will be sent to {email}",
-        "meeting_id": meeting_id
-    }
+    # Send email directly (not queued) with correct parameter order
+    try:
+        # Fix parameter order: meeting_id, email_to, summary_path (or transcript_path if no summary)
+        file_path = meeting.summary_path if has_summary else meeting.transcript_path
+        send_summary_email(meeting_id, email, file_path)
+        
+        return {
+            "success": True,
+            "message": f"Email sent to {email}",
+            "meeting_id": meeting_id
+        }
+    except Exception as e:
+        print(f"❌ Error sending email: {e}")
+        raise HTTPException(500, f"Failed to send email: {str(e)}")
 
 # UPDATE the existing download endpoint to handle tier-based logic
 @router.get("/{meeting_id}/download")
