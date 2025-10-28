@@ -43,7 +43,7 @@ dependencies:
   open_filex: ^4.4.0
   # For opening email clients
   url_launcher: ^6.2.2
-  
+  webview_flutter: ^4.x
   # For PDF generation
   pdf: ^3.10.7
 
