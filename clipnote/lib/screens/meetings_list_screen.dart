@@ -953,7 +953,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         child: Container(
           padding: const EdgeInsets.all(20),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
                 'Download Files',
@@ -1037,7 +1037,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                   _downloadOfflinePackage(id, 'zip', title);
                 },
               ),
-
             ],
           ),
         ),
