@@ -1,10 +1,12 @@
 // lib/screens/html_viewer_page.dart
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:path/path.dart' as p;
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:pdfx/pdfx.dart';
+import 'package:csv/csv.dart';
 
 class HtmlViewerPage extends StatefulWidget {
   const HtmlViewerPage({
@@ -14,47 +16,50 @@ class HtmlViewerPage extends StatefulWidget {
   });
 
   final String title;
-  final String filePath; // Absolute local file path in app Documents
+  final String filePath; // Absolute local path
 
   @override
   State<HtmlViewerPage> createState() => _HtmlViewerPageState();
 }
 
 class _HtmlViewerPageState extends State<HtmlViewerPage> {
-  WebViewController? _controller;
-  bool _isHtml = false;
+  WebViewController? _webController;
+
+  // pdfx 2.9.x: use PdfControllerPinch with Future<PdfDocument>
+  PdfControllerPinch? _pdfController;
+
   bool _loading = true;
   String? _error;
 
-  // For .txt files
-  Future<String>? _textFuture;
+  late final String _ext;
+  Future<String>? _textFuture;                 // for .txt/.md/.log
+  Future<List<List<dynamic>>>? _csvFuture;     // for .csv/.tsv
 
   @override
   void initState() {
     super.initState();
-    _isHtml = _isHtmlFile(widget.filePath);
+    _ext = p.extension(widget.filePath).toLowerCase();
+
     if (_isHtml) {
       _initWebView();
-    } else if (_isTextFile(widget.filePath)) {
+    } else if (_isText) {
       _textFuture = _readTextFile(File(widget.filePath));
+    } else if (_isPdf) {
+      _initPdfPinch();
+    } else if (_isCsv) {
+      _csvFuture = _readCsv(File(widget.filePath));
     } else {
-      _error =
-          'Unsupported file type: ${p.extension(widget.filePath)}\nPath: ${widget.filePath}';
+      _error = 'Unsupported file type: $_ext\nPath: ${widget.filePath}';
       _loading = false;
     }
   }
 
-  bool _isHtmlFile(String path) {
-    final ext = p.extension(path).toLowerCase();
-    return ext == '.html' || ext == '.htm';
-  }
+  bool get _isHtml => _ext == '.html' || _ext == '.htm';
+  bool get _isText => _ext == '.txt' || _ext == '.log' || _ext == '.md';
+  bool get _isPdf  => _ext == '.pdf';
+  bool get _isCsv  => _ext == '.csv' || _ext == '.tsv';
 
-  bool _isTextFile(String path) {
-    final ext = p.extension(path).toLowerCase();
-    return ext == '.txt' || ext == '.log' || ext == '.md';
-  }
-
-  void _initWebView() async {
+  Future<void> _initWebView() async {
     try {
       final f = File(widget.filePath);
       if (!await f.exists()) {
@@ -64,7 +69,6 @@ class _HtmlViewerPageState extends State<HtmlViewerPage> {
         });
         return;
       }
-
       final controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
         ..enableZoom(true)
@@ -75,8 +79,7 @@ class _HtmlViewerPageState extends State<HtmlViewerPage> {
             onPageFinished: (_) => setState(() => _loading = false),
             onWebResourceError: (err) {
               setState(() {
-                _error =
-                    'Web resource error (${err.errorCode}): ${err.description}';
+                _error = 'Web resource error (${err.errorCode}): ${err.description}';
                 _loading = false;
               });
             },
@@ -84,14 +87,38 @@ class _HtmlViewerPageState extends State<HtmlViewerPage> {
         );
 
       await controller.loadFile(f.path);
-
       setState(() {
-        _controller = controller;
+        _webController = controller;
         _loading = false;
       });
     } catch (e) {
       setState(() {
         _error = 'Failed to load HTML file:\n$e';
+        _loading = false;
+      });
+    }
+  }
+
+  // pdfx 2.9.x way: create controller with Future<PdfDocument>
+  Future<void> _initPdfPinch() async {
+    try {
+      final f = File(widget.filePath);
+      if (!await f.exists()) {
+        setState(() {
+          _error = 'File not found:\n${widget.filePath}';
+          _loading = false;
+        });
+        return;
+      }
+      final futureDoc = PdfDocument.openFile(widget.filePath); // returns Future<PdfDocument>
+      final controller = PdfControllerPinch(document: futureDoc);
+      setState(() {
+        _pdfController = controller;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Failed to open PDF:\n$e';
         _loading = false;
       });
     }
@@ -106,12 +133,10 @@ class _HtmlViewerPageState extends State<HtmlViewerPage> {
       return '';
     }
     try {
-      // Try UTF-8 first
       final s = await f.readAsString();
       setState(() => _loading = false);
       return s;
     } catch (_) {
-      // Fallback decoding
       try {
         final bytes = await f.readAsBytes();
         final s = const Utf8Decoder(allowMalformed: true).convert(bytes);
@@ -127,16 +152,51 @@ class _HtmlViewerPageState extends State<HtmlViewerPage> {
     }
   }
 
+  Future<List<List<dynamic>>> _readCsv(File f) async {
+    if (!await f.exists()) {
+      setState(() {
+        _loading = false;
+        _error = 'File not found:\n${f.path}';
+      });
+      return const [];
+    }
+    try {
+      final raw = await f.readAsString();
+      final isTsv = _ext == '.tsv';
+      final rows = const CsvToListConverter(
+        fieldDelimiter: ',', // we'll pre-convert TSV below
+        textDelimiter: '"',
+        eol: '\n',
+        shouldParseNumbers: false,
+      ).convert(isTsv ? raw.replaceAll('\t', ',') : raw);
+      setState(() => _loading = false);
+      return rows;
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _error = 'Failed to read CSV:\n$e';
+      });
+      return const [];
+    }
+  }
+
+  @override
+  void dispose() {
+    // pdfx controller owns the document in this pattern; dispose the controller.
+    _pdfController?.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final actions = <Widget>[
-      if (_isHtml && _controller != null)
+      if (_isHtml && _webController != null)
         IconButton(
           tooltip: 'Reload',
           icon: const Icon(Icons.refresh),
           onPressed: () async {
             setState(() => _loading = true);
-            await _controller!.reload();
+            await _webController!.reload();
           },
         ),
       IconButton(
@@ -147,7 +207,6 @@ class _HtmlViewerPageState extends State<HtmlViewerPage> {
           showAboutDialog(
             context: context,
             applicationName: 'Viewer',
-            applicationVersion: '',
             children: [
               SelectableText('File: $name\nPath: ${widget.filePath}'),
             ],
@@ -164,9 +223,7 @@ class _HtmlViewerPageState extends State<HtmlViewerPage> {
       ),
       body: Stack(
         children: [
-          // Content
           Positioned.fill(child: _buildBody()),
-          // Loading overlay
           if (_loading)
             const Positioned.fill(
               child: IgnorePointer(
@@ -179,37 +236,45 @@ class _HtmlViewerPageState extends State<HtmlViewerPage> {
   }
 
   Widget _buildBody() {
-    if (_error != null) {
-      return _buildError(_error!);
-    }
+    if (_error != null) return _buildError(_error!);
 
     if (_isHtml) {
-      if (_controller == null) {
-        return const SizedBox.shrink();
-      }
-      return SafeArea(child: WebViewWidget(controller: _controller!));
+      if (_webController == null) return const SizedBox.shrink();
+      return SafeArea(child: WebViewWidget(controller: _webController!));
     }
 
-    if (_isTextFile(widget.filePath)) {
+    if (_isPdf) {
+      if (_pdfController == null) return const SizedBox.shrink();
+      return SafeArea(child: PdfViewPinch(controller: _pdfController!));
+    }
+
+    if (_isText) {
       return SafeArea(
         child: FutureBuilder<String>(
           future: _textFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting &&
-                _loading) {
-              return const SizedBox.shrink();
-            }
-            if (snapshot.hasError) {
-              return _buildError('Failed to load text:\n${snapshot.error}');
-            }
-            final text = snapshot.data ?? '';
+          builder: (context, snap) {
+            if (snap.hasError) return _buildError('Failed to load text:\n${snap.error}');
+            final text = snap.data ?? '';
             return _TextViewer(text: text);
           },
         ),
       );
     }
 
-    // Shouldn’t reach here; handled earlier
+    if (_isCsv) {
+      return SafeArea(
+        child: FutureBuilder<List<List<dynamic>>>(
+          future: _csvFuture,
+          builder: (context, snap) {
+            if (snap.hasError) return _buildError('Failed to load CSV:\n${snap.error}');
+            final rows = snap.data ?? const [];
+            if (rows.isEmpty) return const Center(child: Text('(empty CSV)'));
+            return _CsvTable(rows: rows);
+          },
+        ),
+      );
+    }
+
     return _buildError('Unsupported file type.');
   }
 
@@ -249,7 +314,6 @@ class _HtmlViewerPageState extends State<HtmlViewerPage> {
 
 class _TextViewer extends StatelessWidget {
   const _TextViewer({required this.text});
-
   final String text;
 
   @override
@@ -268,4 +332,79 @@ class _TextViewer extends StatelessWidget {
       ),
     );
   }
+}
+
+// ---------- CSV ----------
+
+class _CsvTable extends StatefulWidget {
+  const _CsvTable({required this.rows});
+  final List<List<dynamic>> rows;
+
+  @override
+  State<_CsvTable> createState() => _CsvTableState();
+}
+
+class _CsvTableState extends State<_CsvTable> {
+  static const int _rowsPerPage = 25;
+
+  late final List<String> _headers;
+  late final List<List<String>> _data;
+  late final _CsvDataSource _source;
+
+  @override
+  void initState() {
+    super.initState();
+    final rows = widget.rows.map((r) => r.map((c) => c?.toString() ?? '').toList()).toList();
+    if (rows.isEmpty) {
+      _headers = const [];
+      _data = const [];
+    } else {
+      _headers = rows.first;
+      _data = rows.length > 1 ? rows.sublist(1) : <List<String>>[];
+    }
+    _source = _CsvDataSource(headers: _headers, data: _data);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_headers.isEmpty) return const Center(child: Text('(empty CSV)'));
+    return Scrollbar(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 800),
+          child: PaginatedDataTable(
+            header: const Text('CSV Preview'),
+            rowsPerPage: (_data.length < _rowsPerPage) ? _data.length : _rowsPerPage,
+            columns: _headers.map((h) => DataColumn(label: Text(h))).toList(),
+            source: _source,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CsvDataSource extends DataTableSource {
+  _CsvDataSource({required this.headers, required this.data});
+  final List<String> headers;
+  final List<List<String>> data;
+
+  @override
+  DataRow getRow(int index) {
+    final row = data[index];
+    return DataRow(
+      cells: List.generate(
+        headers.length,
+        (i) => DataCell(SelectableText(i < row.length ? row[i] : '')),
+      ),
+    );
+  }
+
+  @override
+  bool get isRowCountApproximate => false;
+  @override
+  int get rowCount => data.length;
+  @override
+  int get selectedRowCount => 0;
 }

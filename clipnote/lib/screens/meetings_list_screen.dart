@@ -10,10 +10,10 @@ import 'package:clipnote/services/sync_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:dio/dio.dart';
 import 'dart:typed_data';
-import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
-
+import 'dart:io';
+import 'package:clipnote/services/offline_storage.dart' as offline;
 import 'package:clipnote/services/api_service.dart';
 import 'package:clipnote/screens/html_viewer_page.dart'; // your existing HTML viewer
 import 'package:path_provider/path_provider.dart';
@@ -674,7 +674,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
 
     // filenames you want to keep on device
     const filename = 'transcript.txt'; // or .txt if plain text
-    final local = await getLocalMeetingFile(meetingId, filename);
+    final local = await offline.getLocalMeetingFile(meetingId, filename);
     if (local != null) {
       if (!mounted) return;
       Navigator.of(context).push(MaterialPageRoute(
@@ -691,7 +691,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         options: Options(responseType: ResponseType.bytes),
       );
       final bytes = Uint8List.fromList(res.data ?? const []);
-      final saved = await saveBytesForMeeting(
+      final saved = await offline.saveBytesForMeeting(
         meetingId: meetingId,
         filename: filename,
         bytes: bytes,
@@ -722,7 +722,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     final api = ApiService.I;
 
     const filename = 'summary.txt'; // or .txt
-    final local = await getLocalMeetingFile(meetingId, filename);
+    final local = await offline.getLocalMeetingFile(meetingId, filename);
     if (local != null) {
       if (!mounted) return;
       Navigator.of(context).push(MaterialPageRoute(
@@ -738,7 +738,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         options: Options(responseType: ResponseType.bytes),
       );
       final bytes = Uint8List.fromList(res.data ?? const []);
-      final saved = await saveBytesForMeeting(
+      final saved = await offline.saveBytesForMeeting(
         meetingId: meetingId,
         filename: filename,
         bytes: bytes,
