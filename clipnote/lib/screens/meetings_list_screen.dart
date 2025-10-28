@@ -8,7 +8,6 @@ import 'package:clipnote/services/local_db.dart';
 import 'package:clipnote/services/offline_storage.dart';
 import 'package:clipnote/services/sync_service.dart';
 
-
 class MeetingsListScreen extends StatefulWidget {
   final String? initialFilter;
   
@@ -19,7 +18,7 @@ class MeetingsListScreen extends StatefulWidget {
 }
 
 // Use a MaterialColor so .shade50/.shade700 are valid
-final MaterialColor badgeSwatch = Colors.blue; // <-- rename from badgeColor if needed
+final MaterialColor badgeSwatch = Colors.blue;
 
 class _MeetingsListScreenState extends State<MeetingsListScreen> {
   final _api = ApiService.I;
@@ -89,7 +88,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         } else if (_filterStatus == 'processing') {
           matchesStatus = meeting['status'] == 'processing' || meeting['status'] == 'queued';
         } else if (_filterStatus == 'delivered') {
-          // Match any completed status
           matchesStatus = _isCompletedStatus(meeting['status'] ?? '');
         } else {
           matchesStatus = meeting['status'] == _filterStatus;
@@ -177,7 +175,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     final status = meeting['status'] ?? '';
     
     if (hasCloudStorage) {
-      // Pro/Business - Cloud Storage
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
@@ -201,7 +198,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         ),
       );
     } else {
-      // Free/Starter - Device Storage
       Color badgeColor;
       String badgeText;
       IconData badgeIcon;
@@ -615,7 +611,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     }
   }
 
-  // Helper method to check if status represents a completed meeting
   bool _isCompletedStatus(String status) {
     final completedStatuses = [
       'delivered',
@@ -663,6 +658,294 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       default:
         return Colors.grey;
     }
+  }
+
+  void _showMeetingDetails(int id, String title, String status) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      if (_isCompletedStatus(status)) ...[
+                        _actionButton(
+                          icon: Icons.description,
+                          label: 'View Transcript',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            Navigator.of(this.context).push(
+                              MaterialPageRoute(
+                                builder: (_) => TranscriptScreen(meetingId: id),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _actionButton(
+                          icon: Icons.auto_awesome,
+                          label: 'View Summary',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            Navigator.of(this.context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ResultsScreen(meetingId: id),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _actionButton(
+                          icon: Icons.email,
+                          label: 'Email Meeting',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _emailMeeting(id, title);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _actionButton(
+                          icon: Icons.download,
+                          label: 'Download Files',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _downloadMeetingFiles(id, title);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _actionButton(
+                          icon: Icons.delete,
+                          label: 'Delete Meeting',
+                          color: Colors.red,
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _deleteMeeting(id, title);
+                          },
+                        ),
+                      ] else if (status == 'processing' || status == 'queued') ...[
+                        const Center(
+                          child: Column(
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 16),
+                              Text(
+                                'Processing in progress...',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else if (status == 'failed') ...[
+                        Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.error_outline, color: Colors.red, size: 48),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'This meeting failed to process',
+                                style: TextStyle(color: Colors.red, fontSize: 16),
+                              ),
+                              const SizedBox(height: 20),
+                              _actionButton(
+                                icon: Icons.delete,
+                                label: 'Delete Meeting',
+                                color: Colors.red,
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _deleteMeeting(id, title);
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else ...[
+                        Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.orange, size: 48),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Status: ${_getStatusLabel(status)}',
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'This meeting is in an unknown state',
+                                style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Center(child: Text('Close')),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _emailMeeting(int id, String title) async {
+    final emailController = TextEditingController();
+    bool isSending = false;
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Email Meeting'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'Email Address',
+                  hintText: 'Enter email address',
+                  prefixIcon: const Icon(Icons.email, color: Color(0xFF667eea)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Meeting: $title',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSending ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: isSending
+                  ? null
+                  : () async {
+                      final email = emailController.text.trim();
+                      
+                      if (email.isEmpty) {
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please enter an email address'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+
+                      if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please enter a valid email address'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() => isSending = true);
+
+                      try {
+                        await _api.sendMeetingEmail(id, email);
+                        
+                        if (!mounted) return;
+                        Navigator.pop(context);
+                        
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          SnackBar(
+                            content: Text('Meeting sent to $email'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      } catch (e) {
+                        print('Error sending email: $e');
+                        setDialogState(() => isSending = false);
+                        
+                        if (!mounted) return;
+                        
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to send email: ${e.toString().replaceAll("Exception: ", "")}'),
+                            backgroundColor: Colors.red,
+                            duration: const Duration(seconds: 4),
+                          ),
+                        );
+                      }
+                    },
+              icon: isSending
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(Icons.send, size: 18),
+              label: Text(isSending ? 'Sending...' : 'Send'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF667eea),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _downloadMeetingFiles(int id, String title) async {
@@ -795,224 +1078,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       ),
     );
   }
-}
-
-  Future<void> _emailMeeting(int id, String title) async {
-    final emailController = TextEditingController();
-    bool isSending = false;
-    
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Email Meeting'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  labelText: 'Email Address',
-                  hintText: 'Enter email address',
-                  prefixIcon: const Icon(Icons.email, color: Color(0xFF667eea)),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Meeting: $title',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: isSending ? null : () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton.icon(
-              onPressed: isSending
-                  ? null
-                  : () async {
-                      final email = emailController.text.trim();
-                      
-                      if (email.isEmpty) {
-                        ScaffoldMessenger.of(this.context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please enter an email address'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        return;
-                      }
-
-                      // Basic email validation
-                      if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
-                        ScaffoldMessenger.of(this.context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please enter a valid email address'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        return;
-                      }
-
-                      setDialogState(() => isSending = true);
-
-                      try {
-                        await _api.sendMeetingEmail(id, email);
-                        
-                        if (!mounted) return;
-                        Navigator.pop(context);
-                        
-                        ScaffoldMessenger.of(this.context).showSnackBar(
-                          SnackBar(
-                            content: Text('Meeting sent to $email'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      } catch (e) {
-                        print('Error sending email: $e');
-                        setDialogState(() => isSending = false);
-                        
-                        if (!mounted) return;
-                        
-                        ScaffoldMessenger.of(this.context).showSnackBar(
-                          SnackBar(
-                            content: Text('Failed to send email: ${e.toString().replaceAll("Exception: ", "")}'),
-                            backgroundColor: Colors.red,
-                            duration: const Duration(seconds: 4),
-                          ),
-                        );
-                      }
-                    },
-              icon: isSending
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Icon(Icons.send, size: 18),
-              label: Text(isSending ? 'Sending...' : 'Send'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF667eea),
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _downloadMeetingFiles(int id, String title) async {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Download Files',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFE3F2FD),
-                  child: Icon(Icons.description, color: Color(0xFF667eea)),
-                ),
-                title: const Text('Transcript'),
-                subtitle: const Text('Download as .txt file'),
-                trailing: const Icon(Icons.download),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadFile(id, 'transcript', title);
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFFFF3E0),
-                  child: Icon(Icons.auto_awesome, color: Colors.orange),
-                ),
-                title: const Text('Summary'),
-                subtitle: const Text('Download as .txt file'),
-                trailing: const Icon(Icons.download),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadFile(id, 'summary', title);
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFFFEBEE),
-                  child: Icon(Icons.picture_as_pdf, color: Colors.red),
-                ),
-                title: const Text('Full Report'),
-                subtitle: const Text('Download as PDF (if available)'),
-                trailing: const Icon(Icons.download),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadFile(id, 'pdf', title);
-                },
-              ),
-              const Divider(height: 30),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8.0),
-                child: Text(
-                  'Offline Packages',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey,
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFE8F5E9),
-                  child: Icon(Icons.web, color: Colors.green),
-                ),
-                title: const Text('HTML Viewer'),
-                subtitle: const Text('Beautiful offline viewer'),
-                trailing: const Icon(Icons.offline_bolt),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadOfflinePackage(id, 'html', title);
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFFCE4EC),
-                  child: Icon(Icons.folder_zip, color: Colors.pink),
-                ),
-                title: const Text('ZIP Archive'),
-                subtitle: const Text('Complete package with all files'),
-                trailing: const Icon(Icons.offline_bolt),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadOfflinePackage(id, 'zip', title);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Future<void> _downloadFile(int id, String type, String title) async {
     final isCloudStorage = _api.hasCloudStorage;
@@ -1130,7 +1195,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       
       String errorMessage = e.toString().replaceAll("Exception: ", "");
       
-      // Handle specific error cases
       if (errorMessage.contains('cloud-stored')) {
         errorMessage = 'This meeting is in cloud storage.\nUse individual download options instead.';
       }
@@ -1146,7 +1210,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
   }
   
   Future<void> _deleteMeeting(int id, String title) async {
-    // Confirm deletion
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1171,7 +1234,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
 
     if (confirm != true) return;
 
-    // Show deleting dialog
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1199,7 +1261,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         ),
       );
       
-      // Refresh the list
       _loadMeetings();
     } catch (e) {
       print('Error deleting meeting: $e');
@@ -1240,7 +1301,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       ),
     );
   }
- 
 
   @override
   void dispose() {
@@ -1249,7 +1309,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
   }
 
   void _startAutoDownloadPolling() {
-    // Only poll for Free/Starter tiers (device storage)
     if (!_api.shouldAutoDownload) {
       print('[MeetingsList] Skipping auto-download (cloud storage tier)');
       return;
@@ -1257,10 +1316,8 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     
     print('[MeetingsList] Starting auto-download polling...');
     
-    // Check immediately
     _checkForAutoDownloads();
     
-    // Then check every 10 seconds
     _autoDownloadTimer = Timer.periodic(
       const Duration(seconds: 10),
       (timer) => _checkForAutoDownloads(),
@@ -1273,7 +1330,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       
       for (var meeting in meetings) {
         if (meeting['status'] == 'ready_for_download') {
-          print('[MeetingsList] 🔽 Auto-downloading meeting ${meeting['id']}');
+          print('[MeetingsList] 📽 Auto-downloading meeting ${meeting['id']}');
           await _autoDownloadMeeting(meeting);
         }
       }
@@ -1289,7 +1346,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     try {
       print('[MeetingsList] 📥 Auto-downloading: $title');
       
-      // Download transcript
       bool transcriptSuccess = false;
       try {
         await _downloadFileSilently(id, 'transcript', title);
@@ -1299,7 +1355,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         print('[MeetingsList] ⚠️ Transcript download failed: $e');
       }
       
-      // Download summary
       bool summarySuccess = false;
       try {
         await _downloadFileSilently(id, 'summary', title);
@@ -1309,14 +1364,11 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         print('[MeetingsList] ⚠️ Summary download failed: $e');
       }
       
-      // If both succeeded, confirm download to backend
       if (transcriptSuccess && summarySuccess) {
         await _api.confirmDownloadComplete(id);
         
-        // Refresh meetings list
         await _loadMeetings();
         
-        // Show success notification
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1349,14 +1401,18 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     }
   }
 }
+
 class LocalFilesSection extends StatefulWidget {
   const LocalFilesSection({super.key, required this.meetingId});
   final int meetingId;
+  
   @override
   State<LocalFilesSection> createState() => _LocalFilesSectionState();
 }
+
 class _LocalFilesSectionState extends State<LocalFilesSection> {
   Future<List<Map<String, Object?>>> _load() => localDb.listByMeeting(widget.meetingId);
+  
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, Object?>>>(
@@ -1364,7 +1420,7 @@ class _LocalFilesSectionState extends State<LocalFilesSection> {
       builder: (context, snap) {
         final items = snap.data ?? const [];
         if (items.isEmpty) {
-          return const SizedBox.shrink(); // nothing saved yet
+          return const SizedBox.shrink();
         }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
