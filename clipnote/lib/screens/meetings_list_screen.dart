@@ -665,19 +665,15 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     }
   }
 
-  void _showMeetingDetails(int id, String title, String status) {
+  Future<void> _downloadMeetingFiles(int id, String title) async {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (context, scrollController) => Padding(
+      builder: (context) => SafeArea(
+        child: Padding(
           padding: EdgeInsets.only(
             left: 20,
             right: 20,
@@ -700,134 +696,94 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
               ),
               const SizedBox(height: 20),
               
-              // Scrollable content
-              Expanded(
+              const Text(
+                'Download Files',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              
+              // Make the list scrollable when content is too long
+              Flexible(
                 child: SingleChildScrollView(
-                  controller: scrollController,
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFE3F2FD),
+                          child: Icon(Icons.description, color: Color(0xFF667eea)),
+                        ),
+                        title: const Text('Transcript'),
+                        subtitle: const Text('Download as .txt file'),
+                        trailing: const Icon(Icons.download),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _downloadFile(id, 'transcript', title);
+                        },
+                      ),
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFFFF3E0),
+                          child: Icon(Icons.auto_awesome, color: Colors.orange),
+                        ),
+                        title: const Text('Summary'),
+                        subtitle: const Text('Download as .txt file'),
+                        trailing: const Icon(Icons.download),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _downloadFile(id, 'summary', title);
+                        },
+                      ),
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFFFEBEE),
+                          child: Icon(Icons.picture_as_pdf, color: Colors.red),
+                        ),
+                        title: const Text('Full Report'),
+                        subtitle: const Text('Download as PDF (if available)'),
+                        trailing: const Icon(Icons.download),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _downloadFile(id, 'pdf', title);
+                        },
+                      ),
+                      const Divider(height: 30),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          'Offline Packages',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 20),
-                      if (_isCompletedStatus(status)) ...[
-                        _actionButton(
-                          icon: Icons.description,
-                          label: 'View Transcript',
-                          onPressed: () {
-                            Navigator.pop(context);
-                            Navigator.of(this.context).push(
-                              MaterialPageRoute(
-                                builder: (_) => TranscriptScreen(meetingId: id),
-                              ),
-                            );
-                          },
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFE8F5E9),
+                          child: Icon(Icons.web, color: Colors.green),
                         ),
-                        const SizedBox(height: 12),
-                        _actionButton(
-                          icon: Icons.auto_awesome,
-                          label: 'View Summary',
-                          onPressed: () {
-                            Navigator.pop(context);
-                            Navigator.of(this.context).push(
-                              MaterialPageRoute(
-                                builder: (_) => ResultsScreen(meetingId: id),
-                              ),
-                            );
-                          },
+                        title: const Text('HTML Viewer'),
+                        subtitle: const Text('Beautiful offline viewer'),
+                        trailing: const Icon(Icons.offline_bolt),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _downloadOfflinePackage(id, 'html', title);
+                        },
+                      ),
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFFCE4EC),
+                          child: Icon(Icons.folder_zip, color: Colors.pink),
                         ),
-                        const SizedBox(height: 12),
-                        _actionButton(
-                          icon: Icons.email,
-                          label: 'Email Meeting',
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _emailMeeting(id, title);
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        _actionButton(
-                          icon: Icons.download,
-                          label: 'Download Files',
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _downloadMeetingFiles(id, title);
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        _actionButton(
-                          icon: Icons.delete,
-                          label: 'Delete Meeting',
-                          color: Colors.red,
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _deleteMeeting(id, title);
-                          },
-                        ),
-                      ] else if (status == 'processing' || status == 'queued') ...[
-                        const Center(
-                          child: Column(
-                            children: [
-                              CircularProgressIndicator(),
-                              SizedBox(height: 16),
-                              Text(
-                                'Processing in progress...',
-                                style: TextStyle(fontSize: 16),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ] else if (status == 'failed') ...[
-                        Center(
-                          child: Column(
-                            children: [
-                              Icon(Icons.error_outline, color: Colors.red, size: 48),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'This meeting failed to process',
-                                style: TextStyle(color: Colors.red, fontSize: 16),
-                              ),
-                              const SizedBox(height: 20),
-                              _actionButton(
-                                icon: Icons.delete,
-                                label: 'Delete Meeting',
-                                color: Colors.red,
-                                onPressed: () {
-                                  Navigator.pop(context);
-                                  _deleteMeeting(id, title);
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ] else ...[
-                        Center(
-                          child: Column(
-                            children: [
-                              Icon(Icons.info_outline, color: Colors.orange, size: 48),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Status: ${_getStatusLabel(status)}',
-                                style: const TextStyle(fontSize: 16),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'This meeting is in an unknown state',
-                                style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Center(child: Text('Close')),
+                        title: const Text('ZIP Archive'),
+                        subtitle: const Text('Complete package with all files'),
+                        trailing: const Icon(Icons.offline_bolt),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _downloadOfflinePackage(id, 'zip', title);
+                        },
                       ),
                     ],
                   ),
@@ -839,6 +795,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       ),
     );
   }
+}
 
   Future<void> _emailMeeting(int id, String title) async {
     final emailController = TextEditingController();
