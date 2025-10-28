@@ -7,6 +7,10 @@ import 'results_screen.dart';
 import 'package:clipnote/services/local_db.dart';
 import 'package:clipnote/services/offline_storage.dart';
 import 'package:clipnote/services/sync_service.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:dio/dio.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 class MeetingsListScreen extends StatefulWidget {
   final String? initialFilter;
@@ -1165,12 +1169,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       
       if (!mounted) return;
       Navigator.pop(context);
-      
-      // For Android/iOS, we need to actually download the file
-      // Import the required packages at the top:
-      // import 'package:dio/dio.dart';
-      // import 'dart:io';
-      // import 'package:path_provider/path_provider.dart';
       
       final dio = Dio();
       final dir = Platform.isAndroid 
