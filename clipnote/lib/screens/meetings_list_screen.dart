@@ -1142,15 +1142,17 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
   
   Future<void> _downloadOfflinePackage(int id, String format, String title) async {
     final formatLabel = format == 'html' ? 'HTML Viewer' : 'ZIP Archive';
+    final extension = format == 'html' ? 'html' : 'zip';
     
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        content: Row(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             const CircularProgressIndicator(),
-            const SizedBox(width: 20),
+            const SizedBox(height: 16),
             Text('Preparing $formatLabel...'),
           ],
         ),
@@ -1160,38 +1162,139 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     try {
       final downloadInfo = await _api.downloadOfflinePackage(id, format);
       final url = downloadInfo['download_url'];
-      final uri = Uri.parse(url);
       
       if (!mounted) return;
       Navigator.pop(context);
       
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // For Android/iOS, we need to actually download the file
+      // Import the required packages at the top:
+      // import 'package:dio/dio.dart';
+      // import 'dart:io';
+      // import 'package:path_provider/path_provider.dart';
+      
+      final dio = Dio();
+      final dir = Platform.isAndroid 
+          ? Directory('/storage/emulated/0/Download')
+          : await getApplicationDocumentsDirectory();
+      
+      // Sanitize filename
+      final sanitizedTitle = title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
+      final filename = '${sanitizedTitle}_offline.$extension';
+      final savePath = '${dir.path}/$filename';
+      
+      if (!mounted) return;
+      
+      // Show downloading progress
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text('Downloading $formatLabel...'),
+              const SizedBox(height: 8),
+              const Text(
+                'This may take a moment',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      );
+      
+      try {
+        await dio.download(
+          url,
+          savePath,
+          onReceiveProgress: (received, total) {
+            if (total != -1) {
+              print('Download progress: ${(received / total * 100).toStringAsFixed(0)}%');
+            }
+          },
+        );
         
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
+        Navigator.pop(context);
+        
+        // Show success with option to open file
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
               children: [
-                const Icon(Icons.offline_bolt, color: Colors.white),
+                Icon(Icons.check_circle, color: Colors.green),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: Text('$formatLabel ready for offline use'),
+                const Text('Downloaded!'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$formatLabel has been saved to:'),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    savePath,
+                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  ),
                 ),
               ],
             ),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  // Try to open the file with default app
+                  final file = File(savePath);
+                  if (await file.exists()) {
+                    final uri = Uri.file(savePath);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri);
+                    } else {
+                      // Open the Downloads folder instead
+                      if (Platform.isAndroid) {
+                        final uri = Uri.parse('content://com.android.externalstorage.documents/document/primary:Download');
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      }
+                    }
+                  }
+                },
+                icon: const Icon(Icons.folder_open),
+                label: const Text('Open'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF667eea),
+                ),
+              ),
+            ],
           ),
         );
-      } else {
-        throw Exception('Could not open download URL');
+        
+      } catch (downloadError) {
+        print('Error downloading file: $downloadError');
+        if (!mounted) return;
+        Navigator.pop(context);
+        throw downloadError;
       }
+      
     } catch (e) {
       print('Error downloading offline package: $e');
       
       if (!mounted) return;
-      Navigator.pop(context);
       
       String errorMessage = e.toString().replaceAll("Exception: ", "");
       
