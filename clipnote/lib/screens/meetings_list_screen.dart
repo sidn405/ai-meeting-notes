@@ -672,155 +672,168 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => SafeArea(
-        child: DraggableScrollableSheet(
-          initialChildSize: 0.6,
-          minChildSize: 0.4,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (context, scrollController) => SingleChildScrollView(
-            controller: scrollController,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  const SizedBox(height: 20),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  if (_isCompletedStatus(status)) ...[
-                    _actionButton(
-                      icon: Icons.description,
-                      label: 'View Transcript',
-                      onPressed: () {
-                        Navigator.pop(context);
-                        Navigator.of(this.context).push(
-                          MaterialPageRoute(
-                            builder: (_) => TranscriptScreen(meetingId: id),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _actionButton(
-                      icon: Icons.auto_awesome,
-                      label: 'View Summary',
-                      onPressed: () {
-                        Navigator.pop(context);
-                        Navigator.of(this.context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ResultsScreen(meetingId: id),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _actionButton(
-                      icon: Icons.email,
-                      label: 'Email Meeting',
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _emailMeeting(id, title);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _actionButton(
-                      icon: Icons.download,
-                      label: 'Download Files',
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _downloadMeetingFiles(id, title);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _actionButton(
-                      icon: Icons.delete,
-                      label: 'Delete Meeting',
-                      color: Colors.red,
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _deleteMeeting(id, title);
-                      },
-                    ),
-                  ] else if (status == 'processing' || status == 'queued') ...[
-                    const Center(
-                      child: Column(
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text(
-                            'Processing in progress...',
-                            style: TextStyle(fontSize: 16),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else if (status == 'failed') ...[
-                    Center(
-                      child: Column(
-                        children: [
-                          Icon(Icons.error_outline, color: Colors.red, size: 48),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'This meeting failed to process',
-                            style: TextStyle(color: Colors.red, fontSize: 16),
-                          ),
-                          const SizedBox(height: 20),
-                          _actionButton(
-                            icon: Icons.delete,
-                            label: 'Delete Meeting',
-                            color: Colors.red,
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _deleteMeeting(id, title);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else ...[
-                    Center(
-                      child: Column(
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.orange, size: 48),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Status: ${_getStatusLabel(status)}',
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'This meeting is in an unknown state',
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Center(child: Text('Close')),
-                  ),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(height: 20),
+              
+              // Scrollable content
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      if (_isCompletedStatus(status)) ...[
+                        _actionButton(
+                          icon: Icons.description,
+                          label: 'View Transcript',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            Navigator.of(this.context).push(
+                              MaterialPageRoute(
+                                builder: (_) => TranscriptScreen(meetingId: id),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _actionButton(
+                          icon: Icons.auto_awesome,
+                          label: 'View Summary',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            Navigator.of(this.context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ResultsScreen(meetingId: id),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _actionButton(
+                          icon: Icons.email,
+                          label: 'Email Meeting',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _emailMeeting(id, title);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _actionButton(
+                          icon: Icons.download,
+                          label: 'Download Files',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _downloadMeetingFiles(id, title);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _actionButton(
+                          icon: Icons.delete,
+                          label: 'Delete Meeting',
+                          color: Colors.red,
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _deleteMeeting(id, title);
+                          },
+                        ),
+                      ] else if (status == 'processing' || status == 'queued') ...[
+                        const Center(
+                          child: Column(
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 16),
+                              Text(
+                                'Processing in progress...',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else if (status == 'failed') ...[
+                        Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.error_outline, color: Colors.red, size: 48),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'This meeting failed to process',
+                                style: TextStyle(color: Colors.red, fontSize: 16),
+                              ),
+                              const SizedBox(height: 20),
+                              _actionButton(
+                                icon: Icons.delete,
+                                label: 'Delete Meeting',
+                                color: Colors.red,
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _deleteMeeting(id, title);
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else ...[
+                        Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.orange, size: 48),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Status: ${_getStatusLabel(status)}',
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'This meeting is in an unknown state',
+                                style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Center(child: Text('Close')),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
