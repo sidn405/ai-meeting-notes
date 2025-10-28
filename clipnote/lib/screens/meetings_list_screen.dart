@@ -9,7 +9,13 @@ import 'package:clipnote/services/offline_storage.dart';
 import 'package:clipnote/services/sync_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:dio/dio.dart';
-import 'dart:io';
+import 'dart:typed_data';
+import 'package:dio/dio.dart';
+import 'package:path/path.dart' as p;
+import 'package:flutter/material.dart';
+
+import 'package:clipnote/services/api_service.dart';
+import 'package:clipnote/screens/html_viewer_page.dart'; // your existing HTML viewer
 import 'package:path_provider/path_provider.dart';
 
 class MeetingsListScreen extends StatefulWidget {
@@ -663,6 +669,101 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         return Colors.grey;
     }
   }
+  Future<void> _openTranscriptOfflineFirst(int meetingId) async {
+    final api = ApiService.I;
+
+    // filenames you want to keep on device
+    const filename = 'transcript.txt'; // or .txt if plain text
+    final local = await getLocalMeetingFile(meetingId, filename);
+    if (local != null) {
+      if (!mounted) return;
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => HtmlViewerPage(title: 'Transcript', filePath: local.path),
+      ));
+      return;
+    }
+
+    // Not cached yet → download once, then save locally
+    final url = '${api.baseUrl}/meetings/$meetingId/download?type=transcript';
+    try {
+      final res = await api.dio.get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = Uint8List.fromList(res.data ?? const []);
+      final saved = await saveBytesForMeeting(
+        meetingId: meetingId,
+        filename: filename,
+        bytes: bytes,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => HtmlViewerPage(title: 'Transcript', filePath: saved.path),
+      ));
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      final msg = code == 403
+          ? 'You don’t have permission to view this transcript.'
+          : code == 422
+              ? 'Transcript not available yet. Try again in a moment.'
+              : 'Download failed. Check connection and try again.';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error opening transcript: $e')),
+      );
+    }
+  }
+
+  Future<void> _openSummaryOfflineFirst(int meetingId) async {
+    final api = ApiService.I;
+
+    const filename = 'summary.txt'; // or .txt
+    final local = await getLocalMeetingFile(meetingId, filename);
+    if (local != null) {
+      if (!mounted) return;
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => HtmlViewerPage(title: 'Summary', filePath: local.path),
+      ));
+      return;
+    }
+
+    final url = '${api.baseUrl}/meetings/$meetingId/download?type=summary';
+    try {
+      final res = await api.dio.get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = Uint8List.fromList(res.data ?? const []);
+      final saved = await saveBytesForMeeting(
+        meetingId: meetingId,
+        filename: filename,
+        bytes: bytes,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => HtmlViewerPage(title: 'Summary', filePath: saved.path),
+      ));
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      final msg = code == 403
+          ? 'You don’t have permission to view this summary.'
+          : code == 422
+              ? 'Summary not available yet. Try again in a moment.'
+              : 'Download failed. Check connection and try again.';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error opening summary: $e')),
+      );
+    }
+  }
 
   void _showMeetingDetails(int id, String title, String status) {
     showModalBottomSheet(
@@ -718,12 +819,8 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                           label: 'View Transcript',
                           onPressed: () {
                             Navigator.pop(context);
-                            Navigator.of(this.context).push(
-                              MaterialPageRoute(
-                                builder: (_) => TranscriptScreen(meetingId: id),
-                              ),
-                            );
-                          },
+                            _openTranscriptOfflineFirst(id);
+                          },                       
                         ),
                         const SizedBox(height: 12),
                         _actionButton(
@@ -731,11 +828,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                           label: 'View Summary',
                           onPressed: () {
                             Navigator.pop(context);
-                            Navigator.of(this.context).push(
-                              MaterialPageRoute(
-                                builder: (_) => ResultsScreen(meetingId: id),
-                              ),
-                            );
+                            _openSummaryOfflineFirst(id);
                           },
                         ),
                         const SizedBox(height: 12),
