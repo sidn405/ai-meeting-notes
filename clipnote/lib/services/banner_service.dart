@@ -10,13 +10,97 @@ class BannerService {
   static BannerService get I => _instance;
   
   List<BannerAd> _banners = [];
+  DateTime? _lastFetch;
+  static const _cacheDuration = Duration(hours: 1); // Cache banners for 1 hour
+  
+  // CHANGE THIS to your actual API endpoint
+  static const String _apiBaseUrl = 'https://ai-meeting-notes-production-81d7.up.railway.app';
   
   Future<void> init() async {
-    _loadHardcodedBanners();
+    await _loadBanners();
+  }
+  
+  Future<void> _loadBanners() async {
+    // Try to load from cache first
+    await _loadCachedBanners();
+    
+    // If cache is expired or empty, fetch from server
+    if (_shouldFetchFromServer()) {
+      try {
+        await _fetchBannersFromServer();
+      } catch (e) {
+        print('⚠️ Failed to fetch banners from server: $e');
+        // Fall back to hardcoded banners if server fails
+        if (_banners.isEmpty) {
+          _loadHardcodedBanners();
+        }
+      }
+    }
+    
+    // If still no banners, load hardcoded ones
+    if (_banners.isEmpty) {
+      _loadHardcodedBanners();
+    }
+  }
+  
+  bool _shouldFetchFromServer() {
+    if (_lastFetch == null) return true;
+    return DateTime.now().difference(_lastFetch!) > _cacheDuration;
+  }
+  
+  Future<void> _fetchBannersFromServer() async {
+    print('🌐 Fetching banners from server...');
+    
+    final response = await http.get(
+      Uri.parse('$_apiBaseUrl/api/banners'),
+      headers: {'Content-Type': 'application/json'},
+    ).timeout(const Duration(seconds: 10));
+    
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      _banners = data.map((json) => BannerAd.fromJson(json)).toList();
+      _lastFetch = DateTime.now();
+      
+      // Cache the banners locally
+      await _cacheBanners();
+      
+      print('✅ Loaded ${_banners.length} banners from server');
+    } else {
+      throw Exception('Failed to load banners: ${response.statusCode}');
+    }
+  }
+  
+  Future<void> _cacheBanners() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final bannersJson = _banners.map((b) => b.toJson()).toList();
+      await prefs.setString('cached_banners', jsonEncode(bannersJson));
+      await prefs.setString('banners_last_fetch', DateTime.now().toIso8601String());
+    } catch (e) {
+      print('Error caching banners: $e');
+    }
+  }
+  
+  Future<void> _loadCachedBanners() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedBannersJson = prefs.getString('cached_banners');
+      final lastFetchStr = prefs.getString('banners_last_fetch');
+      
+      if (cachedBannersJson != null && lastFetchStr != null) {
+        final List<dynamic> data = jsonDecode(cachedBannersJson);
+        _banners = data.map((json) => BannerAd.fromJson(json)).toList();
+        _lastFetch = DateTime.parse(lastFetchStr);
+        print('📦 Loaded ${_banners.length} banners from cache');
+      }
+    } catch (e) {
+      print('Error loading cached banners: $e');
+    }
   }
   
   void _loadHardcodedBanners() {
-    // Hardcoded banners from assets folder
+    print('📱 Loading hardcoded banners as fallback');
+    // Hardcoded banners from assets folder (fallback)
     _banners = [
       BannerAd(
         id: 'banner_001',
@@ -88,36 +172,38 @@ class BannerService {
   
   List<BannerAd> getAllBanners() => List.unmodifiable(_banners);
   
+  // Force refresh from server
+  Future<void> refresh() async {
+    _lastFetch = null;
+    await _loadBanners();
+  }
+  
   Future<void> recordClick(String bannerId) async {
-    // Track banner click locally or send to analytics
-    print('Banner clicked: $bannerId');
+    print('🖱️ Banner clicked: $bannerId');
     
-    // Optional: Send to your backend for analytics
-    // try {
-    //   await http.post(
-    //     Uri.parse('https://your-api.com/api/banners/click'),
-    //     headers: {'Content-Type': 'application/json'},
-    //     body: jsonEncode({'banner_id': bannerId}),
-    //   );
-    // } catch (e) {
-    //   print('Error recording click: $e');
-    // }
+    try {
+      await http.post(
+        Uri.parse('$_apiBaseUrl/api/banners/click'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'banner_id': bannerId}),
+      ).timeout(const Duration(seconds: 5));
+    } catch (e) {
+      print('Error recording click: $e');
+    }
   }
   
   Future<void> recordImpression(String bannerId) async {
-    // Track banner impression locally or send to analytics
-    print('Banner impression: $bannerId');
+    print('👁️ Banner impression: $bannerId');
     
-    // Optional: Send to your backend for analytics
-    // try {
-    //   await http.post(
-    //     Uri.parse('https://your-api.com/api/banners/impression'),
-    //     headers: {'Content-Type': 'application/json'},
-    //     body: jsonEncode({'banner_id': bannerId}),
-    //   );
-    // } catch (e) {
-    //   print('Error recording impression: $e');
-    // }
+    try {
+      await http.post(
+        Uri.parse('$_apiBaseUrl/api/banners/impression'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'banner_id': bannerId}),
+      ).timeout(const Duration(seconds: 5));
+    } catch (e) {
+      print('Error recording impression: $e');
+    }
   }
 }
 
