@@ -11,6 +11,7 @@ void main() async {
   
   // Initialize API service to load license key
   await ApiService.I.init();
+  await BannerService.I.init();
   
   // Ensure user has a license
   await ApiService.I.ensureUserHasLicense();

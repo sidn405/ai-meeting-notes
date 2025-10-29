@@ -5,9 +5,16 @@ import 'dart:async';
 import 'transcript_screen.dart';
 import 'results_screen.dart';
 import 'package:clipnote/services/local_db.dart';
-import 'package:clipnote/services/offline_storage.dart';
 import 'package:clipnote/services/sync_service.dart';
-
+import 'package:file_picker/file_picker.dart';
+import 'package:dio/dio.dart';
+import 'dart:typed_data';
+import 'package:path/path.dart' as p;
+import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:clipnote/services/offline_storage.dart' as offline;
+import 'package:clipnote/screens/html_viewer_page.dart'; // your existing HTML viewer
+import 'package:path_provider/path_provider.dart';
 
 class MeetingsListScreen extends StatefulWidget {
   final String? initialFilter;
@@ -19,7 +26,7 @@ class MeetingsListScreen extends StatefulWidget {
 }
 
 // Use a MaterialColor so .shade50/.shade700 are valid
-final MaterialColor badgeSwatch = Colors.blue; // <-- rename from badgeColor if needed
+final MaterialColor badgeSwatch = Colors.blue;
 
 class _MeetingsListScreenState extends State<MeetingsListScreen> {
   final _api = ApiService.I;
@@ -89,7 +96,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         } else if (_filterStatus == 'processing') {
           matchesStatus = meeting['status'] == 'processing' || meeting['status'] == 'queued';
         } else if (_filterStatus == 'delivered') {
-          // Match any completed status
           matchesStatus = _isCompletedStatus(meeting['status'] ?? '');
         } else {
           matchesStatus = meeting['status'] == _filterStatus;
@@ -177,7 +183,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     final status = meeting['status'] ?? '';
     
     if (hasCloudStorage) {
-      // Pro/Business - Cloud Storage
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
@@ -201,7 +206,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         ),
       );
     } else {
-      // Free/Starter - Device Storage
       Color badgeColor;
       String badgeText;
       IconData badgeIcon;
@@ -615,7 +619,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     }
   }
 
-  // Helper method to check if status represents a completed meeting
   bool _isCompletedStatus(String status) {
     final completedStatuses = [
       'delivered',
@@ -664,6 +667,101 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         return Colors.grey;
     }
   }
+  Future<void> _openTranscriptOfflineFirst(int meetingId) async {
+    final api = ApiService.I;
+
+    // filenames you want to keep on device
+    const filename = 'transcript.txt'; // or .txt if plain text
+    final local = await offline.getLocalMeetingFile(meetingId, filename);
+    if (local != null) {
+      if (!mounted) return;
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => HtmlViewerPage(title: 'Transcript', filePath: local.path),
+      ));
+      return;
+    }
+
+    // Not cached yet → download once, then save locally
+    final url = '${api.baseUrl}/meetings/$meetingId/download?type=transcript';
+    try {
+      final res = await api.dio.get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = Uint8List.fromList(res.data ?? const []);
+      final saved = await offline.saveBytesForMeeting(
+        meetingId: meetingId,
+        filename: filename,
+        bytes: bytes,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => HtmlViewerPage(title: 'Transcript', filePath: saved.path),
+      ));
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      final msg = code == 403
+          ? 'You don’t have permission to view this transcript.'
+          : code == 422
+              ? 'Transcript not available yet. Try again in a moment.'
+              : 'Download failed. Check connection and try again.';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error opening transcript: $e')),
+      );
+    }
+  }
+
+  Future<void> _openSummaryOfflineFirst(int meetingId) async {
+    final api = ApiService.I;
+
+    const filename = 'summary.txt'; // or .txt
+    final local = await offline.getLocalMeetingFile(meetingId, filename);
+    if (local != null) {
+      if (!mounted) return;
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => HtmlViewerPage(title: 'Summary', filePath: local.path),
+      ));
+      return;
+    }
+
+    final url = '${api.baseUrl}/meetings/$meetingId/download?type=summary';
+    try {
+      final res = await api.dio.get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = Uint8List.fromList(res.data ?? const []);
+      final saved = await offline.saveBytesForMeeting(
+        meetingId: meetingId,
+        filename: filename,
+        bytes: bytes,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => HtmlViewerPage(title: 'Summary', filePath: saved.path),
+      ));
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      final msg = code == 403
+          ? 'You don’t have permission to view this summary.'
+          : code == 422
+              ? 'Summary not available yet. Try again in a moment.'
+              : 'Download failed. Check connection and try again.';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error opening summary: $e')),
+      );
+    }
+  }
 
   void _showMeetingDetails(int id, String title, String status) {
     showModalBottomSheet(
@@ -672,155 +770,158 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => SafeArea(
-        child: DraggableScrollableSheet(
-          initialChildSize: 0.6,
-          minChildSize: 0.4,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (context, scrollController) => SingleChildScrollView(
-            controller: scrollController,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  const SizedBox(height: 20),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  if (_isCompletedStatus(status)) ...[
-                    _actionButton(
-                      icon: Icons.description,
-                      label: 'View Transcript',
-                      onPressed: () {
-                        Navigator.pop(context);
-                        Navigator.of(this.context).push(
-                          MaterialPageRoute(
-                            builder: (_) => TranscriptScreen(meetingId: id),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _actionButton(
-                      icon: Icons.auto_awesome,
-                      label: 'View Summary',
-                      onPressed: () {
-                        Navigator.pop(context);
-                        Navigator.of(this.context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ResultsScreen(meetingId: id),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _actionButton(
-                      icon: Icons.email,
-                      label: 'Email Meeting',
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _emailMeeting(id, title);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _actionButton(
-                      icon: Icons.download,
-                      label: 'Download Files',
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _downloadMeetingFiles(id, title);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _actionButton(
-                      icon: Icons.delete,
-                      label: 'Delete Meeting',
-                      color: Colors.red,
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _deleteMeeting(id, title);
-                      },
-                    ),
-                  ] else if (status == 'processing' || status == 'queued') ...[
-                    const Center(
-                      child: Column(
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text(
-                            'Processing in progress...',
-                            style: TextStyle(fontSize: 16),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else if (status == 'failed') ...[
-                    Center(
-                      child: Column(
-                        children: [
-                          Icon(Icons.error_outline, color: Colors.red, size: 48),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'This meeting failed to process',
-                            style: TextStyle(color: Colors.red, fontSize: 16),
-                          ),
-                          const SizedBox(height: 20),
-                          _actionButton(
-                            icon: Icons.delete,
-                            label: 'Delete Meeting',
-                            color: Colors.red,
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _deleteMeeting(id, title);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else ...[
-                    Center(
-                      child: Column(
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.orange, size: 48),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Status: ${_getStatusLabel(status)}',
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'This meeting is in an unknown state',
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Center(child: Text('Close')),
-                  ),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(height: 20),
+              
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      if (_isCompletedStatus(status)) ...[
+                        _actionButton(
+                          icon: Icons.description,
+                          label: 'View Transcript',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _openTranscriptOfflineFirst(id);
+                          },                       
+                        ),
+                        const SizedBox(height: 12),
+                        _actionButton(
+                          icon: Icons.auto_awesome,
+                          label: 'View Summary',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _openSummaryOfflineFirst(id);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _actionButton(
+                          icon: Icons.email,
+                          label: 'Email Meeting',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _emailMeeting(id, title);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _actionButton(
+                          icon: Icons.download,
+                          label: 'Download Files',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _downloadMeetingFiles(id, title);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _actionButton(
+                          icon: Icons.delete,
+                          label: 'Delete Meeting',
+                          color: Colors.red,
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _deleteMeeting(id, title);
+                          },
+                        ),
+                      ] else if (status == 'processing' || status == 'queued') ...[
+                        const Center(
+                          child: Column(
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 16),
+                              Text(
+                                'Processing in progress...',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else if (status == 'failed') ...[
+                        Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.error_outline, color: Colors.red, size: 48),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'This meeting failed to process',
+                                style: TextStyle(color: Colors.red, fontSize: 16),
+                              ),
+                              const SizedBox(height: 20),
+                              _actionButton(
+                                icon: Icons.delete,
+                                label: 'Delete Meeting',
+                                color: Colors.red,
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _deleteMeeting(id, title);
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else ...[
+                        Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.orange, size: 48),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Status: ${_getStatusLabel(status)}',
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'This meeting is in an unknown state',
+                                style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Center(child: Text('Close')),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -880,7 +981,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                         return;
                       }
 
-                      // Basic email validation
                       if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
                         ScaffoldMessenger.of(this.context).showSnackBar(
                           const SnackBar(
@@ -946,60 +1046,127 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
   Future<void> _downloadMeetingFiles(int id, String title) async {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => SafeArea(
-        child: Container(
-          padding: const EdgeInsets.all(20),
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              
               const Text(
                 'Download Files',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFE3F2FD),
-                  child: Icon(Icons.description, color: Color(0xFF667eea)),
+              
+              // Make the list scrollable when content is too long
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFE3F2FD),
+                          child: Icon(Icons.description, color: Color(0xFF667eea)),
+                        ),
+                        title: const Text('Transcript'),
+                        subtitle: const Text('Download as .txt file'),
+                        trailing: const Icon(Icons.download),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _downloadFile(id, 'transcript', title);
+                        },
+                      ),
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFFFF3E0),
+                          child: Icon(Icons.auto_awesome, color: Colors.orange),
+                        ),
+                        title: const Text('Summary'),
+                        subtitle: const Text('Download as .txt file'),
+                        trailing: const Icon(Icons.download),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _downloadFile(id, 'summary', title);
+                        },
+                      ),
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFFFEBEE),
+                          child: Icon(Icons.picture_as_pdf, color: Colors.red),
+                        ),
+                        title: const Text('Full Report'),
+                        subtitle: const Text('Download as PDF (if available)'),
+                        trailing: const Icon(Icons.download),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _downloadFile(id, 'pdf', title);
+                        },
+                      ),
+                      const Divider(height: 30),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          'Offline Packages',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ),
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFE8F5E9),
+                          child: Icon(Icons.web, color: Colors.green),
+                        ),
+                        title: const Text('HTML Viewer'),
+                        subtitle: const Text('Beautiful offline viewer'),
+                        trailing: const Icon(Icons.offline_bolt),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _downloadOfflinePackage(id, 'html', title);
+                        },
+                      ),
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFFCE4EC),
+                          child: Icon(Icons.folder_zip, color: Colors.pink),
+                        ),
+                        title: const Text('ZIP Archive'),
+                        subtitle: const Text('Complete package with all files'),
+                        trailing: const Icon(Icons.offline_bolt),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _downloadOfflinePackage(id, 'zip', title);
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-                title: const Text('Transcript'),
-                subtitle: const Text('Download as .txt file'),
-                trailing: const Icon(Icons.download),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadFile(id, 'transcript', title);
-                },
               ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFFFF3E0),
-                  child: Icon(Icons.auto_awesome, color: Colors.orange),
-                ),
-                title: const Text('Summary'),
-                subtitle: const Text('Download as .txt file'),
-                trailing: const Icon(Icons.download),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadFile(id, 'summary', title);
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFFFEBEE),
-                  child: Icon(Icons.picture_as_pdf, color: Colors.red),
-                ),
-                title: const Text('Full Report'),
-                subtitle: const Text('Download as PDF (if available)'),
-                trailing: const Icon(Icons.download),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadFile(id, 'pdf', title);
-                },
-              ),
-
             ],
           ),
         ),
@@ -1068,8 +1235,173 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     }
   }
   
+  Future<void> _downloadOfflinePackage(int id, String format, String title) async {
+    final formatLabel = format == 'html' ? 'HTML Viewer' : 'ZIP Archive';
+    final extension = format == 'html' ? 'html' : 'zip';
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text('Preparing $formatLabel...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final downloadInfo = await _api.downloadOfflinePackage(id, format);
+      final url = downloadInfo['download_url'];
+      
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      final dio = Dio();
+      final dir = Platform.isAndroid 
+          ? Directory('/storage/emulated/0/Download')
+          : await getApplicationDocumentsDirectory();
+      
+      // Sanitize filename
+      final sanitizedTitle = title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
+      final filename = '${sanitizedTitle}_offline.$extension';
+      final savePath = '${dir.path}/$filename';
+      
+      if (!mounted) return;
+      
+      // Show downloading progress
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text('Downloading $formatLabel...'),
+              const SizedBox(height: 8),
+              const Text(
+                'This may take a moment',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      );
+      
+      try {
+        await dio.download(
+          url,
+          savePath,
+          onReceiveProgress: (received, total) {
+            if (total != -1) {
+              print('Download progress: ${(received / total * 100).toStringAsFixed(0)}%');
+            }
+          },
+        );
+        
+        if (!mounted) return;
+        Navigator.pop(context);
+        
+        // Show success with option to open file
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green),
+                const SizedBox(width: 12),
+                const Text('Downloaded!'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$formatLabel has been saved to:'),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    savePath,
+                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  // Try to open the file with default app
+                  final file = File(savePath);
+                  if (await file.exists()) {
+                    final uri = Uri.file(savePath);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri);
+                    } else {
+                      // Open the Downloads folder instead
+                      if (Platform.isAndroid) {
+                        final uri = Uri.parse('content://com.android.externalstorage.documents/document/primary:Download');
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      }
+                    }
+                  }
+                },
+                icon: const Icon(Icons.folder_open),
+                label: const Text('Open'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF667eea),
+                ),
+              ),
+            ],
+          ),
+        );
+        
+      } catch (downloadError) {
+        print('Error downloading file: $downloadError');
+        if (!mounted) return;
+        Navigator.pop(context);
+        throw downloadError;
+      }
+      
+    } catch (e) {
+      print('Error downloading offline package: $e');
+      
+      if (!mounted) return;
+      
+      String errorMessage = e.toString().replaceAll("Exception: ", "");
+      
+      if (errorMessage.contains('cloud-stored')) {
+        errorMessage = 'This meeting is in cloud storage.\nUse individual download options instead.';
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Download failed: $errorMessage'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+  
   Future<void> _deleteMeeting(int id, String title) async {
-    // Confirm deletion
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1094,7 +1426,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
 
     if (confirm != true) return;
 
-    // Show deleting dialog
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1122,7 +1453,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         ),
       );
       
-      // Refresh the list
       _loadMeetings();
     } catch (e) {
       print('Error deleting meeting: $e');
@@ -1163,7 +1493,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       ),
     );
   }
- 
 
   @override
   void dispose() {
@@ -1172,7 +1501,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
   }
 
   void _startAutoDownloadPolling() {
-    // Only poll for Free/Starter tiers (device storage)
     if (!_api.shouldAutoDownload) {
       print('[MeetingsList] Skipping auto-download (cloud storage tier)');
       return;
@@ -1180,10 +1508,8 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     
     print('[MeetingsList] Starting auto-download polling...');
     
-    // Check immediately
     _checkForAutoDownloads();
     
-    // Then check every 10 seconds
     _autoDownloadTimer = Timer.periodic(
       const Duration(seconds: 10),
       (timer) => _checkForAutoDownloads(),
@@ -1196,7 +1522,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       
       for (var meeting in meetings) {
         if (meeting['status'] == 'ready_for_download') {
-          print('[MeetingsList] 🔽 Auto-downloading meeting ${meeting['id']}');
+          print('[MeetingsList] 📽 Auto-downloading meeting ${meeting['id']}');
           await _autoDownloadMeeting(meeting);
         }
       }
@@ -1212,7 +1538,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     try {
       print('[MeetingsList] 📥 Auto-downloading: $title');
       
-      // Download transcript
       bool transcriptSuccess = false;
       try {
         await _downloadFileSilently(id, 'transcript', title);
@@ -1222,7 +1547,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         print('[MeetingsList] ⚠️ Transcript download failed: $e');
       }
       
-      // Download summary
       bool summarySuccess = false;
       try {
         await _downloadFileSilently(id, 'summary', title);
@@ -1232,14 +1556,11 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         print('[MeetingsList] ⚠️ Summary download failed: $e');
       }
       
-      // If both succeeded, confirm download to backend
       if (transcriptSuccess && summarySuccess) {
         await _api.confirmDownloadComplete(id);
         
-        // Refresh meetings list
         await _loadMeetings();
         
-        // Show success notification
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1272,14 +1593,67 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     }
   }
 }
+
 class LocalFilesSection extends StatefulWidget {
   const LocalFilesSection({super.key, required this.meetingId});
   final int meetingId;
+  
   @override
   State<LocalFilesSection> createState() => _LocalFilesSectionState();
 }
+
 class _LocalFilesSectionState extends State<LocalFilesSection> {
   Future<List<Map<String, Object?>>> _load() => localDb.listByMeeting(widget.meetingId);
+
+  Future<void> openLocalFile(String path) async {
+    final ext = p.extension(path).toLowerCase();
+    final title = p.basename(path);
+
+    // Use your multi-format viewer we wrote (HTML / TXT / PDF / CSV)
+    if (['.html', '.htm', '.txt', '.log', '.md', '.pdf', '.csv', '.tsv']
+        .contains(ext)) {
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => HtmlViewerPage(title: title, filePath: path),
+        ),
+      );
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unsupported file type: $ext')),
+      );
+    }
+  }
+
+  Future<void> deleteSingleFile(String path) async {
+    try {
+      final f = File(path);
+      if (await f.exists()) {
+        await f.delete();
+      }
+      if (mounted) setState(() {}); // refresh the list
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete file: $e')),
+      );
+    }
+  }
+
+  Future<void> deleteMeetingFiles(int meetingId) async {
+    try {
+      await offline.deleteMeetingDir(meetingId); // helper below
+      if (mounted) setState(() {}); // refresh the list
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete files: $e')),
+      );
+    }
+  }
+
+  
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, Object?>>>(
@@ -1287,7 +1661,7 @@ class _LocalFilesSectionState extends State<LocalFilesSection> {
       builder: (context, snap) {
         final items = snap.data ?? const [];
         if (items.isEmpty) {
-          return const SizedBox.shrink(); // nothing saved yet
+          return const SizedBox.shrink();
         }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -788,3 +788,68 @@ class ApiService {
     }
   }
 }
+class ApiService {
+  final Dio dio = Dio(BaseOptions(
+    baseUrl: 'https://ai-meeting-notes-production-81d7.up.railway.app',
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 30),
+  ));
+
+  ApiService() {
+    dio.interceptors.add(LogInterceptor(responseBody: false));
+  }
+
+  /// Download transcript (plain text)
+  Future<File?> downloadTranscript(int meetingId) async {
+    try {
+      final response = await dio.get<List<int>>(
+        '/meetings/$meetingId/download/transcript',
+        options: Options(
+          responseType: ResponseType.bytes,
+          validateStatus: (_) => true,
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final dir = await getApplicationDocumentsDirectory();
+        final file = File('${dir.path}/meeting_${meetingId}_transcript.txt');
+        await file.writeAsBytes(response.data!);
+        return file;
+      } else {
+        final msg = utf8.decode(response.data ?? []);
+        throw Exception(
+            'Transcript download failed (${response.statusCode}): $msg');
+      }
+    } catch (e) {
+      print('Error downloading transcript: $e');
+      return null;
+    }
+  }
+
+  /// Download summary (JSON)
+  Future<File?> downloadSummary(int meetingId) async {
+    try {
+      final response = await dio.get<List<int>>(
+        '/meetings/$meetingId/download/summary',
+        options: Options(
+          responseType: ResponseType.bytes,
+          validateStatus: (_) => true,
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final dir = await getApplicationDocumentsDirectory();
+        final file = File('${dir.path}/meeting_${meetingId}_summary.json');
+        await file.writeAsBytes(response.data!);
+        return file;
+      } else {
+        final msg = utf8.decode(response.data ?? []);
+        throw Exception(
+            'Summary download failed (${response.statusCode}): $msg');
+      }
+    } catch (e) {
+      print('Error downloading summary: $e');
+      return null;
+    }
+  }
+}
