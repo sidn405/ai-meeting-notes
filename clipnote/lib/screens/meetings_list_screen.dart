@@ -5,7 +5,6 @@ import 'dart:async';
 import 'transcript_screen.dart';
 import 'results_screen.dart';
 import 'package:clipnote/services/local_db.dart';
-import 'package:clipnote/services/offline_storage.dart';
 import 'package:clipnote/services/sync_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:dio/dio.dart';
@@ -14,7 +13,6 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:clipnote/services/offline_storage.dart' as offline;
-import 'package:clipnote/services/api_service.dart';
 import 'package:clipnote/screens/html_viewer_page.dart'; // your existing HTML viewer
 import 'package:path_provider/path_provider.dart';
 
@@ -1606,6 +1604,55 @@ class LocalFilesSection extends StatefulWidget {
 
 class _LocalFilesSectionState extends State<LocalFilesSection> {
   Future<List<Map<String, Object?>>> _load() => localDb.listByMeeting(widget.meetingId);
+
+  Future<void> openLocalFile(String path) async {
+    final ext = p.extension(path).toLowerCase();
+    final title = p.basename(path);
+
+    // Use your multi-format viewer we wrote (HTML / TXT / PDF / CSV)
+    if (['.html', '.htm', '.txt', '.log', '.md', '.pdf', '.csv', '.tsv']
+        .contains(ext)) {
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => HtmlViewerPage(title: title, filePath: path),
+        ),
+      );
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unsupported file type: $ext')),
+      );
+    }
+  }
+
+  Future<void> deleteSingleFile(String path) async {
+    try {
+      final f = File(path);
+      if (await f.exists()) {
+        await f.delete();
+      }
+      if (mounted) setState(() {}); // refresh the list
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete file: $e')),
+      );
+    }
+  }
+
+  Future<void> deleteMeetingFiles(int meetingId) async {
+    try {
+      await offline.deleteMeetingDir(meetingId); // helper below
+      if (mounted) setState(() {}); // refresh the list
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete files: $e')),
+      );
+    }
+  }
+
   
   @override
   Widget build(BuildContext context) {

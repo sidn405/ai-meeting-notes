@@ -11,7 +11,7 @@ import 'package:clipnote/services/local_db.dart';
 import 'package:clipnote/services/offline_storage.dart';
 import 'package:clipnote/services/sync_service.dart';
 import 'package:path_provider/path_provider.dart';
-
+import 'package:dio/dio.dart';
 
 class ApiService {
   static final ApiService I = ApiService._();
@@ -47,6 +47,7 @@ class ApiService {
   
   // Dio instance for API calls
   late final Dio _dio;
+  Dio get dio => _dio;
   
   String? _licenseKey;
   String? _currentTier;

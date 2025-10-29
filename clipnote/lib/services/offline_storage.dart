@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
 import 'local_db.dart';
+import 'package:path/path.dart' as p;
 
 Future<Directory> _meetingDir(int meetingId) async {
   final doc = await getApplicationDocumentsDirectory();
@@ -50,4 +51,38 @@ Future<void> openLocalFile(String path) async {
 // Outbox enqueue helper
 Future<void> enqueueConfirmDownload(int meetingId) async {
   await localDb.enqueueOutbox('confirm_download', jsonEncode({'meeting_id': meetingId}));
+}
+
+Future<void> deleteMeetingDir(int meetingId) async {
+  final docs = await getApplicationDocumentsDirectory();
+  final dir = Directory(p.join(docs.path, 'meetings', '$meetingId'));
+  if (await dir.exists()) {
+    await dir.delete(recursive: true);
+  }
+}
+
+/// Returns .../Documents/meetings/<meetingId> and creates it if needed.
+Future<String> _meetingDirPath(int meetingId) async {
+  final docs = await getApplicationDocumentsDirectory(); // survives app updates
+  final path = p.join(docs.path, 'meetings', '$meetingId');
+  await Directory(path).create(recursive: true);
+  return path;
+}
+
+/// Save arbitrary bytes for a meeting (e.g., transcript.html, summary.html)
+Future<File> saveBytesForMeeting({
+  required int meetingId,
+  required String filename,
+  required Uint8List bytes,
+}) async {
+  final dir = await _meetingDirPath(meetingId);
+  final file = File(p.join(dir, filename));
+  return file.writeAsBytes(bytes, flush: true);
+}
+
+/// If a local file exists for this meeting, return it; otherwise null.
+Future<File?> getLocalMeetingFile(int meetingId, String filename) async {
+  final dir = await _meetingDirPath(meetingId);
+  final file = File(p.join(dir, filename));
+  return await file.exists() ? file : null;
 }
