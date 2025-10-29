@@ -109,18 +109,18 @@ class _TranscriptScreenState extends State<TranscriptScreen> {
                   _copyToClipboard();
                 },
               ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFFFF3E0),
-                  child: Icon(Icons.download, color: Colors.orange),
-                ),
-                title: const Text('Download'),
-                subtitle: const Text('Download as text file'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadTranscript();
-                },
-              ),
+              //ListTile(
+                //leading: const CircleAvatar(
+                  //backgroundColor: Color(0xFFFFF3E0),
+                  //child: Icon(Icons.download, color: Colors.orange),
+                //),
+                //title: const Text('Download'),
+                //subtitle: const Text('Download as text file'),
+                //onTap: () {
+                 // Navigator.pop(context);
+                  //_downloadTranscript();
+                //},
+              //),
             ],
           ),
         ),

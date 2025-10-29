@@ -86,8 +86,8 @@ class UserGuideScreen extends StatelessWidget {
             _guideCard(
               icon: Icons.cloud_upload,
               title: 'Storage Options',
-              description: 'Free & Starter Tiers: Saves to your device\n'
-                  'Pro & Business Tiers: Cloud storage with unlimited access and faster processing.',
+              description: 'Saves to your device\n'
+                  'Pro & Business Tiers: Includes cloud storage with unlimited access and faster processing.',
             ),
             const SizedBox(height: 16),
             
@@ -96,7 +96,7 @@ class UserGuideScreen extends StatelessWidget {
               title: 'Upgrade Benefits',
               description: 'Starter: 50MB upload size, 25 meetings\n'
               'Professional: 200MB uploads, 50 meetings, free cloud storage\n'
-                  'Business: 500MB upload size, free cloud storage, record video, CVS & PDF files.',
+                  'Business: 500MB upload size, free cloud storage, record video.',
             ),
             const SizedBox(height: 16),
             

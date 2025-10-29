@@ -69,11 +69,11 @@ class PrivacyPolicyScreen extends StatelessWidget {
             
             _buildSection(
               'Data Storage & Retention',
-              'Free Tier:\n'
+              'All Tiers:\n'
               '• Stored locally on your device\n'
               '• Limited to 5 meetings/month\n'
               '• You control deletion\n\n'
-              'Paid Tiers (Professional & Business):\n'
+              'Cloud (Professional & Business):\n'
               '• Stored on secure cloud servers\n'
               '• Automatic deletion after 90 days\n'
               '• Unlimited storage during 90-day period',
