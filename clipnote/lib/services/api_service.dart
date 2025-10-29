@@ -787,18 +787,6 @@ class ApiService {
       rethrow;
     }
   }
-}
-class ApiService {
-  final Dio dio = Dio(BaseOptions(
-    baseUrl: 'https://ai-meeting-notes-production-81d7.up.railway.app',
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 30),
-  ));
-
-  ApiService() {
-    dio.interceptors.add(LogInterceptor(responseBody: false));
-  }
-
   /// Download transcript (plain text)
   Future<File?> downloadTranscript(int meetingId) async {
     try {
@@ -853,3 +841,5 @@ class ApiService {
     }
   }
 }
+
+

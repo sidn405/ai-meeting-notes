@@ -5,6 +5,7 @@ import 'screens/home_screen.dart';
 import 'screens/activation_screen.dart';
 import 'screens/upload_screen.dart';
 import 'package:clipnote/services/api_service.dart';
+import 'package:clipnote/services/banner_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

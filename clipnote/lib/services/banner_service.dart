@@ -1,332 +1,146 @@
-import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../services/banner_service.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
-class AffiliateBannerWidget extends StatefulWidget {
-  final EdgeInsets padding;
-  final double height;
+class BannerService {
+  static final BannerService _instance = BannerService._internal();
+  factory BannerService() => _instance;
+  BannerService._internal();
   
-  const AffiliateBannerWidget({
-    super.key,
-    this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-    this.height = 80,
-  });
-
-  @override
-  State<AffiliateBannerWidget> createState() => _AffiliateBannerWidgetState();
-}
-
-class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
-  final _bannerService = BannerService.I;
-  BannerAd? _currentBanner;
-  bool _impressionRecorded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadBanner();
-  }
-
-  void _loadBanner() {
-    final banner = _bannerService.getRandomBanner();
-    if (banner != null && mounted) {
-      setState(() => _currentBanner = banner);
-      
-      // Record impression after a short delay to ensure visibility
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && !_impressionRecorded) {
-          _bannerService.recordImpression(banner.id);
-          _impressionRecorded = true;
-        }
-      });
-    }
-  }
-
-  Future<void> _handleBannerTap() async {
-    if (_currentBanner == null) return;
-    
-    await _bannerService.recordClick(_currentBanner!.id);
-    
-    final url = Uri.parse(_currentBanner!.clickUrl);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_currentBanner == null) {
-      return const SizedBox.shrink();
-    }
-
-    return Padding(
-      padding: widget.padding,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _handleBannerTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            height: widget.height,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.3),
-                width: 1,
-              ),
-            ),
-            child: Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: _currentBanner!.isLocal
-                      ? Image.asset(
-                          _currentBanner!.imageUrl,
-                          width: double.infinity,
-                          height: widget.height,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.image_not_supported,
-                                color: Colors.white54,
-                              ),
-                            );
-                          },
-                        )
-                      : Image.network(
-                          _currentBanner!.imageUrl,
-                          width: double.infinity,
-                          height: widget.height,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.image_not_supported,
-                                color: Colors.white54,
-                              ),
-                            );
-                          },
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(
-                              child: CircularProgressIndicator(
-                                value: loadingProgress.expectedTotalBytes != null
-                                    ? loadingProgress.cumulativeBytesLoaded /
-                                        loadingProgress.expectedTotalBytes!
-                                    : null,
-                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-                // Optional: Add a "Ad" label
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      'Ad',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// Alternative: Rotating Banner Widget that changes every few seconds
-class RotatingBannerWidget extends StatefulWidget {
-  final Duration rotationInterval;
-  final EdgeInsets padding;
-  final double height;
+  static BannerService get I => _instance;
   
-  const RotatingBannerWidget({
-    super.key,
-    this.rotationInterval = const Duration(seconds: 10),
-    this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-    this.height = 80,
-  });
-
-  @override
-  State<RotatingBannerWidget> createState() => _RotatingBannerWidgetState();
-}
-
-class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
-  final _bannerService = BannerService.I;
   List<BannerAd> _banners = [];
-  int _currentIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadBanners();
-    _startRotation();
+  
+  Future<void> init() async {
+    _loadHardcodedBanners();
   }
-
-  void _loadBanners() {
-    setState(() {
-      _banners = _bannerService.getAllBanners();
-      if (_banners.isNotEmpty) {
-        _bannerService.recordImpression(_banners[_currentIndex].id);
-      }
-    });
-  }
-
-  void _startRotation() {
-    Future.delayed(widget.rotationInterval, () {
-      if (mounted && _banners.isNotEmpty) {
-        setState(() {
-          _currentIndex = (_currentIndex + 1) % _banners.length;
-        });
-        _bannerService.recordImpression(_banners[_currentIndex].id);
-        _startRotation();
-      }
-    });
-  }
-
-  Future<void> _handleBannerTap() async {
-    if (_banners.isEmpty) return;
-    
-    final banner = _banners[_currentIndex];
-    await _bannerService.recordClick(banner.id);
-    
-    final url = Uri.parse(banner.clickUrl);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_banners.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final currentBanner = _banners[_currentIndex];
-
-    return Padding(
-      padding: widget.padding,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _handleBannerTap,
-          borderRadius: BorderRadius.circular(12),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 500),
-            child: Container(
-              key: ValueKey(currentBanner.id),
-              height: widget.height,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.3),
-                  width: 1,
-                ),
-              ),
-              child: Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: currentBanner.isLocal
-                        ? Image.asset(
-                            currentBanner.imageUrl,
-                            width: double.infinity,
-                            height: widget.height,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.image_not_supported,
-                                  color: Colors.white54,
-                                ),
-                              );
-                            },
-                          )
-                        : Image.network(
-                            currentBanner.imageUrl,
-                            width: double.infinity,
-                            height: widget.height,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.image_not_supported,
-                                  color: Colors.white54,
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'Ad',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Page indicator
-                  if (_banners.length > 1)
-                    Positioned(
-                      bottom: 8,
-                      left: 0,
-                      right: 0,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(_banners.length, (index) {
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 2),
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: index == _currentIndex
-                                  ? Colors.white
-                                  : Colors.white.withOpacity(0.4),
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
+  
+  void _loadHardcodedBanners() {
+    // Hardcoded banners from assets folder
+    _banners = [
+      BannerAd(
+        id: 'banner_001',
+        imageUrl: 'assets/banners/banner1.png',
+        clickUrl: 'https://villiersjetcom?id=7275',
+        title: 'Product 1',
+        weight: 10,
+        isLocal: true,
       ),
+      BannerAd(
+        id: 'banner_002',
+        imageUrl: 'assets/banners/banner2.png',
+        clickUrl: 'https://villiersjetcom?id=7275',
+        title: 'Product 2',
+        weight: 5,
+        isLocal: true,
+      ),
+      BannerAd(
+        id: 'banner_003',
+        imageUrl: 'assets/banners/banner3.png',
+        clickUrl: 'https://villiersjetcom?id=7275',
+        title: 'Product 3',
+        weight: 15,
+        isLocal: true,
+      ),
+      BannerAd(
+        id: 'banner_004',
+        imageUrl: 'assets/banners/banner4.png',
+        clickUrl: 'https://villiersjetcom?id=7275',
+        title: 'Product 4',
+        weight: 8,
+        isLocal: true,
+      ),
+    ];
+  }
+  
+  BannerAd? getRandomBanner() {
+    if (_banners.isEmpty) return null;
+    
+    // Weighted random selection
+    final totalWeight = _banners.fold<int>(0, (sum, banner) => sum + banner.weight);
+    var random = (DateTime.now().millisecondsSinceEpoch % totalWeight);
+    
+    for (final banner in _banners) {
+      if (random < banner.weight) {
+        return banner;
+      }
+      random -= banner.weight;
+    }
+    
+    return _banners.first;
+  }
+  
+  List<BannerAd> getAllBanners() => List.unmodifiable(_banners);
+  
+  Future<void> recordClick(String bannerId) async {
+    // Track banner click locally or send to analytics
+    print('Banner clicked: $bannerId');
+    
+    // Optional: Send to your backend for analytics
+    // try {
+    //   await http.post(
+    //     Uri.parse('https://your-api.com/api/banners/click'),
+    //     headers: {'Content-Type': 'application/json'},
+    //     body: jsonEncode({'banner_id': bannerId}),
+    //   );
+    // } catch (e) {
+    //   print('Error recording click: $e');
+    // }
+  }
+  
+  Future<void> recordImpression(String bannerId) async {
+    // Track banner impression locally or send to analytics
+    print('Banner impression: $bannerId');
+    
+    // Optional: Send to your backend for analytics
+    // try {
+    //   await http.post(
+    //     Uri.parse('https://your-api.com/api/banners/impression'),
+    //     headers: {'Content-Type': 'application/json'},
+    //     body: jsonEncode({'banner_id': bannerId}),
+    //   );
+    // } catch (e) {
+    //   print('Error recording impression: $e');
+    // }
+  }
+}
+
+class BannerAd {
+  final String id;
+  final String imageUrl;
+  final String clickUrl;
+  final String title;
+  final int weight;
+  final bool isLocal; // true if using local asset, false if network image
+  
+  BannerAd({
+    required this.id,
+    required this.imageUrl,
+    required this.clickUrl,
+    required this.title,
+    this.weight = 1,
+    this.isLocal = false,
+  });
+  
+  factory BannerAd.fromJson(Map<String, dynamic> json) {
+    return BannerAd(
+      id: json['id'] as String,
+      imageUrl: json['image_url'] as String,
+      clickUrl: json['click_url'] as String,
+      title: json['title'] as String? ?? '',
+      weight: json['weight'] as int? ?? 1,
+      isLocal: json['is_local'] as bool? ?? false,
     );
+  }
+  
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'image_url': imageUrl,
+      'click_url': clickUrl,
+      'title': title,
+      'weight': weight,
+      'is_local': isLocal,
+    };
   }
 }
