@@ -14,7 +14,7 @@ const banners = [
   {
     id: 'banner_001',
     image_url: 'https://ai-meeting-notes-production-81d7.up.railway.app/api/banner1.jpg',
-    click_url: 'https://villiersjetcom?id=7275',
+    click_url: 'https://villiersjetcom/?id=7275',
     title: 'Product 1',
     weight: 10,
     active: true
@@ -22,7 +22,7 @@ const banners = [
   {
     id: 'banner_002',
     image_url: 'https://ai-meeting-notes-production-81d7.up.railway.app/api/banner2.jpg',
-    click_url: 'https://villiersjetcom?id=7275',
+    click_url: 'https://villiersjetcom/?id=7275',
     title: 'Product 2',
     weight: 5,
     active: true
@@ -30,7 +30,7 @@ const banners = [
   {
     id: 'banner_003',
     image_url: 'https://ai-meeting-notes-production-81d7.up.railway.app/api/banner3.jpg',
-    click_url: 'https://villiersjetcom?id=7275',
+    click_url: 'https://villiersjetcom/?id=7275',
     title: 'Product 3',
     weight: 15,
     active: true
@@ -38,7 +38,7 @@ const banners = [
   {
     id: 'banner_004',
     image_url: 'https://ai-meeting-notes-production-81d7.up.railway.app/api/banner4.jpg',
-    click_url: 'https://villiersjetcom?id=7275',
+    click_url: 'https://villiersjetcom/?id=7275',
     title: 'Product 4',
     weight: 10,
     active: true
@@ -46,7 +46,7 @@ const banners = [
   {
     id: 'banner_005',
     image_url: 'https://ai-meeting-notes-production-81d7.up.railway.app/api/banner5.jpg',
-    click_url: 'https://villiersjetcom?id=7275',
+    click_url: 'https://villiersjetcom/?id=7275',
     title: 'Product 5',
     weight: 5,
     active: true
@@ -54,7 +54,7 @@ const banners = [
   {
     id: 'banner_006',
     image_url: 'https://ai-meeting-notes-production-81d7.up.railway.app/api/banner6.jpg',
-    click_url: 'https://villiersjetcom?id=7275',
+    click_url: 'https://www.villiersjets.com/?id=7275',
     title: 'Product 6',
     weight: 15,
     active: true
