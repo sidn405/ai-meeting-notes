@@ -320,19 +320,43 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                             ),
                           ],
                         ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'This Month',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(height: 16),
                         Row(
                           children: [
                             Expanded(
-                              child: _statItem('This Month', '$meetingsThisMonth / $meetingsLimit'),
+                              child: _statItem('Used', '$meetingsThisMonth'),
+                            ),
+                            Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
+                            Expanded(
+                              child: _statItem('Limit', '$meetingsLimit'),
                             ),
                             Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
                             Expanded(
                               child: _statItem('Max File', '${maxFileSizeMB}MB'),
-                            ),
-                            Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
-                            Expanded(
-                              child: _statItem('Remaining', '${meetingsLimit - meetingsThisMonth}'),
                             ),
                           ],
                         ),
@@ -369,29 +393,31 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                             fontSize: 16,
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _iapService.isBusy ? null : _showUpgradeSheet,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: const Color(0xFF667eea),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
+                        if (!isPaidUser) ...[
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _iapService.isBusy ? null : _showUpgradeSheet,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: const Color(0xFF667eea),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                                elevation: 0,
                               ),
-                              elevation: 0,
-                            ),
-                            child: const Text(
-                              'Upgrade & Remove Ads',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
+                              child: const Text(
+                                'Upgrade & Remove Ads',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),

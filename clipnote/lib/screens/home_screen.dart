@@ -4,7 +4,9 @@ import 'user_guide_screen.dart';
 import 'meetings_list_screen.dart';
 import '../services/iap_service.dart';
 import '../services/api_service.dart';
+import '../services/banner_service.dart';
 import '../utils/route_observer.dart';
+import '../widgets/banner_widget.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,6 +18,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with RouteAware {
   late final IapService _iapService;
   final _api = ApiService.I;
+  final _bannerService = BannerService.I;
   
   Map<String, dynamic>? _licenseInfo;
   Map<String, dynamic>? _meetingStats;
@@ -27,12 +30,19 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     _iapService = IapService();
     _initIAP();
     _initializeLicenseAndLoadData();
+    _initBanners();
+  }
+
+  Future<void> _initBanners() async {
+    try {
+      await _bannerService.init();
+    } catch (e) {
+      print('Failed to initialize banners: $e');
+    }
   }
 
   Future<void> _initializeLicenseAndLoadData() async {
-    // First, ensure user has a license (free tier if new)
     await _api.ensureUserHasLicense();
-    // Then load all data
     await _loadData();
   }
 
@@ -75,37 +85,6 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   Future<void> _initIAP() async {
     try {
       await _iapService.init();
-      
-      // ✅ Set up callback to refresh UI when purchase succeeds
-      _iapService.setOnPurchaseSuccessCallback((licenseKey, tier) {
-        print('🎉 Purchase callback triggered! New tier: $tier');
-        
-        // Refresh all data to show updated license info
-        _loadData();
-        
-        // Show success message
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '✅ Subscription activated! You now have $tier tier',
-                      style: const TextStyle(fontSize: 15),
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 4),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-      });
     } catch (e) {
       print('Failed to initialize IAP: $e');
     }
@@ -117,19 +96,17 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     try {
       await _api.loadLicenseKey();
       
-      // Load license info FIRST and wait for it
       try {
         final licenseInfo = await _api.getLicenseInfo();
-        print('📝 Raw license info: $licenseInfo');
+        print('📋 Raw license info: $licenseInfo');
         if (mounted) {
           setState(() {
             _licenseInfo = licenseInfo;
-            print('📝 License info loaded. Tier: ${licenseInfo?['tier']}, Is Paid: $isPaidUser');
+            print('📋 License info loaded. Tier: ${licenseInfo?['tier']}, Is Paid: $isPaidUser');
           });
         }
       } catch (e) {
         print('❌ Error loading license info: $e');
-        // Set default free tier if loading fails
         if (mounted) {
           setState(() {
             _licenseInfo = {
@@ -143,7 +120,6 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
         }
       }
       
-      // Load meeting stats separately
       try {
         final meetingStats = await _api.getMeetingStats();
         if (mounted) {
@@ -191,6 +167,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   }
 
   bool get isPaidUser => _licenseInfo?['tier'] != null && _licenseInfo?['tier'] != 'free';
+  bool get showBanners => !isPaidUser; // Only show banners for free users
   String? get userEmail => _licenseInfo?['email'];
   String? get planName => _licenseInfo?['tier_name'];
   int get meetingsUsed => _licenseInfo?['meetings_used'] ?? 0;
@@ -272,7 +249,15 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                if (isPaidUser) ...[
+                // Show banner at the top for free users
+                if (showBanners) ...[
+                  const AffiliateBannerWidget(
+                    padding: EdgeInsets.only(bottom: 20),
+                    height: 90,
+                  ),
+                ],
+                
+                if (isPaidUser && userEmail != null) ...[
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -291,30 +276,144 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                '${planName ?? "Premium"} Plan Active',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                '${planName ?? 'Premium'} Active',
+                                style: const TextStyle(color: Colors.white, fontSize: 14),
                               ),
                             ),
                           ],
                         ),
-                        // ✅ ONLY show email container if email is not null
-                        if (userEmail != null) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            const CircleAvatar(
+                              radius: 24,
+                              backgroundColor: Colors.white,
+                              child: Icon(Icons.person, color: Color(0xFF667eea)),
                             ),
-                            child: Text(
-                              userEmail!,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    userEmail ?? 'User',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  if (planName != null)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.3),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        planName!,
+                                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'This Month',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _statItem('Used', '$meetingsThisMonth'),
+                            ),
+                            Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
+                            Expanded(
+                              child: _statItem('Limit', '$meetingsLimit'),
+                            ),
+                            Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
+                            Expanded(
+                              child: _statItem('Max File', '${maxFileSizeMB}MB'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          planName ?? 'Free Tier',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '$meetingsLimit meetings per month\n${maxFileSizeMB}MB max file size',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                        if (!isPaidUser) ...[
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _iapService.isBusy ? null : _showUpgradeSheet,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: const Color(0xFF667eea),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                                elevation: 0,
+                              ),
+                              child: const Text(
+                                'Upgrade & Remove Ads',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),
@@ -322,89 +421,17 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
                 ],
                 
-                // Usage summary card
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                      width: 1,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'This Month',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          if (!isPaidUser)
-                            TextButton.icon(
-                              onPressed: _showUpgradeSheet,
-                              icon: const Icon(Icons.upgrade, size: 16, color: Colors.white),
-                              label: const Text(
-                                'Upgrade',
-                                style: TextStyle(color: Colors.white, fontSize: 13),
-                              ),
-                              style: TextButton.styleFrom(
-                                backgroundColor: Colors.white.withOpacity(0.2),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _statItem('Used', '$meetingsUsed'),
-                          Container(
-                            height: 40,
-                            width: 1,
-                            color: Colors.white.withOpacity(0.3),
-                          ),
-                          _statItem('Limit', '$meetingsLimit'),
-                          Container(
-                            height: 40,
-                            width: 1,
-                            color: Colors.white.withOpacity(0.3),
-                          ),
-                          _statItem('Max File', '${maxFileSizeMB}MB'),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 24),
-                
-                // Upload button
                 SizedBox(
-                  width: double.infinity,
                   height: 56,
                   child: ElevatedButton.icon(
                     onPressed: _navigateToUpload,
-                    icon: const Icon(Icons.cloud_upload, size: 24),
+                    icon: const Icon(Icons.add_circle_outline, size: 24),
                     label: const Text(
-                      'Upload New Meeting',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      'Create Meeting',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
@@ -418,6 +445,14 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                 ),
               
                 const SizedBox(height: 24),
+                
+                // Show banner in the middle for free users
+                if (showBanners) ...[
+                  const RotatingBannerWidget(
+                    padding: EdgeInsets.only(bottom: 20),
+                    height: 80,
+                  ),
+                ],
                 
                 Row(
                   children: [
@@ -462,6 +497,14 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                     ),
                   ],
                 ),
+                
+                // Show banner at the bottom for free users
+                if (showBanners) ...[
+                  const SizedBox(height: 24),
+                  const AffiliateBannerWidget(
+                    height: 90,
+                  ),
+                ],
               ],
             ),
           ),
@@ -563,32 +606,37 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                   'Choose Your Plan',
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Remove ads and unlock more features',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                ),
                 const SizedBox(height: 20),
                 _planTile(
                   context: c,
                   icon: Icons.verified,
                   title: 'Starter',
-                  subtitle: '25 meetings per month\n50MB max file size',
-                  price: _iapService.starterProduct?.price ?? '\$29/month',
-                  productType: 'starter',
+                  subtitle: '25 meetings per month\n50MB max file size\nNo ads',
+                  price: _iapService.proProduct?.price ?? '\$29/month',
+                  isPro: true,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 20),
                 _planTile(
                   context: c,
                   icon: Icons.verified,
                   title: 'Professional',
-                  subtitle: '50 meetings per month\n200MB max file size',
+                  subtitle: '50 meetings per month\n200MB max file size\nNo ads',
                   price: _iapService.proProduct?.price ?? '\$69/month',
-                  productType: 'pro',
+                  isPro: true,
                 ),
                 const SizedBox(height: 12),
                 _planTile(
                   context: c,
                   icon: Icons.business,
                   title: 'Business',
-                  subtitle: '100 meetings per month\n500MB max file size',
+                  subtitle: '100 meetings per month\n500MB max file size\nNo ads',
                   price: _iapService.businessProduct?.price ?? '\$119/month',
-                  productType: 'business',
+                  isPro: false,
                 ),
               ],
             ),
@@ -604,7 +652,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     required String title,
     required String subtitle,
     required String price,
-    required String productType,
+    required bool isPro,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -636,32 +684,19 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
           );
           
           try {
-            String result;
-            switch (productType) {
-              case 'starter':
-                result = await _iapService.purchaseStarter();
-                break;
-              case 'pro':
-                result = await _iapService.purchasePro();
-                break;
-              case 'business':
-                result = await _iapService.purchaseBusiness();
-                break;
-              default:
-                throw Exception('Unknown product type');
-            }
+            final result = isPro 
+                ? await _iapService.purchasePro()
+                : await _iapService.purchaseBusiness();
             
             if (!mounted) return;
             Navigator.pop(this.context);
             
-            if (result == 'pending') {
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                const SnackBar(
-                  content: Text('Purchase in progress...'),
-                  backgroundColor: Colors.orange,
-                ),
-              );
-            }
+            ScaffoldMessenger.of(this.context).showSnackBar(
+              SnackBar(
+                content: Text('Purchase initiated: $result'),
+                backgroundColor: Colors.green,
+              ),
+            );
           } catch (e) {
             if (!mounted) return;
             Navigator.pop(this.context);

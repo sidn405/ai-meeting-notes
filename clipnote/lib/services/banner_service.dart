@@ -29,7 +29,7 @@ class BannerService {
       BannerAd(
         id: 'banner_002',
         imageUrl: 'assets/banners/banner2.png',
-        clickUrl: 'https://villiersjetcom?id=7275',
+        clickUrl: 'https://luxuryescapes.sjv.io/21xOyG',
         title: 'Product 2',
         weight: 5,
         isLocal: true,
