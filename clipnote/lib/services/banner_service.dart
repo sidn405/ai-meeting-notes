@@ -105,7 +105,7 @@ class BannerService {
       BannerAd(
         id: 'banner_001',
         imageUrl: 'assets/banners/banner1.png',
-        clickUrl: 'https://villiersjetcom?id=7275',
+        clickUrl: 'https://villiersjetcom/?id=7275',
         title: 'Product 1',
         weight: 10,
         isLocal: true,
@@ -113,7 +113,7 @@ class BannerService {
       BannerAd(
         id: 'banner_002',
         imageUrl: 'assets/banners/banner2.png',
-        clickUrl: 'https://villiersjetcom?id=7275',
+        clickUrl: 'https://villiersjetcom/?id=7275',
         title: 'Product 2',
         weight: 5,
         isLocal: true,
@@ -121,7 +121,7 @@ class BannerService {
       BannerAd(
         id: 'banner_003',
         imageUrl: 'assets/banners/banner3.png',
-        clickUrl: 'https://villiersjetcom?id=7275',
+        clickUrl: 'https://villiersjetcom/?id=7275',
         title: 'Product 3',
         weight: 15,
         isLocal: true,
@@ -129,7 +129,7 @@ class BannerService {
       BannerAd(
         id: 'banner_004',
         imageUrl: 'assets/banners/banner4.png',
-        clickUrl: 'https://villiersjetcom?id=7275',
+        clickUrl: 'https://villiersjetcom/?id=7275',
         title: 'Product 4',
         weight: 8,
         isLocal: true,
@@ -137,7 +137,7 @@ class BannerService {
       BannerAd(
         id: 'banner_005',
         imageUrl: 'assets/banners/banner5.png',
-        clickUrl: 'https://villiersjetcom?id=7275',
+        clickUrl: 'https://villiersjetcom/?id=7275',
         title: 'Product 5',
         weight: 8,
         isLocal: true,
@@ -145,7 +145,7 @@ class BannerService {
       BannerAd(
         id: 'banner_006',
         imageUrl: 'assets/banners/banner6.png',
-        clickUrl: 'https://villiersjetcom?id=7275',
+        clickUrl: 'https://villiersjetcom/?id=7275',
         title: 'Product 6',
         weight: 15,
         isLocal: true,
