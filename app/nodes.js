@@ -32,6 +32,30 @@ const banners = [
     title: 'Product 3',
     weight: 15,
     active: true
+  },
+  {
+    id: 'banner_004',
+    image_url: 'https://your-cdn.com/banner4.jpg',
+    click_url: 'https://villiersjetcom?id=7275',
+    title: 'Product 4',
+    weight: 10,
+    active: true
+  },
+  {
+    id: 'banner_005',
+    image_url: 'https://your-cdn.com/banner5.jpg',
+    click_url: 'https://villiersjetcom?id=7275',
+    title: 'Product 5',
+    weight: 5,
+    active: true
+  },
+  {
+    id: 'banner_006',
+    image_url: 'https://your-cdn.com/banner6.jpg',
+    click_url: 'https://villiersjetcom?id=7275',
+    title: 'Product 6',
+    weight: 15,
+    active: true
   }
 ];
 
