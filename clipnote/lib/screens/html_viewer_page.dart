@@ -1,410 +1,278 @@
 // lib/screens/html_viewer_page.dart
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:pdfx/pdfx.dart';
-import 'package:csv/csv.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 class HtmlViewerPage extends StatefulWidget {
+  final String title;
+  final String filePath;
+
   const HtmlViewerPage({
     super.key,
     required this.title,
     required this.filePath,
   });
 
-  final String title;
-  final String filePath; // Absolute local path
-
   @override
   State<HtmlViewerPage> createState() => _HtmlViewerPageState();
 }
 
 class _HtmlViewerPageState extends State<HtmlViewerPage> {
-  WebViewController? _webController;
-
-  // pdfx 2.9.x: use PdfControllerPinch with Future<PdfDocument>
-  PdfControllerPinch? _pdfController;
-
-  bool _loading = true;
-  String? _error;
-
-  late final String _ext;
-  Future<String>? _textFuture;                 // for .txt/.md/.log
-  Future<List<List<dynamic>>>? _csvFuture;     // for .csv/.tsv
+  WebViewController? _web;
+  PdfControllerPinch? _pdf;
 
   @override
   void initState() {
     super.initState();
-    _ext = p.extension(widget.filePath).toLowerCase();
-
-    if (_isHtml) {
-      _initWebView();
-    } else if (_isText) {
-      _textFuture = _readTextFile(File(widget.filePath));
-    } else if (_isPdf) {
-      _initPdfPinch();
-    } else if (_isCsv) {
-      _csvFuture = _readCsv(File(widget.filePath));
-    } else {
-      _error = 'Unsupported file type: $_ext\nPath: ${widget.filePath}';
-      _loading = false;
-    }
-  }
-
-  bool get _isHtml => _ext == '.html' || _ext == '.htm';
-  bool get _isText => _ext == '.txt' || _ext == '.log' || _ext == '.md';
-  bool get _isPdf  => _ext == '.pdf';
-  bool get _isCsv  => _ext == '.csv' || _ext == '.tsv';
-
-  Future<void> _initWebView() async {
-    try {
-      final f = File(widget.filePath);
-      if (!await f.exists()) {
-        setState(() {
-          _error = 'File not found:\n${widget.filePath}';
-          _loading = false;
-        });
-        return;
-      }
-      final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..enableZoom(true)
-        ..setBackgroundColor(Colors.transparent)
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onPageStarted: (_) => setState(() => _loading = true),
-            onPageFinished: (_) => setState(() => _loading = false),
-            onWebResourceError: (err) {
-              setState(() {
-                _error = 'Web resource error (${err.errorCode}): ${err.description}';
-                _loading = false;
-              });
-            },
-          ),
-        );
-
-      await controller.loadFile(f.path);
-      setState(() {
-        _webController = controller;
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = 'Failed to load HTML file:\n$e';
-        _loading = false;
-      });
-    }
-  }
-
-  // pdfx 2.9.x way: create controller with Future<PdfDocument>
-  Future<void> _initPdfPinch() async {
-    try {
-      final f = File(widget.filePath);
-      if (!await f.exists()) {
-        setState(() {
-          _error = 'File not found:\n${widget.filePath}';
-          _loading = false;
-        });
-        return;
-      }
-      final futureDoc = PdfDocument.openFile(widget.filePath); // returns Future<PdfDocument>
-      final controller = PdfControllerPinch(document: futureDoc);
-      setState(() {
-        _pdfController = controller;
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = 'Failed to open PDF:\n$e';
-        _loading = false;
-      });
-    }
-  }
-
-  Future<String> _readTextFile(File f) async {
-    if (!await f.exists()) {
-      setState(() {
-        _loading = false;
-        _error = 'File not found:\n${f.path}';
-      });
-      return '';
-    }
-    try {
-      final s = await f.readAsString();
-      setState(() => _loading = false);
-      return s;
-    } catch (_) {
-      try {
-        final bytes = await f.readAsBytes();
-        final s = const Utf8Decoder(allowMalformed: true).convert(bytes);
-        setState(() => _loading = false);
-        return s;
-      } catch (e) {
-        setState(() {
-          _loading = false;
-          _error = 'Failed to read text file:\n$e';
-        });
-        return '';
-      }
-    }
-  }
-
-  Future<List<List<dynamic>>> _readCsv(File f) async {
-    if (!await f.exists()) {
-      setState(() {
-        _loading = false;
-        _error = 'File not found:\n${f.path}';
-      });
-      return const [];
-    }
-    try {
-      final raw = await f.readAsString();
-      final isTsv = _ext == '.tsv';
-      final rows = const CsvToListConverter(
-        fieldDelimiter: ',', // we'll pre-convert TSV below
-        textDelimiter: '"',
-        eol: '\n',
-        shouldParseNumbers: false,
-      ).convert(isTsv ? raw.replaceAll('\t', ',') : raw);
-      setState(() => _loading = false);
-      return rows;
-    } catch (e) {
-      setState(() {
-        _loading = false;
-        _error = 'Failed to read CSV:\n$e';
-      });
-      return const [];
-    }
+    _load();
   }
 
   @override
   void dispose() {
-    // pdfx controller owns the document in this pattern; dispose the controller.
-    _pdfController?.dispose();
+    _pdf?.dispose();
     super.dispose();
   }
 
+  String get _ext => widget.filePath.split('.').last.toLowerCase();
+
+  Future<void> _load() async {
+    final f = File(widget.filePath);
+    if (!await f.exists()) return;
+
+    if (_ext == 'pdf') {
+      setState(() {
+        _pdf = PdfControllerPinch(
+          document: PdfDocument.openFile(widget.filePath),
+        );
+      });
+      return;
+    }
+
+    // Build themed HTML string for everything else
+    String html;
+
+    switch (_ext) {
+      case 'html':
+      case 'htm':
+        html = await f.readAsString();
+        // If the file is just raw content, wrap it; otherwise use as-is
+        if (!html.contains('<html')) {
+          html = _wrapHtml(title: widget.title, body: '<pre>${_safe(html)}</pre>');
+        }
+        break;
+
+      case 'txt':
+      case 'md':
+      case 'log':
+        final text = await f.readAsString();
+        html = _wrapHtml(
+          title: widget.title,
+          body: '<div class="section"><h2>${_safe(widget.title)}</h2>'
+              '<pre class="mono">${_safe(text)}</pre></div>',
+        );
+        break;
+
+      case 'csv':
+      case 'tsv':
+        final raw = await f.readAsString();
+        html = _wrapHtml(
+          title: widget.title,
+          body: _csvToTable(raw, delimiter: _ext == 'tsv' ? '\t' : ','),
+        );
+        break;
+
+      case 'json':
+        final raw = await f.readAsString();
+        html = _wrapHtml(
+          title: widget.title,
+          body: _renderSummaryJson(raw), // pretty cards, no braces shown
+        );
+        break;
+
+      default:
+        final bytes = await f.readAsBytes();
+        final preview = bytes.length > 0
+            ? await f.openRead(0, bytes.length.clamp(0, 4096)).transform(utf8.decoder).join()
+            : '';
+        html = _wrapHtml(
+          title: widget.title,
+          body:
+              '<div class="section"><h2>Preview</h2><pre class="mono">${_safe(preview)}</pre>'
+              '<div class="muted">Unsupported type “.$_ext”.</div></div>',
+        );
+    }
+
+    final controller = WebViewController()
+      ..setBackgroundColor(Colors.transparent)
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..loadHtmlString(html);
+
+    setState(() => _web = controller);
+  }
+
+  // ---------- UI ----------
   @override
   Widget build(BuildContext context) {
-    final actions = <Widget>[
-      if (_isHtml && _webController != null)
-        IconButton(
-          tooltip: 'Reload',
-          icon: const Icon(Icons.refresh),
-          onPressed: () async {
-            setState(() => _loading = true);
-            await _webController!.reload();
-          },
-        ),
-      IconButton(
-        tooltip: 'Info',
-        icon: const Icon(Icons.info_outline),
-        onPressed: () {
-          final name = p.basename(widget.filePath);
-          showAboutDialog(
-            context: context,
-            applicationName: 'Viewer',
-            children: [
-              SelectableText('File: $name\nPath: ${widget.filePath}'),
-            ],
-          );
-        },
-      ),
-    ];
-
+    final title = widget.title;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title, overflow: TextOverflow.ellipsis),
-        elevation: 0,
-        actions: actions,
-      ),
-      body: Stack(
-        children: [
-          Positioned.fill(child: _buildBody()),
-          if (_loading)
-            const Positioned.fill(
-              child: IgnorePointer(
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            ),
+        title: Text(title),
+        centerTitle: false,
+        actions: [
+          // (No “View licenses” button here)
         ],
       ),
+      body: _pdf != null
+          ? PdfViewPinch(controller: _pdf!)
+          : _web != null
+              ? WebViewWidget(controller: _web!)
+              : const Center(child: CircularProgressIndicator()),
     );
   }
 
-  Widget _buildBody() {
-    if (_error != null) return _buildError(_error!);
+  // ---------- Helpers ----------
 
-    if (_isHtml) {
-      if (_webController == null) return const SizedBox.shrink();
-      return SafeArea(child: WebViewWidget(controller: _webController!));
+  String _wrapHtml({required String title, required String body}) {
+    // Your home-screen gradient + clean cards
+    return '''
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${_safe(title)}</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,system-ui,sans-serif;color:#333;line-height:1.6}
+  .header{padding:28px;background:linear-gradient(135deg,#6a82fb 0%,#7f53ac 100%);color:#fff}
+  .header h1{margin:0;font-size:22px}
+  .badge{display:inline-block;margin-top:10px;font-size:12px;padding:6px 10px;border-radius:14px;background:rgba(255,255,255,.18)}
+  .container{max-width:920px;margin:16px auto;padding:16px}
+  .card{background:#fff;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.06);padding:20px}
+  .section{margin-bottom:22px}
+  h2{font-size:18px;color:#6a82fb;margin:0 0 10px 0;padding-bottom:10px;border-bottom:2px solid #eee}
+  .mono{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#fafafa;border:1px solid #eee;border-radius:10px;padding:14px;font-size:14px;line-height:1.8}
+  .muted{color:#888}
+  table{width:100%;border-collapse:collapse;border-radius:10px;overflow:hidden}
+  thead th{background:#f0f2ff;color:#4e5ef7;font-weight:600}
+  th,td{padding:10px;border:1px solid #ececec;text-align:left;font-size:14px}
+  .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#eef2ff;color:#4e5ef7;font-size:12px}
+  .item{background:#f9f9ff;border:1px solid #eaeaff;border-left:4px solid #6a82fb;border-radius:10px;padding:12px;margin:10px 0}
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>${_safe(title)}</h1>
+    <div class="badge">✓ Works Offline</div>
+  </div>
+  <div class="container">
+    <div class="card">
+      $body
+    </div>
+  </div>
+</body>
+</html>
+''';
+  }
+
+  String _renderSummaryJson(String raw) {
+    Map<String, dynamic>? data;
+    try {
+      data = json.decode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      // Not valid JSON — just show as text
+      return '<div class="section"><h2>Content</h2><pre class="mono">${_safe(raw)}</pre></div>';
     }
 
-    if (_isPdf) {
-      if (_pdfController == null) return const SizedBox.shrink();
-      return SafeArea(child: PdfViewPinch(controller: _pdfController!));
+    final exec = (data['executive_summary'] ?? data['summary'] ?? '') as String? ?? '';
+    final decisions = (data['key_decisions'] ?? data['decisions'] ?? []) as List?;
+    final items = (data['action_items'] ?? data['actions'] ?? []) as List?;
+    final points = (data['key_points'] ?? data['highlights'] ?? []) as List?;
+
+    final sb = StringBuffer();
+
+    if (exec.isNotEmpty) {
+      sb.writeln('<div class="section"><h2>Executive Summary</h2>');
+      sb.writeln('<div class="item">${_safe(exec)}</div></div>');
     }
 
-    if (_isText) {
-      return SafeArea(
-        child: FutureBuilder<String>(
-          future: _textFuture,
-          builder: (context, snap) {
-            if (snap.hasError) return _buildError('Failed to load text:\n${snap.error}');
-            final text = snap.data ?? '';
-            return _TextViewer(text: text);
-          },
-        ),
-      );
+    if (points != null && points.isNotEmpty) {
+      sb.writeln('<div class="section"><h2>Key Points</h2>');
+      for (final p in points) {
+        sb.writeln('<div class="item">${_safe(p.toString())}</div>');
+      }
+      sb.writeln('</div>');
     }
 
-    if (_isCsv) {
-      return SafeArea(
-        child: FutureBuilder<List<List<dynamic>>>(
-          future: _csvFuture,
-          builder: (context, snap) {
-            if (snap.hasError) return _buildError('Failed to load CSV:\n${snap.error}');
-            final rows = snap.data ?? const [];
-            if (rows.isEmpty) return const Center(child: Text('(empty CSV)'));
-            return _CsvTable(rows: rows);
-          },
-        ),
-      );
+    if (decisions != null && decisions.isNotEmpty) {
+      sb.writeln('<div class="section"><h2>Key Decisions</h2>');
+      for (final d in decisions) {
+        sb.writeln('<div class="item">${_safe(d.toString())}</div>');
+      }
+      sb.writeln('</div>');
     }
 
-    return _buildError('Unsupported file type.');
-  }
-
-  Widget _buildError(String msg) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 48),
-            const SizedBox(height: 12),
-            Text(
-              'Unable to open file',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            SelectableText(
-              msg,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TextViewer extends StatelessWidget {
-  const _TextViewer({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final mono = Theme.of(context).textTheme.bodyMedium?.copyWith(
-          fontFamily: 'monospace',
-          fontFamilyFallback: const ['Courier New', 'SFMono-Regular'],
-          fontSize: 14,
-          height: 1.6,
-        );
-
-    return Scrollbar(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SelectableText(text.isEmpty ? '(empty file)' : text, style: mono),
-      ),
-    );
-  }
-}
-
-// ---------- CSV ----------
-
-class _CsvTable extends StatefulWidget {
-  const _CsvTable({required this.rows});
-  final List<List<dynamic>> rows;
-
-  @override
-  State<_CsvTable> createState() => _CsvTableState();
-}
-
-class _CsvTableState extends State<_CsvTable> {
-  static const int _rowsPerPage = 25;
-
-  late final List<String> _headers;
-  late final List<List<String>> _data;
-  late final _CsvDataSource _source;
-
-  @override
-  void initState() {
-    super.initState();
-    final rows = widget.rows.map((r) => r.map((c) => c?.toString() ?? '').toList()).toList();
-    if (rows.isEmpty) {
-      _headers = const [];
-      _data = const [];
-    } else {
-      _headers = rows.first;
-      _data = rows.length > 1 ? rows.sublist(1) : <List<String>>[];
+    if (items != null && items.isNotEmpty) {
+      sb.writeln('<div class="section"><h2>Action Items</h2>');
+      for (final it in items) {
+        if (it is Map) {
+          final owner = (it['owner'] ?? '').toString();
+          final task = (it['task'] ?? it['description'] ?? '').toString();
+          final due = (it['due_date'] ?? '').toString();
+          final pri = (it['priority'] ?? '').toString();
+          sb.writeln(
+              '<div class="item"><strong>${_safe(owner.isEmpty ? "Owner" : owner)}:</strong> ${_safe(task)}'
+              '${due.isNotEmpty ? ' — <span class="pill">Due: ${_safe(due)}</span>' : ''}'
+              '${pri.isNotEmpty ? ' — <span class="pill">Priority: ${_safe(pri)}</span>' : ''}'
+              '</div>');
+        } else {
+          sb.writeln('<div class="item">${_safe(it.toString())}</div>');
+        }
+      }
+      sb.writeln('</div>');
     }
-    _source = _CsvDataSource(headers: _headers, data: _data);
+
+    // Fallback if nothing recognized
+    if (sb.isEmpty) {
+      return '<div class="section"><h2>Summary</h2><pre class="mono">${_safe(raw)}</pre></div>';
+    }
+    return sb.toString();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_headers.isEmpty) return const Center(child: Text('(empty CSV)'));
-    return Scrollbar(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 800),
-          child: PaginatedDataTable(
-            header: const Text('CSV Preview'),
-            rowsPerPage: (_data.length < _rowsPerPage) ? _data.length : _rowsPerPage,
-            columns: _headers.map((h) => DataColumn(label: Text(h))).toList(),
-            source: _source,
-          ),
-        ),
-      ),
-    );
-  }
-}
+  String _csvToTable(String raw, {String delimiter = ','}) {
+    final lines = const LineSplitter().convert(raw.trim());
+    if (lines.isEmpty) {
+      return '<div class="muted">No data</div>';
+    }
+    List<List<String>> rows = lines
+        .map((l) => l.split(delimiter).map((c) => c.trim()).toList())
+        .toList();
 
-class _CsvDataSource extends DataTableSource {
-  _CsvDataSource({required this.headers, required this.data});
-  final List<String> headers;
-  final List<List<String>> data;
+    final header = rows.first;
+    final body = rows.skip(1);
 
-  @override
-  DataRow getRow(int index) {
-    final row = data[index];
-    return DataRow(
-      cells: List.generate(
-        headers.length,
-        (i) => DataCell(SelectableText(i < row.length ? row[i] : '')),
-      ),
-    );
+    final headHtml = header.map((h) => '<th>${_safe(h)}</th>').join();
+    final bodyHtml = body
+        .map((r) => '<tr>${r.map((c) => '<td>${_safe(c)}</td>').join()}</tr>')
+        .join();
+
+    return '''
+<div class="section">
+  <h2>Data</h2>
+  <div style="overflow:auto;">
+    <table>
+      <thead><tr>$headHtml</tr></thead>
+      <tbody>$bodyHtml</tbody>
+    </table>
+  </div>
+</div>
+''';
   }
 
-  @override
-  bool get isRowCountApproximate => false;
-  @override
-  int get rowCount => data.length;
-  @override
-  int get selectedRowCount => 0;
+  String _safe(String s) => s
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
 }
