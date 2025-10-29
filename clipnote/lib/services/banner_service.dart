@@ -29,7 +29,7 @@ class BannerService {
       BannerAd(
         id: 'banner_002',
         imageUrl: 'assets/banners/banner2.png',
-        clickUrl: 'https://luxuryescapes.sjv.io/21xOyG',
+        clickUrl: 'https://villiersjetcom?id=7275',
         title: 'Product 2',
         weight: 5,
         isLocal: true,
@@ -48,6 +48,14 @@ class BannerService {
         clickUrl: 'https://villiersjetcom?id=7275',
         title: 'Product 4',
         weight: 8,
+        isLocal: true,
+      ),
+      BannerAd(
+        id: 'banner_005',
+        imageUrl: 'assets/banners/banner5.png',
+        clickUrl: 'https://villiersjetcom?id=7275',
+        title: 'Product 5',
+        weight: 15,
         isLocal: true,
       ),
     ];

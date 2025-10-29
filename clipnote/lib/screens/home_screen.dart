@@ -257,7 +257,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                   ),
                 ],
                 
-                if (isPaidUser && userEmail != null) ...[
+                if (isPaidUser) ...[
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -276,50 +276,18 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                '${planName ?? 'Premium'} Active',
-                                style: const TextStyle(color: Colors.white, fontSize: 14),
+                                '${planName ?? 'Premium'} Plan Active',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            const CircleAvatar(
-                              radius: 24,
-                              backgroundColor: Colors.white,
-                              child: Icon(Icons.person, color: Color(0xFF667eea)),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    userEmail ?? 'User',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  if (planName != null)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.3),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        planName!,
-                                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                        
                       ],
                     ),
                   ),
