@@ -1344,3 +1344,404 @@ def confirm_download(
     except Exception as e:
         print(f"⚠️ Failed to delete files from server: {e}")
         raise HTTPException(500, f"Failed to delete server files: {str(e)}")
+
+# ============================================================
+# OFFLINE ACCESS - Available to ALL users
+# ============================================================
+
+@router.get("/{meeting_id}/download-all")
+def download_meeting_package(
+    meeting_id: int,
+    format: str = Query("zip", description="zip or html"),
+    x_license_key: str = Header(..., alias="X-License-Key"),
+    db: Session = Depends(get_session)
+):
+    """
+    Download complete meeting package for offline access.
+    Available to ALL users.
+    
+    Formats:
+    - zip: All files in a ZIP archive (transcript, summary, metadata)
+    - html: Self-contained HTML viewer with all data embedded
+    """
+    import zipfile
+    import tempfile
+    from datetime import datetime
+    
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+    
+    # Verify ownership
+    if not meeting.license_id:
+        raise HTTPException(500, "Meeting has no license")
+    
+    meeting_license = db.get(License, meeting.license_id)
+    if not meeting_license or meeting_license.license_key != x_license_key:
+        raise HTTPException(403, "Not authorized")
+    
+    # Check if files are in cloud storage
+    files_in_cloud = (
+        (meeting.transcript_path and meeting.transcript_path.startswith("s3://")) or
+        (meeting.summary_path and meeting.summary_path.startswith("s3://"))
+    )
+    
+    if files_in_cloud:
+        raise HTTPException(
+            400,
+            "Cannot create offline package for cloud-stored files. "
+            "Please download files individually from cloud storage."
+        )
+    
+    # Verify files exist locally
+    has_transcript = meeting.transcript_path and Path(meeting.transcript_path).exists()
+    has_summary = meeting.summary_path and Path(meeting.summary_path).exists()
+    
+    if not has_transcript and not has_summary:
+        raise HTTPException(404, "No meeting files available for download")
+    
+    if format == "html":
+        # Generate self-contained HTML viewer
+        html_content = generate_offline_html_viewer(meeting, db)
+        
+        # Save to temp file
+        temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.html')
+        temp_file.write(html_content)
+        temp_file.close()
+        
+        return FileResponse(
+            temp_file.name,
+            media_type="text/html",
+            filename=f"meeting_{meeting_id}_{meeting.title.replace(' ', '_')}.html",
+            background=BackgroundTasks()
+        )
+    
+    elif format == "zip":
+        # Create ZIP package with all files
+        temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+        temp_zip.close()
+        
+        with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # Add transcript
+            if has_transcript:
+                zipf.write(
+                    meeting.transcript_path,
+                    f"transcript.txt"
+                )
+            
+            # Add summary
+            if has_summary:
+                zipf.write(
+                    meeting.summary_path,
+                    f"summary.json"
+                )
+            
+            # Add metadata file
+            metadata = {
+                "meeting_id": meeting.id,
+                "title": meeting.title,
+                "created_at": meeting.created_at.isoformat() if meeting.created_at else None,
+                "status": meeting.status,
+                "media_type": meeting.media_type,
+                "has_transcript": has_transcript,
+                "has_summary": has_summary,
+                "download_date": datetime.now().isoformat()
+            }
+            
+            zipf.writestr("metadata.json", json.dumps(metadata, indent=2))
+            
+            # Add README
+            readme = f"""# Meeting: {meeting.title}
+
+Downloaded: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## Contents
+
+- transcript.txt: Full meeting transcript
+- summary.json: AI-generated meeting summary
+- metadata.json: Meeting information
+
+## Offline Access
+
+All files in this archive work offline and do not require an internet connection.
+
+You can view the summary.json in any text editor or JSON viewer.
+"""
+            zipf.writestr("README.md", readme)
+        
+        return FileResponse(
+            temp_zip.name,
+            media_type="application/zip",
+            filename=f"meeting_{meeting_id}_{meeting.title.replace(' ', '_')}.zip"
+        )
+    
+    else:
+        raise HTTPException(400, f"Invalid format: {format}. Use 'zip' or 'html'")
+
+
+def generate_offline_html_viewer(meeting: Meeting, db: Session) -> str:
+    """
+    Generate a self-contained HTML file with all meeting data embedded.
+    Works completely offline with no external dependencies.
+    """
+    from datetime import datetime
+    
+    # Load transcript
+    transcript_text = ""
+    if meeting.transcript_path and Path(meeting.transcript_path).exists():
+        with open(meeting.transcript_path, 'r') as f:
+            transcript_text = f.read()
+    
+    # Load summary
+    summary_data = {}
+    if meeting.summary_path and Path(meeting.summary_path).exists():
+        with open(meeting.summary_path, 'r') as f:
+            summary_data = json.load(f)
+    
+    # Extract summary sections
+    summary_text = summary_data.get('summary', 'No summary available')
+    action_items = summary_data.get('action_items', [])
+    key_points = summary_data.get('key_points', [])
+    
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{meeting.title} - Meeting Summary</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            padding: 20px;
+        }}
+        
+        .container {{
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }}
+        
+        .header {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+        }}
+        
+        .header h1 {{
+            font-size: 28px;
+            margin-bottom: 10px;
+        }}
+        
+        .header .meta {{
+            opacity: 0.9;
+            font-size: 14px;
+        }}
+        
+        .offline-badge {{
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            margin-top: 10px;
+        }}
+        
+        .content {{
+            padding: 30px;
+        }}
+        
+        .section {{
+            margin-bottom: 30px;
+        }}
+        
+        .section h2 {{
+            font-size: 20px;
+            color: #667eea;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e0e0e0;
+        }}
+        
+        .tabs {{
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }}
+        
+        .tab {{
+            padding: 10px 20px;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            font-size: 16px;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }}
+        
+        .tab:hover {{
+            color: #667eea;
+        }}
+        
+        .tab.active {{
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }}
+        
+        .tab-content {{
+            display: none;
+        }}
+        
+        .tab-content.active {{
+            display: block;
+        }}
+        
+        .summary-text {{
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            line-height: 1.8;
+        }}
+        
+        .list-item {{
+            background: #f9f9f9;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }}
+        
+        .transcript {{
+            background: #fafafa;
+            padding: 20px;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.8;
+            max-height: 600px;
+            overflow-y: auto;
+        }}
+        
+        .no-content {{
+            color: #999;
+            font-style: italic;
+            padding: 20px;
+            text-align: center;
+        }}
+        
+        .footer {{
+            background: #f9f9f9;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }}
+        
+        @media print {{
+            body {{
+                background: white;
+                padding: 0;
+            }}
+            .container {{
+                box-shadow: none;
+            }}
+            .tabs {{
+                display: none;
+            }}
+            .tab-content {{
+                display: block !important;
+                page-break-before: always;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{meeting.title}</h1>
+            <div class="meta">
+                Meeting ID: {meeting.id} | 
+                Created: {meeting.created_at.strftime('%Y-%m-%d %H:%M') if meeting.created_at else 'N/A'} |
+                Status: {meeting.status}
+            </div>
+            <div class="offline-badge">✓ Works Offline</div>
+        </div>
+        
+        <div class="content">
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('summary')">Summary</button>
+                <button class="tab" onclick="showTab('action-items')">Action Items</button>
+                <button class="tab" onclick="showTab('key-points')">Key Points</button>
+                <button class="tab" onclick="showTab('transcript')">Full Transcript</button>
+            </div>
+            
+            <div id="summary" class="tab-content active">
+                <div class="section">
+                    <h2>Meeting Summary</h2>
+                    <div class="summary-text">{summary_text if summary_text else '<div class="no-content">No summary available</div>'}</div>
+                </div>
+            </div>
+            
+            <div id="action-items" class="tab-content">
+                <div class="section">
+                    <h2>Action Items</h2>
+                    {''.join([f'<div class="list-item">{item}</div>' for item in action_items]) if action_items else '<div class="no-content">No action items</div>'}
+                </div>
+            </div>
+            
+            <div id="key-points" class="tab-content">
+                <div class="section">
+                    <h2>Key Points</h2>
+                    {''.join([f'<div class="list-item">{point}</div>' for point in key_points]) if key_points else '<div class="no-content">No key points</div>'}
+                </div>
+            </div>
+            
+            <div id="transcript" class="tab-content">
+                <div class="section">
+                    <h2>Full Transcript</h2>
+                    <div class="transcript">{transcript_text if transcript_text else '<div class="no-content">No transcript available</div>'}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
+            This file works completely offline and contains all meeting data.
+        </div>
+    </div>
+    
+    <script>
+        function showTab(tabName) {{
+            // Hide all tab contents
+            const contents = document.querySelectorAll('.tab-content');
+            contents.forEach(content => content.classList.remove('active'));
+            
+            // Remove active class from all tabs
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }}
+    </script>
+</body>
+</html>"""
+    
+    return html
