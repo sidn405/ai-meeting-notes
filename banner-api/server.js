@@ -1,5 +1,5 @@
 // Example backend API for serving dynamic banner ads
-// Install: npm install express body-parser
+// Install: npm install express body-parser cors
 
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -13,51 +13,57 @@ app.use(bodyParser.json());
 const banners = [
   {
     id: 'banner_001',
-    image_url: 'https://ai-meeting-notes-production-81d7.up.railway.app/api/banner1.jpg',
+    image_url: 'https://your-cdn.com/banner1.jpg',
     click_url: 'https://villiersjets.com/?id=7275',
     title: 'Product 1',
     weight: 10,
-    active: true
+    active: true,
+    is_local: false
   },
   {
     id: 'banner_002',
-    image_url: 'https://ai-meeting-notes-production-81d7.up.railway.app/api/banner2.jpg',
+    image_url: 'https://your-cdn.com/banner2.jpg',
     click_url: 'https://villiersjets.com/?id=7275',
     title: 'Product 2',
     weight: 5,
-    active: true
+    active: true,
+    is_local: false
   },
   {
     id: 'banner_003',
-    image_url: 'https://ai-meeting-notes-production-81d7.up.railway.app/api/banner3.jpg',
+    image_url: 'https://your-cdn.com/banner3.jpg',
     click_url: 'https://villiersjets.com/?id=7275',
     title: 'Product 3',
     weight: 15,
-    active: true
+    active: true,
+    is_local: false
   },
   {
     id: 'banner_004',
-    image_url: 'https://ai-meeting-notes-production-81d7.up.railway.app/api/banner4.jpg',
+    image_url: 'https://your-cdn.com/banner4.jpg',
     click_url: 'https://villiersjets.com/?id=7275',
     title: 'Product 4',
     weight: 10,
-    active: true
+    active: true,
+    is_local: false
   },
   {
     id: 'banner_005',
-    image_url: 'https://ai-meeting-notes-production-81d7.up.railway.app/api/banner5.jpg',
+    image_url: 'https://your-cdn.com/banner5.jpg',
     click_url: 'https://villiersjets.com/?id=7275',
     title: 'Product 5',
     weight: 5,
-    active: true
+    active: true,
+    is_local: false
   },
   {
     id: 'banner_006',
-    image_url: 'https://ai-meeting-notes-production-81d7.up.railway.app/api/banner6.jpg',
+    image_url: 'https://your-cdn.com/banner6.jpg',
     click_url: 'https://www.villiersjets.com/?id=7275',
     title: 'Product 6',
     weight: 15,
-    active: true
+    active: true,
+    is_local: false
   }
 ];
 
@@ -75,6 +81,7 @@ const analytics = {
 app.get('/api/banners', (req, res) => {
   try {
     const activeBanners = banners.filter(b => b.active);
+    console.log(`📡 Serving ${activeBanners.length} active banners`);
     res.json(activeBanners);
   } catch (error) {
     console.error('Error fetching banners:', error);
@@ -91,18 +98,18 @@ app.post('/api/banners/impression', (req, res) => {
       return res.status(400).json({ error: 'banner_id required' });
     }
     
-    if (!bannerAnalytics.impressions[banner_id]) {
-      bannerAnalytics.impressions[banner_id] = 0;
+    if (!analytics.impressions[banner_id]) {
+      analytics.impressions[banner_id] = 0;
     }
     
-    bannerAnalytics.impressions[banner_id]++;
+    analytics.impressions[banner_id]++;
     
-    console.log(`👁️ Impression: ${banner_id} - Total: ${bannerAnalytics.impressions[banner_id]}`);
+    console.log(`👁️  Impression: ${banner_id} - Total: ${analytics.impressions[banner_id]}`);
     
     res.json({ 
       success: true, 
       banner_id, 
-      impressions: bannerAnalytics.impressions[banner_id] 
+      impressions: analytics.impressions[banner_id] 
     });
   } catch (error) {
     console.error('Error recording impression:', error);
@@ -119,18 +126,18 @@ app.post('/api/banners/click', (req, res) => {
       return res.status(400).json({ error: 'banner_id required' });
     }
     
-    if (!bannerAnalytics.clicks[banner_id]) {
-      bannerAnalytics.clicks[banner_id] = 0;
+    if (!analytics.clicks[banner_id]) {
+      analytics.clicks[banner_id] = 0;
     }
     
-    bannerAnalytics.clicks[banner_id]++;
+    analytics.clicks[banner_id]++;
     
-    console.log(`🖱️ Click: ${banner_id} - Total: ${bannerAnalytics.clicks[banner_id]}`);
+    console.log(`🖱️  Click: ${banner_id} - Total: ${analytics.clicks[banner_id]}`);
     
     res.json({ 
       success: true, 
       banner_id, 
-      clicks: bannerAnalytics.clicks[banner_id] 
+      clicks: analytics.clicks[banner_id] 
     });
   } catch (error) {
     console.error('Error recording click:', error);
@@ -142,8 +149,8 @@ app.post('/api/banners/click', (req, res) => {
 app.get('/api/banners/analytics', (req, res) => {
   try {
     const data = banners.map(banner => {
-      const impressions = bannerAnalytics.impressions[banner.id] || 0;
-      const clicks = bannerAnalytics.clicks[banner.id] || 0;
+      const impressions = analytics.impressions[banner.id] || 0;
+      const clicks = analytics.clicks[banner.id] || 0;
       const ctr = impressions > 0 
         ? ((clicks / impressions) * 100).toFixed(2) + '%'
         : '0%';
@@ -158,6 +165,7 @@ app.get('/api/banners/analytics', (req, res) => {
       };
     });
     
+    console.log('📊 Analytics requested');
     res.json(data);
   } catch (error) {
     console.error('Error fetching analytics:', error);
@@ -184,7 +192,8 @@ app.post('/api/banners', (req, res) => {
       click_url,
       title: title || 'New Banner',
       weight: weight || 1,
-      active: true
+      active: true,
+      is_local: false
     };
     
     banners.push(newBanner);
@@ -234,7 +243,7 @@ app.delete('/api/banners/:id', (req, res) => {
     
     banner.active = false;
     
-    console.log(`🗑️ Banner deactivated: ${id}`);
+    console.log(`🗑️  Banner deactivated: ${id}`);
     
     res.json({ success: true, banner });
   } catch (error) {
@@ -243,5 +252,10 @@ app.delete('/api/banners/:id', (req, res) => {
   }
 });
 
-console.log('🎯 Banner routes initialized');
-console.log(`📊 Active banners: ${banners.filter(b => b.active).length}`);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🎯 Banner API running on port ${PORT}`);
+  console.log(`📊 Active banners: ${banners.filter(b => b.active).length}`);
+});
+
+module.exports = app;
