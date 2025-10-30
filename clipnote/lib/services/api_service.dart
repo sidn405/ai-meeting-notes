@@ -814,13 +814,7 @@ class ApiService {
     }
   }
 
-Future<Map<String, dynamic>> getCloudStatus(int meetingId) async {
-  final response = await dio.get(
-    '$baseUrl/meetings/$meetingId/cloud-status',
-    options: Options(headers: {'X-License-Key': _licenseKey}),
-  );
-  return response.data;
-}
+
 
 Future<void> downloadFromCloud(int meetingId, String type) async {
   // This will download files from B2 cloud storage
