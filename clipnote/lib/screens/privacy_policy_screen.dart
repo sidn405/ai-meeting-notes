@@ -71,7 +71,6 @@ class PrivacyPolicyScreen extends StatelessWidget {
               'Data Storage & Retention',
               'All Tiers:\n'
               '• Stored locally on your device\n'
-              '• Limited to 5 meetings/month\n'
               '• You control deletion\n\n'
               'Cloud (Professional & Business):\n'
               '• Stored on secure cloud servers\n'
