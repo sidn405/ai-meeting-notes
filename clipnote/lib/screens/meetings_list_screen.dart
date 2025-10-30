@@ -1806,23 +1806,27 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
   }
 
   Future<void> _checkForAutoDownloads() async {
-    try {
-      final meetings = await _api.getMeetings();
+  try {
+    final meetings = await _api.getMeetings();
+    
+    for (var meeting in meetings) {
+      final status = meeting['status'] ?? '';
+      final storageLocation = meeting['storage_location'] ?? 'local';
       
-      for (var meeting in meetings) {
-        final status = meeting['status'] ?? '';
-        final storageLocation = meeting['storage_location'] ?? 'local';
-        
-        // Only auto-download if status is ready AND files are local (not cloud)
-        if (status == 'ready_for_download' && storageLocation == 'local') {
-          print('[MeetingsList] 📽 Auto-downloading meeting ${meeting['id']}');
-          await _autoDownloadMeeting(meeting);
-        }
+      // Only auto-download if:
+      // 1. Status is ready_for_download
+      // 2. Files are not already in cloud
+      if (status == 'ready_for_download' && storageLocation != 'cloud') {
+        print('[MeetingsList] 📽 Auto-downloading meeting ${meeting['id']}');
+        await _autoDownloadMeeting(meeting);
+      } else if (status == 'ready_for_download' && storageLocation == 'cloud') {
+        print('[MeetingsList] ⏭️ Skipping auto-download - files already in cloud for meeting ${meeting['id']}');
       }
-    } catch (e) {
-      print('[MeetingsList] Error checking for auto-downloads: $e');
     }
+  } catch (e) {
+    print('[MeetingsList] Error checking for auto-downloads: $e');
   }
+}
 
   Future<void> _autoDownloadMeeting(Map<String, dynamic> meeting) async {
     final int id = meeting['id'];
