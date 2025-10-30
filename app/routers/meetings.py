@@ -246,7 +246,7 @@ def get_meeting_stats(
     from datetime import datetime
     from sqlmodel import func
     
-    # Filter all queries by license_id
+    # Current meetings (not deleted) - filtered by license_id
     total_meetings = db.exec(
         select(func.count(Meeting.id)).where(Meeting.license_id == license.id)
     ).one()
@@ -264,22 +264,17 @@ def get_meeting_stats(
         )
     ).one()
     
-    # Meetings this month
-    now = datetime.now()
-    first_day_of_month = datetime(now.year, now.month, 1)
+    # Use license.meetings_used for accurate count (includes deleted meetings)
+    # This field should be incremented in track_meeting_usage() and NEVER decremented
+    meetings_this_month = license.meetings_used if hasattr(license, 'meetings_used') else 0
     
-    meetings_this_month = db.exec(
-        select(func.count(Meeting.id)).where(
-            (Meeting.license_id == license.id) & 
-            (Meeting.created_at >= first_day_of_month)
-        )
-    ).one()
+    now = datetime.now()
     
     return {
-        "total_meetings": total_meetings,
-        "completed": completed_meetings,
-        "processing": processing_meetings,
-        "meetings_this_month": meetings_this_month,
+        "total_meetings": total_meetings,  # Current meetings only
+        "completed": completed_meetings,   # Current completed meetings
+        "processing": processing_meetings, # Current processing meetings
+        "meetings_this_month": meetings_this_month,  # Total used this month (includes deleted)
         "current_month": now.strftime("%B %Y"),
     }
     
