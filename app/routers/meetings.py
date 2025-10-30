@@ -254,9 +254,12 @@ def get_meeting_stats(
         select(func.count(Meeting.id)).where(Meeting.license_id == license.id)
     ).one()
     
+    # Count all successfully completed meetings (not just "delivered")
+    completed_statuses = ["delivered", "ready_for_download", "uploaded_to_cloud", "downloaded_to_device"]
     completed_meetings = db.exec(
         select(func.count(Meeting.id)).where(
-            (Meeting.license_id == license.id) & (Meeting.status == "delivered")
+            (Meeting.license_id == license.id) & 
+            (Meeting.status.in_(completed_statuses))
         )
     ).one()
     

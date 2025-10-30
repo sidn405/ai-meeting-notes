@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pathlib import Path
 from sqlmodel import select, Session
 from ..db import get_session, DATA_DIR
-from ..models import Meeting, License, LicenseTier, TIER_LIMITS
+from ..models import Meeting, License, LicenseTier, TIER_LIMITS, LicenseUsage
 from ..services.pipeline import process_meeting, send_summary_email, process_meeting_transcribe_summarize, process_meeting_transcribe_only
 
 import json, re, os
@@ -241,50 +241,65 @@ def get_meeting_stats(
     """
     Get meeting statistics for the current user
     Returns counts of total, completed, processing, and current month meetings
+    
+    IMPORTANT: meetings_this_month gets usage from LicenseUsage table
+    This ensures quota tracking is accurate and users can't recover quota by deleting meetings
     """
     
-    # For now, return global stats (in production, filter by user/license)
     from datetime import datetime
     from sqlmodel import func
     
+    # Current meetings (excludes deleted) - filtered by license_id
     total_meetings = db.exec(
-        select(func.count(Meeting.id))
+        select(func.count(Meeting.id)).where(Meeting.license_id == license.id)
     ).one()
     
     completed_meetings = db.exec(
-        select(func.count(Meeting.id)).where(Meeting.status == "delivered")
+        select(func.count(Meeting.id)).where(
+            (Meeting.license_id == license.id) & (Meeting.status == "delivered")
+        )
     ).one()
     
     processing_meetings = db.exec(
         select(func.count(Meeting.id)).where(
-            (Meeting.status == "processing") | (Meeting.status == "queued")
+            (Meeting.license_id == license.id) & 
+            ((Meeting.status == "processing") | (Meeting.status == "queued"))
         )
     ).one()
     
-    # Meetings this month
-    now = datetime.now()
-    first_day_of_month = datetime(now.year, now.month, 1)
-    
-    meetings_this_month = db.exec(
-        select(func.count(Meeting.id)).where(
-            Meeting.created_at >= first_day_of_month
+    # Get accurate usage count from LicenseUsage table (includes deleted meetings)
+    # This value is tracked separately and reset monthly
+    now = datetime.utcnow()
+    usage = db.exec(
+        select(LicenseUsage).where(
+            LicenseUsage.license_key == license.license_key,
+            LicenseUsage.year == now.year,
+            LicenseUsage.month == now.month
         )
-    ).one()
+    ).first()
+    
+    meetings_this_month = usage.meetings_used if usage else 0
     
     return {
-        "total_meetings": total_meetings,
-        "completed": completed_meetings,
-        "processing": processing_meetings,
-        "meetings_this_month": meetings_this_month,
+        "total_meetings": total_meetings,        # Current meetings only
+        "completed": completed_meetings,          # Current completed meetings
+        "processing": processing_meetings,        # Current processing meetings  
+        "meetings_this_month": meetings_this_month,  # Total used (includes deleted)
         "current_month": now.strftime("%B %Y"),
     }
     
 @router.get("/list")
-def list_meetings(db: Session = Depends(get_session)):
-    """Get all meetings ordered by creation date (newest first) with storage info"""
+def list_meetings(
+    license: License = Depends(get_license_from_key),  # ADD THIS
+    db: Session = Depends(get_session)
+):
+    """Get all meetings for current user ordered by creation date (newest first) with storage info"""
     try:
+        # Filter by license_id
         meetings = db.exec(
-            select(Meeting).order_by(Meeting.created_at.desc())
+            select(Meeting)
+            .where(Meeting.license_id == license.id)  # ADD THIS
+            .order_by(Meeting.created_at.desc())
         ).all()
         
         # Add storage info to each meeting
@@ -315,11 +330,20 @@ def list_meetings(db: Session = Depends(get_session)):
         raise HTTPException(500, f"Failed to fetch meetings: {str(e)}")
     
 @router.get("/{meeting_id}/status")
-def meeting_status(meeting_id: int, db: Session = Depends(get_session)):
+def meeting_status(
+    meeting_id: int,
+    license: License = Depends(get_license_from_key),  # ADD THIS
+    db: Session = Depends(get_session)
+):
     """Get meeting status with cloud storage info"""
+    # Get meeting and verify ownership
     m = db.get(Meeting, meeting_id)
     if not m:
         raise HTTPException(404, "Not found")
+    
+    # Security check: verify this meeting belongs to this user
+    if m.license_id != license.id:
+        raise HTTPException(403, "Access denied - this meeting belongs to another user")
     
     # Check if files are in cloud
     transcript_in_cloud = m.transcript_path and m.transcript_path.startswith("s3://")
@@ -695,61 +719,109 @@ async def create_from_url_transcribe_only(
     }
 
 @router.get("/{meeting_id}")
-def get_meeting(meeting_id: int):
+def get_meeting(
+    meeting_id: int,
+    license: License = Depends(get_license_from_key)
+):
     """Get meeting details"""
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
         if not m:
             raise HTTPException(status_code=404, detail="Not found")
+        
+        # Security check
+        if m.license_id != license.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
         return m
 
 
 @router.get("/{meeting_id}/download/transcript")
-def download_transcript(meeting_id: int):
+def download_transcript(
+    meeting_id: int,
+    license: License = Depends(get_license_from_key)
+):
     """Download meeting transcript"""
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
-        if not (m and m.transcript_path and Path(m.transcript_path).exists()):
+        if not m:
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        # Security check
+        if m.license_id != license.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        if not (m.transcript_path and Path(m.transcript_path).exists()):
             raise HTTPException(status_code=404, detail="Transcript not found")
+        
         return FileResponse(
             m.transcript_path,
             media_type="text/plain",
             filename=Path(m.transcript_path).name
         )
 
+
 @router.get("/{meeting_id}/download/summary")
-def download_summary(meeting_id: int):
+def download_summary(
+    meeting_id: int,
+    license: License = Depends(get_license_from_key)
+):
     """Download meeting summary (as file attachment)"""
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
-        if not (m and m.summary_path and Path(m.summary_path).exists()):
+        if not m:
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        # Security check
+        if m.license_id != license.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        if not (m.summary_path and Path(m.summary_path).exists()):
             raise HTTPException(status_code=404, detail="Summary not found")
+        
         return FileResponse(
             m.summary_path,
             media_type="application/json",
             filename=Path(m.summary_path).name
         )
 
+
 @router.get("/{meeting_id}/summary")
-def get_summary(meeting_id: int):
+def get_summary(
+    meeting_id: int,
+    license: License = Depends(get_license_from_key)
+):
     """Get meeting summary as JSON (for reading, not downloading)"""
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
-        if not (m and m.summary_path and Path(m.summary_path).exists()):
+        if not m:
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        # Security check
+        if m.license_id != license.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        if not (m.summary_path and Path(m.summary_path).exists()):
             raise HTTPException(status_code=404, detail="Summary not found")
         
         summary_text = Path(m.summary_path).read_text(encoding="utf-8")
         return json.loads(summary_text)
-    
-# Add these endpoints to your meetings.py file
+
 
 @router.get("/{meeting_id}/transcript")
-def get_transcript(meeting_id: int):
+def get_transcript(
+    meeting_id: int,
+    license: License = Depends(get_license_from_key)
+):
     """Get meeting transcript as JSON (for reading, not downloading)"""
     with get_session() as s:
         m = s.get(Meeting, meeting_id)
         if not m:
             raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        # Security check
+        if m.license_id != license.id:
+            raise HTTPException(status_code=403, detail="Access denied")
         
         if not (m.transcript_path and Path(m.transcript_path).exists()):
             raise HTTPException(status_code=404, detail="Transcript not found")
