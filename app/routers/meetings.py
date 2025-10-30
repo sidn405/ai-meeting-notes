@@ -242,12 +242,13 @@ def get_meeting_stats(
     Get meeting statistics for the current user
     Returns counts of total, completed, processing, and current month meetings
     
-    IMPORTANT: meetings_this_month uses license.meetings_used which includes deleted meetings
+    IMPORTANT: meetings_this_month gets usage count from license service
     This ensures quota tracking is accurate and users can't recover quota by deleting meetings
     """
     
     from datetime import datetime
     from sqlmodel import func
+    from app.services.license import get_usage_count
     
     # Current meetings (excludes deleted) - filtered by license_id
     total_meetings = db.exec(
@@ -267,9 +268,9 @@ def get_meeting_stats(
         )
     ).one()
     
-    # Use license.meetings_used for accurate quota tracking (includes deleted meetings)
-    # This value is incremented in track_meeting_usage() and reset monthly
-    meetings_this_month = license.meetings_used
+    # Get accurate usage count from license service (includes deleted meetings)
+    # This value is tracked separately and reset monthly
+    meetings_this_month = get_usage_count(db, license.license_key)
     
     now = datetime.now()
     
