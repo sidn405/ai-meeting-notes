@@ -631,6 +631,8 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       'done',
       'finished',
       'downloaded_to_device',
+      'uploaded_to_cloud',
+      'ready_for_download',
     ];
     return completedStatuses.contains(status.toLowerCase());
   }
@@ -649,6 +651,8 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         return 'FAILED';
       case 'ready_for_download':
         return 'READY';
+      case 'uploaded_to_cloud':  // ADD THIS
+        return 'DONE';
       default:
         return status.toUpperCase();
     }
@@ -769,6 +773,8 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
 
   // Add this method to _MeetingsListScreenState class
 
+  // REPLACE your entire _showMeetingDetails method with this:
+
   void _showMeetingDetails(int id, String title, String status) {
     showModalBottomSheet(
       context: context,
@@ -816,91 +822,92 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       
-                      // Storage location indicator
+                      // Storage location indicator - Load cloud status first
                       FutureBuilder<Map<String, dynamic>>(
                         future: _api.getCloudStatus(id),
                         builder: (context, snapshot) {
-                          if (snapshot.hasData) {
-                            final cloudStatus = snapshot.data!;
-                            final storageLocation = cloudStatus['storage_location'] ?? 'local';
-                            final transcriptInCloud = cloudStatus['transcript_in_cloud'] ?? false;
-                            final summaryInCloud = cloudStatus['summary_in_cloud'] ?? false;
-                            
-                            if (storageLocation == 'cloud') {
-                              return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.blue.shade200),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.cloud, size: 16, color: Colors.blue.shade700),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Stored in Cloud',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.blue.shade700,
-                                      ),
+                          if (!snapshot.hasData) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Checking storage...',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
                                     ),
-                                  ],
-                                ),
-                              );
-                            } else {
-                              return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.green.shade200),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.phone_android, size: 16, color: Colors.green.shade700),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Stored on Device',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.green.shade700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
+                                  ),
+                                ],
+                              ),
+                            );
                           }
-                          return const SizedBox.shrink();
-                        },
-                      ),
-                      
-                      const SizedBox(height: 20),
-                      
-                      if (_isCompletedStatus(status)) ...[
-                        // Check storage location to show appropriate download options
-                        FutureBuilder<Map<String, dynamic>>(
-                          future: _api.getCloudStatus(id),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData) {
-                              return const Center(child: CircularProgressIndicator());
-                            }
-                            
-                            final cloudStatus = snapshot.data!;
-                            final storageLocation = cloudStatus['storage_location'] ?? 'local';
-                            final transcriptInCloud = cloudStatus['transcript_in_cloud'] ?? false;
-                            final summaryInCloud = cloudStatus['summary_in_cloud'] ?? false;
-                            
-                            return Column(
-                              children: [
-                                // View Transcript
+                          
+                          final cloudStatus = snapshot.data!;
+                          final storageLocation = cloudStatus['storage_location'] ?? 'local';
+                          final transcriptInCloud = cloudStatus['transcript_in_cloud'] ?? false;
+                          final summaryInCloud = cloudStatus['summary_in_cloud'] ?? false;
+                          
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Storage badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: storageLocation == 'cloud' 
+                                      ? Colors.blue.shade50 
+                                      : Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: storageLocation == 'cloud'
+                                        ? Colors.blue.shade200
+                                        : Colors.green.shade200,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      storageLocation == 'cloud' ? Icons.cloud : Icons.phone_android,
+                                      size: 16,
+                                      color: storageLocation == 'cloud'
+                                          ? Colors.blue.shade700
+                                          : Colors.green.shade700,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      storageLocation == 'cloud' ? 'Stored in Cloud' : 'Stored on Device',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: storageLocation == 'cloud'
+                                            ? Colors.blue.shade700
+                                            : Colors.green.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              
+                              const SizedBox(height: 20),
+                              
+                              // Action buttons based on status and storage
+                              if (_isCompletedStatus(status)) ...[
+                                // View/Download Transcript
                                 if (transcriptInCloud) ...[
                                   _actionButton(
                                     icon: Icons.cloud_download,
@@ -924,7 +931,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                                 
                                 const SizedBox(height: 12),
                                 
-                                // View Summary
+                                // View/Download Summary
                                 if (summaryInCloud) ...[
                                   _actionButton(
                                     icon: Icons.cloud_download,
@@ -948,7 +955,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                                 
                                 const SizedBox(height: 12),
                                 
-                                // Upload to Cloud button (if Pro/Business and files are local)
+                                // Upload to Cloud (Pro/Business only, if files are local)
                                 if (_api.hasCloudStorage && 
                                     storageLocation == 'local' &&
                                     cloudStatus['can_upload_to_cloud'] == true) ...[
@@ -960,6 +967,18 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                                       _uploadToCloud(id, title);
                                     },
                                     color: Colors.purple,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    child: Text(
+                                      'Store permanently in cloud and free up server space',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade600,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
                                   ),
                                   const SizedBox(height: 12),
                                 ],
@@ -974,47 +993,61 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                                     _deleteMeeting(id, title);
                                   },
                                 ),
+                              ] else if (status == 'processing' || status == 'queued') ...[
+                                const Center(
+                                  child: Column(
+                                    children: [
+                                      CircularProgressIndicator(),
+                                      SizedBox(height: 16),
+                                      Text(
+                                        'Processing in progress...',
+                                        style: TextStyle(fontSize: 16),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ] else if (status == 'failed') ...[
+                                Center(
+                                  child: Column(
+                                    children: [
+                                      Icon(Icons.error_outline, color: Colors.red, size: 48),
+                                      const SizedBox(height: 16),
+                                      const Text(
+                                        'This meeting failed to process',
+                                        style: TextStyle(color: Colors.red, fontSize: 16),
+                                      ),
+                                      const SizedBox(height: 20),
+                                      _actionButton(
+                                        icon: Icons.delete,
+                                        label: 'Delete Meeting',
+                                        color: Colors.red,
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          _deleteMeeting(id, title);
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ] else ...[
+                                Center(
+                                  child: Column(
+                                    children: [
+                                      Icon(Icons.info_outline, color: Colors.orange, size: 48),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Status: ${_getStatusLabel(status)}',
+                                        style: const TextStyle(fontSize: 16),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ],
-                            );
-                          },
-                        ),
-                      ] else if (status == 'processing' || status == 'queued') ...[
-                        const Center(
-                          child: Column(
-                            children: [
-                              CircularProgressIndicator(),
-                              SizedBox(height: 16),
-                              Text(
-                                'Processing in progress...',
-                                style: TextStyle(fontSize: 16),
-                              ),
                             ],
-                          ),
-                        ),
-                      ] else if (status == 'failed') ...[
-                        Center(
-                          child: Column(
-                            children: [
-                              Icon(Icons.error_outline, color: Colors.red, size: 48),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'This meeting failed to process',
-                                style: TextStyle(color: Colors.red, fontSize: 16),
-                              ),
-                              const SizedBox(height: 20),
-                              _actionButton(
-                                icon: Icons.delete,
-                                label: 'Delete Meeting',
-                                color: Colors.red,
-                                onPressed: () {
-                                  Navigator.pop(context);
-                                  _deleteMeeting(id, title);
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                          );
+                        },
+                      ),
+                      
                       const SizedBox(height: 20),
                       TextButton(
                         onPressed: () => Navigator.pop(context),
@@ -1031,160 +1064,160 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     );
   }
 
-// Add these new methods to handle cloud operations
+  // Add these new methods to handle cloud operations
 
-Future<void> _downloadFromCloud(int id, String type, String title) async {
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => AlertDialog(
-      content: Row(
-        children: [
-          const CircularProgressIndicator(),
-          const SizedBox(width: 20),
-          Text('Downloading from cloud...'),
-        ],
+  Future<void> _downloadFromCloud(int id, String type, String title) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Text('Downloading from cloud...'),
+          ],
+        ),
       ),
-    ),
-  );
+    );
 
-  try {
-    final downloadInfo = await _api.downloadMeetingFile(id, type);
-    final url = downloadInfo['download_url'];
-    final storage = downloadInfo['storage'];
-    
-    if (storage == 'cloud') {
-      // This is a presigned B2 URL
-      final uri = Uri.parse(url);
+    try {
+      final downloadInfo = await _api.downloadMeetingFile(id, type);
+      final url = downloadInfo['download_url'];
+      final storage = downloadInfo['storage'];
+      
+      if (storage == 'cloud') {
+        // This is a presigned B2 URL
+        final uri = Uri.parse(url);
+        
+        if (!mounted) return;
+        Navigator.pop(context);
+        
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Downloaded $type from cloud'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } else {
+          throw Exception('Could not open download URL');
+        }
+      } else {
+        // Local file - use regular download
+        throw Exception('File is not in cloud storage');
+      }
+    } catch (e) {
+      print('Error downloading from cloud: $e');
       
       if (!mounted) return;
       Navigator.pop(context);
       
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Downloaded $type from cloud'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      } else {
-        throw Exception('Could not open download URL');
-      }
-    } else {
-      // Local file - use regular download
-      throw Exception('File is not in cloud storage');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Download failed: ${e.toString().replaceAll("Exception: ", "")}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
-  } catch (e) {
-    print('Error downloading from cloud: $e');
-    
-    if (!mounted) return;
-    Navigator.pop(context);
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Download failed: ${e.toString().replaceAll("Exception: ", "")}'),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 4),
-      ),
-    );
   }
-}
 
-Future<void> _uploadToCloud(int id, String title) async {
-  // Confirm upload
-  final confirm = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Row(
-        children: [
-          Icon(Icons.cloud_upload, color: Colors.purple),
-          const SizedBox(width: 12),
-          const Text('Upload to Cloud'),
-        ],
-      ),
-      content: Text(
-        'Upload "$title" to cloud storage?\n\n'
-        'This will:\n'
-        '• Upload transcript and summary to cloud\n'
-        '• Delete local copies from server\n'
-        '• Files will be permanently stored in cloud\n\n'
-        'Your device copy will remain intact.'
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
+  Future<void> _uploadToCloud(int id, String title) async {
+    // Confirm upload
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.cloud_upload, color: Colors.purple),
+            const SizedBox(width: 12),
+            const Text('Upload to Cloud'),
+          ],
         ),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(context, true),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.purple,
-            foregroundColor: Colors.white,
+        content: Text(
+          'Upload "$title" to cloud storage?\n\n'
+          'This will:\n'
+          '• Upload transcript and summary to cloud\n'
+          '• Delete local copies from server\n'
+          '• Files will be permanently stored in cloud\n\n'
+          'Your device copy will remain intact.'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
           ),
-          child: const Text('Upload'),
-        ),
-      ],
-    ),
-  );
-
-  if (confirm != true) return;
-
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => const AlertDialog(
-      content: Row(
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(width: 20),
-          Text('Uploading to cloud...'),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Upload'),
+          ),
         ],
       ),
-    ),
-  );
+    );
 
-  try {
-    // ApiService.dio already includes the license key in headers
-    final response = await _api.dio.post(
-      '${_api.baseUrl}/meetings/$id/upload-to-cloud',
-    );
-    
-    if (!mounted) return;
-    Navigator.pop(context);
-    
-    final data = response.data;
-    final uploadedFiles = data['uploaded_files'] ?? [];
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('✅ Uploaded ${uploadedFiles.join(", ")} to cloud'),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 3),
+    if (confirm != true) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('Uploading to cloud...'),
+          ],
+        ),
       ),
     );
-    
-    // Refresh meetings list
-    _loadMeetings();
-    
-  } catch (e) {
-    print('Error uploading to cloud: $e');
-    
-    if (!mounted) return;
-    Navigator.pop(context);
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Upload failed: ${e.toString().replaceAll("Exception: ", "")}'),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 4),
-      ),
-    );
+
+    try {
+      // ApiService.dio already includes the license key in headers
+      final response = await _api.dio.post(
+        '${_api.baseUrl}/meetings/$id/upload-to-cloud',
+      );
+      
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      final data = response.data;
+      final uploadedFiles = data['uploaded_files'] ?? [];
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Uploaded ${uploadedFiles.join(", ")} to cloud'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      
+      // Refresh meetings list
+      _loadMeetings();
+      
+    } catch (e) {
+      print('Error uploading to cloud: $e');
+      
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Upload failed: ${e.toString().replaceAll("Exception: ", "")}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
-}
 
   Future<void> _emailMeeting(int id, String title) async {
     final emailController = TextEditingController();
