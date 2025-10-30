@@ -179,33 +179,36 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
   }
 
   Widget _buildStorageBadge(Map<String, dynamic> meeting) {
-    final hasCloudStorage = _api.hasCloudStorage;
+    final storageLocation = meeting['storage_location'] ?? 'local';
     final status = meeting['status'] ?? '';
     
-    if (hasCloudStorage) {
+    if (storageLocation == 'cloud') {
+      // Pro/Business tier - files in B2 cloud
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: badgeSwatch.shade50,
+          color: Colors.blue.shade50,
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue.shade200),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud, size: 12, color: badgeSwatch.shade50),
+            Icon(Icons.cloud, size: 12, color: Colors.blue.shade700),
             const SizedBox(width: 4),
             Text(
               'Cloud',
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
-                color: badgeSwatch.shade700,
+                color: Colors.blue.shade700,
               ),
             ),
           ],
         ),
       );
     } else {
+      // Free/Starter tier or Pro/Business with local files
       Color badgeColor;
       String badgeText;
       IconData badgeIcon;
@@ -227,20 +230,21 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: badgeSwatch.shade50,
+          color: badgeColor.withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: badgeColor.withOpacity(0.3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(badgeIcon, size: 12, color: badgeSwatch.shade700),
+            Icon(badgeIcon, size: 12, color: badgeColor),
             const SizedBox(width: 4),
             Text(
               badgeText,
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
-                color: badgeSwatch.shade700,
+                color: badgeColor,
               ),
             ),
           ],
@@ -763,124 +767,204 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     }
   }
 
-  void _showMeetingDetails(int id, String title, String status) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (context, scrollController) => Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+  // Add this method to _MeetingsListScreenState class
+
+void _showMeetingDetails(int id, String title, String status) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (context) => DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) => Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const SizedBox(height: 20),
-              
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: scrollController,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
+            ),
+            const SizedBox(height: 20),
+            
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scrollController,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
                       ),
-                      const SizedBox(height: 20),
-                      if (_isCompletedStatus(status)) ...[
-                        _actionButton(
-                          icon: Icons.description,
-                          label: 'View Transcript',
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _openTranscriptOfflineFirst(id);
-                          },                       
-                        ),
-                        const SizedBox(height: 12),
-                        _actionButton(
-                          icon: Icons.auto_awesome,
-                          label: 'View Summary',
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _openSummaryOfflineFirst(id);
-                          },
-                        ),
-                        //const SizedBox(height: 12),
-                        //_actionButton(
-                          //icon: Icons.email,
-                          //label: 'Email Meeting',
-                          //onPressed: () {
-                            //Navigator.pop(context);
-                            //_emailMeeting(id, title);
-                          //},
-                        //),
-                        //const SizedBox(height: 12),
-                        //_actionButton(
-                          //icon: Icons.download,
-                          //label: 'Download Files',
-                          //onPressed: () {
-                            //Navigator.pop(context);
-                            //_downloadMeetingFiles(id, title);
-                          //},
-                        //),
-                        const SizedBox(height: 12),
-                        _actionButton(
-                          icon: Icons.delete,
-                          label: 'Delete Meeting',
-                          color: Colors.red,
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _deleteMeeting(id, title);
-                          },
-                        ),
-                      ] else if (status == 'processing' || status == 'queued') ...[
-                        const Center(
-                          child: Column(
-                            children: [
-                              CircularProgressIndicator(),
-                              SizedBox(height: 16),
-                              Text(
-                                'Processing in progress...',
-                                style: TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    
+                    // Storage location indicator
+                    FutureBuilder<Map<String, dynamic>>(
+                      future: _api.getCloudStatus(id),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          final cloudStatus = snapshot.data!;
+                          final storageLocation = cloudStatus['storage_location'] ?? 'local';
+                          final transcriptInCloud = cloudStatus['transcript_in_cloud'] ?? false;
+                          final summaryInCloud = cloudStatus['summary_in_cloud'] ?? false;
+                          
+                          if (storageLocation == 'cloud') {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.blue.shade200),
                               ),
-                            ],
-                          ),
-                        ),
-                      ] else if (status == 'failed') ...[
-                        Center(
-                          child: Column(
-                            children: [
-                              Icon(Icons.error_outline, color: Colors.red, size: 48),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'This meeting failed to process',
-                                style: TextStyle(color: Colors.red, fontSize: 16),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.cloud, size: 16, color: Colors.blue.shade700),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Stored in Cloud',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.blue.shade700,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 20),
+                            );
+                          } else {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.green.shade200),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.phone_android, size: 16, color: Colors.green.shade700),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Stored on Device',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.green.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                    
+                    const SizedBox(height: 20),
+                    
+                    if (_isCompletedStatus(status)) ...[
+                      // Check storage location to show appropriate download options
+                      FutureBuilder<Map<String, dynamic>>(
+                        future: _api.getCloudStatus(id),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
+                          
+                          final cloudStatus = snapshot.data!;
+                          final storageLocation = cloudStatus['storage_location'] ?? 'local';
+                          final transcriptInCloud = cloudStatus['transcript_in_cloud'] ?? false;
+                          final summaryInCloud = cloudStatus['summary_in_cloud'] ?? false;
+                          
+                          return Column(
+                            children: [
+                              // View Transcript
+                              if (transcriptInCloud) ...[
+                                _actionButton(
+                                  icon: Icons.cloud_download,
+                                  label: 'Download Transcript from Cloud',
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _downloadFromCloud(id, 'transcript', title);
+                                  },
+                                  color: Colors.blue,
+                                ),
+                              ] else ...[
+                                _actionButton(
+                                  icon: Icons.description,
+                                  label: 'View Transcript',
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _openTranscriptOfflineFirst(id);
+                                  },
+                                ),
+                              ],
+                              
+                              const SizedBox(height: 12),
+                              
+                              // View Summary
+                              if (summaryInCloud) ...[
+                                _actionButton(
+                                  icon: Icons.cloud_download,
+                                  label: 'Download Summary from Cloud',
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _downloadFromCloud(id, 'summary', title);
+                                  },
+                                  color: Colors.blue,
+                                ),
+                              ] else ...[
+                                _actionButton(
+                                  icon: Icons.auto_awesome,
+                                  label: 'View Summary',
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _openSummaryOfflineFirst(id);
+                                  },
+                                ),
+                              ],
+                              
+                              const SizedBox(height: 12),
+                              
+                              // Upload to Cloud button (if Pro/Business and files are local)
+                              if (_api.hasCloudStorage && 
+                                  storageLocation == 'local' &&
+                                  cloudStatus['can_upload_to_cloud'] == true) ...[
+                                _actionButton(
+                                  icon: Icons.cloud_upload,
+                                  label: 'Upload to Cloud Storage',
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _uploadToCloud(id, title);
+                                  },
+                                  color: Colors.purple,
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              
+                              // Delete Meeting
                               _actionButton(
                                 icon: Icons.delete,
                                 label: 'Delete Meeting',
@@ -891,42 +975,216 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                                 },
                               ),
                             ],
-                          ),
+                          );
+                        },
+                      ),
+                    ] else if (status == 'processing' || status == 'queued') ...[
+                      const Center(
+                        child: Column(
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 16),
+                            Text(
+                              'Processing in progress...',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                          ],
                         ),
-                      ] else ...[
-                        Center(
-                          child: Column(
-                            children: [
-                              Icon(Icons.info_outline, color: Colors.orange, size: 48),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Status: ${_getStatusLabel(status)}',
-                                style: const TextStyle(fontSize: 16),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'This meeting is in an unknown state',
-                                style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-                              ),
-                            ],
-                          ),
+                      ),
+                    ] else if (status == 'failed') ...[
+                      Center(
+                        child: Column(
+                          children: [
+                            Icon(Icons.error_outline, color: Colors.red, size: 48),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'This meeting failed to process',
+                              style: TextStyle(color: Colors.red, fontSize: 16),
+                            ),
+                            const SizedBox(height: 20),
+                            _actionButton(
+                              icon: Icons.delete,
+                              label: 'Delete Meeting',
+                              color: Colors.red,
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _deleteMeeting(id, title);
+                              },
+                            ),
+                          ],
                         ),
-                      ],
-                      const SizedBox(height: 20),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Center(child: Text('Close')),
                       ),
                     ],
-                  ),
+                    const SizedBox(height: 20),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Center(child: Text('Close')),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+      ),
+    ),
+  );
+}
+
+// Add these new methods to handle cloud operations
+
+Future<void> _downloadFromCloud(int id, String type, String title) async {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      content: Row(
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(width: 20),
+          Text('Downloading from cloud...'),
+        ],
+      ),
+    ),
+  );
+
+  try {
+    final downloadInfo = await _api.downloadMeetingFile(id, type);
+    final url = downloadInfo['download_url'];
+    final storage = downloadInfo['storage'];
+    
+    if (storage == 'cloud') {
+      // This is a presigned B2 URL
+      final uri = Uri.parse(url);
+      
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Downloaded $type from cloud'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        throw Exception('Could not open download URL');
+      }
+    } else {
+      // Local file - use regular download
+      throw Exception('File is not in cloud storage');
+    }
+  } catch (e) {
+    print('Error downloading from cloud: $e');
+    
+    if (!mounted) return;
+    Navigator.pop(context);
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Download failed: ${e.toString().replaceAll("Exception: ", "")}'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
       ),
     );
   }
+}
+
+Future<void> _uploadToCloud(int id, String title) async {
+  // Confirm upload
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.cloud_upload, color: Colors.purple),
+          const SizedBox(width: 12),
+          const Text('Upload to Cloud'),
+        ],
+      ),
+      content: Text(
+        'Upload "$title" to cloud storage?\n\n'
+        'This will:\n'
+        '• Upload transcript and summary to cloud\n'
+        '• Delete local copies from server\n'
+        '• Files will be permanently stored in cloud\n\n'
+        'Your device copy will remain intact.'
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.purple,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Upload'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm != true) return;
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => const AlertDialog(
+      content: Row(
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(width: 20),
+          Text('Uploading to cloud...'),
+        ],
+      ),
+    ),
+  );
+
+  try {
+    final response = await _api.dio.post(
+      '${_api.baseUrl}/meetings/$id/upload-to-cloud',
+      options: Options(headers: {'X-License-Key': _api.licenseKey}),
+    );
+    
+    if (!mounted) return;
+    Navigator.pop(context);
+    
+    final data = response.data;
+    final uploadedFiles = data['uploaded_files'] ?? [];
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✅ Uploaded ${uploadedFiles.join(", ")} to cloud'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+    
+    // Refresh meetings list
+    _loadMeetings();
+    
+  } catch (e) {
+    print('Error uploading to cloud: $e');
+    
+    if (!mounted) return;
+    Navigator.pop(context);
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Upload failed: ${e.toString().replaceAll("Exception: ", "")}'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+}
 
   Future<void> _emailMeeting(int id, String title) async {
     final emailController = TextEditingController();

@@ -829,24 +829,24 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                             _openSummaryOfflineFirst(id);
                           },
                         ),
-                        const SizedBox(height: 12),
-                        _actionButton(
-                          icon: Icons.email,
-                          label: 'Email Meeting',
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _emailMeeting(id, title);
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        _actionButton(
-                          icon: Icons.download,
-                          label: 'Download Files',
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _downloadMeetingFiles(id, title);
-                          },
-                        ),
+                        //const SizedBox(height: 12),
+                        //_actionButton(
+                          //icon: Icons.email,
+                          //label: 'Email Meeting',
+                          //onPressed: () {
+                            //Navigator.pop(context);
+                            //_emailMeeting(id, title);
+                          //},
+                        //),
+                        //const SizedBox(height: 12),
+                        //_actionButton(
+                          //icon: Icons.download,
+                          //label: 'Download Files',
+                          //onPressed: () {
+                            //Navigator.pop(context);
+                            //_downloadMeetingFiles(id, title);
+                          //},
+                        //),
                         const SizedBox(height: 12),
                         _actionButton(
                           icon: Icons.delete,
