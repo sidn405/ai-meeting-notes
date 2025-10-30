@@ -76,7 +76,7 @@ dev_dependencies:
     sdk: flutter
   flutter_launcher_icons: ^0.13.1
 flutter_launcher_icons:
-  android: "assets/icon/app_icon.png"  # Use full icon with gradient
+  android: true
   ios: true
   image_path: "assets/icon/app_icon.png"
   remove_alpha_ios: true
@@ -104,7 +104,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-    # Add your banner images
+     - assets/icon/
      - assets/banners/banner1.png
      - assets/banners/banner2.png
      - assets/banners/banner3.png
