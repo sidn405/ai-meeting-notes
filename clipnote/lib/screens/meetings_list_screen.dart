@@ -773,8 +773,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
 
   // Add this method to _MeetingsListScreenState class
 
-  // REPLACE your entire _showMeetingDetails method with this:
-
   void _showMeetingDetails(int id, String title, String status) {
     showModalBottomSheet(
       context: context,
@@ -1812,7 +1810,11 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       final meetings = await _api.getMeetings();
       
       for (var meeting in meetings) {
-        if (meeting['status'] == 'ready_for_download') {
+        final status = meeting['status'] ?? '';
+        final storageLocation = meeting['storage_location'] ?? 'local';
+        
+        // Only auto-download if status is ready AND files are local (not cloud)
+        if (status == 'ready_for_download' && storageLocation == 'local') {
           print('[MeetingsList] 📽 Auto-downloading meeting ${meeting['id']}');
           await _autoDownloadMeeting(meeting);
         }
@@ -1825,6 +1827,13 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
   Future<void> _autoDownloadMeeting(Map<String, dynamic> meeting) async {
     final int id = meeting['id'];
     final String title = meeting['title'] ?? 'Untitled';
+    final storageLocation = meeting['storage_location'] ?? 'local';
+    
+    // Skip auto-download for cloud-stored files
+    if (storageLocation == 'cloud') {
+      print('[MeetingsList] ⏭️ Skipping auto-download for cloud-stored meeting: $title');
+      return;
+    }
     
     try {
       print('[MeetingsList] 📥 Auto-downloading: $title');
@@ -1847,6 +1856,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         print('[MeetingsList] ⚠️ Summary download failed: $e');
       }
       
+      // Only confirm download for local files (Free/Starter tiers)
       if (transcriptSuccess && summarySuccess) {
         await _api.confirmDownloadComplete(id);
         
