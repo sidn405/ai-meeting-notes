@@ -80,9 +80,8 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/icon/app_icon.png"
   remove_alpha_ios: true
-  # Remove adaptive icon settings
-  # adaptive_icon_background: "#8B9FEE"  # Your icon's background color
-  # adaptive_icon_foreground: "assets/icon/foreground.png"
+  adaptive_icon_background: "#8B9FEE"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"  # Use the SAME full icon
  
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
