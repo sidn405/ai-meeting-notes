@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pathlib import Path
 from sqlmodel import select, Session
 from ..db import get_session, DATA_DIR
-from ..models import Meeting, License, LicenseTier, TIER_LIMITS
+from ..models import Meeting, License, LicenseTier, TIER_LIMITS, LicenseUsage
 from ..services.pipeline import process_meeting, send_summary_email, process_meeting_transcribe_summarize, process_meeting_transcribe_only
 
 import json, re, os
@@ -242,13 +242,12 @@ def get_meeting_stats(
     Get meeting statistics for the current user
     Returns counts of total, completed, processing, and current month meetings
     
-    IMPORTANT: meetings_this_month gets usage count from license service
+    IMPORTANT: meetings_this_month gets usage from LicenseUsage table
     This ensures quota tracking is accurate and users can't recover quota by deleting meetings
     """
     
     from datetime import datetime
     from sqlmodel import func
-    from app.services.license import get_usage_count
     
     # Current meetings (excludes deleted) - filtered by license_id
     total_meetings = db.exec(
@@ -268,11 +267,18 @@ def get_meeting_stats(
         )
     ).one()
     
-    # Get accurate usage count from license service (includes deleted meetings)
+    # Get accurate usage count from LicenseUsage table (includes deleted meetings)
     # This value is tracked separately and reset monthly
-    meetings_this_month = get_usage_count(db, license.license_key)
+    now = datetime.utcnow()
+    usage = db.exec(
+        select(LicenseUsage).where(
+            LicenseUsage.license_key == license.license_key,
+            LicenseUsage.year == now.year,
+            LicenseUsage.month == now.month
+        )
+    ).first()
     
-    now = datetime.now()
+    meetings_this_month = usage.meetings_used if usage else 0
     
     return {
         "total_meetings": total_meetings,        # Current meetings only
