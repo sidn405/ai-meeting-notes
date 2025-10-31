@@ -59,12 +59,28 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
       return const SizedBox.shrink();
     }
 
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth >= 600;
-    final adaptiveHeight = isTablet ? widget.height * 1.5 : widget.height;
-    final adaptivePadding = isTablet 
-        ? const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
-        : widget.padding;
+    final size = MediaQuery.of(context).size;
+    final isLandscape = size.width > size.height;
+    final isTablet = size.shortestSide >= 600;
+    
+    // Adjust height based on orientation and device type
+    double adaptiveHeight;
+    EdgeInsets adaptivePadding;
+    
+    if (isLandscape) {
+      // Landscape mode - use smaller height
+      adaptiveHeight = isTablet ? 80 : 60;
+      adaptivePadding = EdgeInsets.symmetric(
+        horizontal: isTablet ? 40 : 20,
+        vertical: isTablet ? 8 : 6,
+      );
+    } else {
+      // Portrait mode - use normal/larger height
+      adaptiveHeight = isTablet ? widget.height * 1.5 : widget.height;
+      adaptivePadding = isTablet 
+          ? const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
+          : widget.padding;
+    }
 
     return Padding(
       padding: adaptivePadding,
@@ -229,12 +245,28 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
     }
 
     final currentBanner = _banners[_currentIndex];
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth >= 600;
-    final adaptiveHeight = isTablet ? widget.height * 1.5 : widget.height;
-    final adaptivePadding = isTablet 
-        ? const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
-        : widget.padding;
+    final size = MediaQuery.of(context).size;
+    final isLandscape = size.width > size.height;
+    final isTablet = size.shortestSide >= 600;
+    
+    // Adjust height based on orientation and device type
+    double adaptiveHeight;
+    EdgeInsets adaptivePadding;
+    
+    if (isLandscape) {
+      // Landscape mode - use smaller height
+      adaptiveHeight = isTablet ? 80 : 60;
+      adaptivePadding = EdgeInsets.symmetric(
+        horizontal: isTablet ? 40 : 20,
+        vertical: isTablet ? 8 : 6,
+      );
+    } else {
+      // Portrait mode - use normal/larger height
+      adaptiveHeight = isTablet ? widget.height * 1.5 : widget.height;
+      adaptivePadding = isTablet 
+          ? const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
+          : widget.padding;
+    }
 
     return Padding(
       padding: adaptivePadding,
