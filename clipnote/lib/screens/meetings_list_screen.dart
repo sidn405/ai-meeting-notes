@@ -771,7 +771,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     }
   }
 
-  // Add this method to _MeetingsListScreenState class
+  // Add these methods to your _MeetingsListScreenState class
 
   void _showMeetingDetails(int id, String title, String status) {
     showModalBottomSheet(
@@ -822,35 +822,41 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                       ),
                       const SizedBox(height: 12),
                       
-                      // Storage location indicator - Load cloud status first
+                      // Load cloud status and show appropriate actions
                       FutureBuilder<Map<String, dynamic>>(
                         future: _api.getCloudStatus(id),
                         builder: (context, snapshot) {
                           if (!snapshot.hasData) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  SizedBox(
-                                    width: 12,
-                                    height: 12,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                            return Column(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Checking storage...',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade600,
-                                    ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Checking storage...',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(height: 20),
+                                const Center(child: CircularProgressIndicator()),
+                              ],
                             );
                           }
                           
@@ -858,11 +864,12 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                           final storageLocation = cloudStatus['storage_location'] ?? 'local';
                           final transcriptInCloud = cloudStatus['transcript_in_cloud'] ?? false;
                           final summaryInCloud = cloudStatus['summary_in_cloud'] ?? false;
+                          final canUploadToCloud = cloudStatus['can_upload_to_cloud'] ?? false;
                           
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Storage badge
+                              // Storage location badge
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(
@@ -888,7 +895,9 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
-                                      storageLocation == 'cloud' ? 'Stored in Cloud' : 'Stored on Device',
+                                      storageLocation == 'cloud' 
+                                          ? 'Stored in Cloud (B2)' 
+                                          : 'Stored on Device',
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
@@ -903,10 +912,11 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                               
                               const SizedBox(height: 20),
                               
-                              // Action buttons based on status and storage
+                              // Action buttons based on status
                               if (_isCompletedStatus(status)) ...[
-                                // View/Download Transcript
+                                // TRANSCRIPT ACTIONS
                                 if (transcriptInCloud) ...[
+                                  // Files in cloud - show download from cloud button
                                   _actionButton(
                                     icon: Icons.cloud_download,
                                     label: 'Download Transcript from Cloud',
@@ -917,9 +927,10 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                                     color: Colors.blue,
                                   ),
                                 ] else ...[
+                                  // Files on device - show view locally button
                                   _actionButton(
                                     icon: Icons.description,
-                                    label: 'View Transcript',
+                                    label: 'View Transcript (Local)',
                                     onPressed: () {
                                       Navigator.pop(context);
                                       _openTranscriptOfflineFirst(id);
@@ -929,8 +940,9 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                                 
                                 const SizedBox(height: 12),
                                 
-                                // View/Download Summary
+                                // SUMMARY ACTIONS
                                 if (summaryInCloud) ...[
+                                  // Files in cloud - show download from cloud button
                                   _actionButton(
                                     icon: Icons.cloud_download,
                                     label: 'Download Summary from Cloud',
@@ -941,9 +953,10 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                                     color: Colors.blue,
                                   ),
                                 ] else ...[
+                                  // Files on device - show view locally button
                                   _actionButton(
                                     icon: Icons.auto_awesome,
-                                    label: 'View Summary',
+                                    label: 'View Summary (Local)',
                                     onPressed: () {
                                       Navigator.pop(context);
                                       _openSummaryOfflineFirst(id);
@@ -953,10 +966,8 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                                 
                                 const SizedBox(height: 12),
                                 
-                                // Upload to Cloud (Pro/Business only, if files are local)
-                                if (_api.hasCloudStorage && 
-                                    storageLocation == 'local' &&
-                                    cloudStatus['can_upload_to_cloud'] == true) ...[
+                                // CLOUD UPLOAD OPTION (Pro/Business only, if files are local)
+                                if (canUploadToCloud && storageLocation == 'local') ...[
                                   _actionButton(
                                     icon: Icons.cloud_upload,
                                     label: 'Upload to Cloud Storage',
@@ -966,11 +977,11 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                                     },
                                     color: Colors.purple,
                                   ),
-                                  const SizedBox(height: 8),
+                                  const SizedBox(height: 4),
                                   Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12),
                                     child: Text(
-                                      'Store permanently in cloud and free up server space',
+                                      '💡 Upload to cloud for permanent storage and access from anywhere',
                                       style: TextStyle(
                                         fontSize: 11,
                                         color: Colors.grey.shade600,
@@ -981,7 +992,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                                   const SizedBox(height: 12),
                                 ],
                                 
-                                // Delete Meeting
+                                // DELETE BUTTON
                                 _actionButton(
                                   icon: Icons.delete,
                                   label: 'Delete Meeting',
@@ -1049,7 +1060,9 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
                       const SizedBox(height: 20),
                       TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Center(child: Text('Close')),
+                        child: const Center(
+                          child: Text('Close', style: TextStyle(fontSize: 16)),
+                        ),
                       ),
                     ],
                   ),
@@ -1062,8 +1075,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     );
   }
 
-  // Add these new methods to handle cloud operations
-
+  // NEW METHOD: Download from cloud using direct API call (no confirmation)
   Future<void> _downloadFromCloud(int id, String type, String title) async {
     showDialog(
       context: context,
@@ -1073,20 +1085,32 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
           children: [
             const CircularProgressIndicator(),
             const SizedBox(width: 20),
-            Text('Downloading from cloud...'),
+            Text('Getting cloud download link...'),
           ],
         ),
       ),
     );
 
     try {
-      final downloadInfo = await _api.downloadMeetingFile(id, type);
-      final url = downloadInfo['download_url'];
-      final storage = downloadInfo['storage'];
+      print('[MeetingsList] ☁️ Getting cloud download URL for $type (meeting $id)');
       
-      if (storage == 'cloud') {
-        // This is a presigned B2 URL
+      // Call download endpoint directly - returns presigned B2 URL for cloud files
+      final response = await _api.dio.get(
+        '${_api.baseUrl}/meetings/$id/download',
+        queryParameters: {'type': type},
+      );
+      
+      final downloadInfo = response.data;
+      
+      print('[MeetingsList] 📦 Download response: $downloadInfo');
+      
+      // Cloud files return download_url with presigned B2 URL
+      if (downloadInfo.containsKey('download_url')) {
+        final url = downloadInfo['download_url'] as String;
+        final storage = downloadInfo['storage'] ?? 'unknown';
         final uri = Uri.parse(url);
+        
+        print('[MeetingsList] 🔗 Storage: $storage, URL: ${url.substring(0, 100)}...');
         
         if (!mounted) return;
         Navigator.pop(context);
@@ -1097,20 +1121,41 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Downloaded $type from cloud'),
+              content: Text('✅ Downloading $type from cloud'),
               backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
+              duration: const Duration(seconds: 3),
             ),
           );
+          
+          print('[MeetingsList] ✅ Opened cloud download URL successfully');
         } else {
           throw Exception('Could not open download URL');
         }
       } else {
-        // Local file - use regular download
-        throw Exception('File is not in cloud storage');
+        throw Exception('No download URL in response');
       }
+    } on DioException catch (e) {
+      print('[MeetingsList] ❌ DioException: ${e.response?.statusCode} - ${e.message}');
+      
+      if (!mounted) return;
+      Navigator.pop(context);
+      
+      final statusCode = e.response?.statusCode;
+      final errorMsg = statusCode == 404 
+          ? 'File not found in cloud storage'
+          : statusCode == 403
+              ? 'Access denied to cloud file'
+              : 'Failed to get cloud download link';
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ $errorMsg'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
     } catch (e) {
-      print('Error downloading from cloud: $e');
+      print('[MeetingsList] ❌ Error downloading from cloud: $e');
       
       if (!mounted) return;
       Navigator.pop(context);
@@ -1125,8 +1170,8 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     }
   }
 
+  // Upload to cloud method
   Future<void> _uploadToCloud(int id, String title) async {
-    // Confirm upload
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1139,24 +1184,26 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         ),
         content: Text(
           'Upload "$title" to cloud storage?\n\n'
-          'This will:\n'
-          '• Upload transcript and summary to cloud\n'
-          '• Delete local copies from server\n'
-          '• Files will be permanently stored in cloud\n\n'
-          'Your device copy will remain intact.'
+          'Benefits:\n'
+          '✅ Permanent storage in Backblaze B2\n'
+          '✅ Access from any device\n'
+          '✅ Frees up server space\n'
+          '✅ Download anytime via cloud links\n\n'
+          'Your local device copy will remain intact.'
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.cloud_upload),
+            label: const Text('Upload'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.purple,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Upload'),
           ),
         ],
       ),
@@ -1179,7 +1226,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     );
 
     try {
-      // ApiService.dio already includes the license key in headers
       final response = await _api.dio.post(
         '${_api.baseUrl}/meetings/$id/upload-to-cloud',
       );
@@ -1198,7 +1244,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
         ),
       );
       
-      // Refresh meetings list
       _loadMeetings();
       
     } catch (e) {
