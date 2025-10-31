@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/banner_service.dart';
+import 'dart:math';
 
 class AffiliateBannerWidget extends StatefulWidget {
   final EdgeInsets padding;
@@ -20,6 +21,7 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
   final _bannerService = BannerService.I;
   BannerAd? _currentBanner;
   bool _impressionRecorded = false;
+  final diagonal = math.sqrt((size.width * size.width) + (size.height * size.height));
 
   @override
   void initState() {
@@ -59,13 +61,15 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
       return const SizedBox.shrink();
     }
 
-    // Detect tablet size
     final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth >= 600; // Standard tablet breakpoint
-    final bannerHeight = isTablet ? 120.0 : widget.height; // Larger for tablets
+    final isTablet = screenWidth >= 600;
+    final adaptiveHeight = isTablet ? widget.height * 1.5 : widget.height;
+    final adaptivePadding = isTablet 
+        ? EdgeInsets.symmetric(horizontal: 40, vertical: 16)
+        : widget.padding;
 
     return Padding(
-      padding: widget.padding,
+      padding: adaptivePadding,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -134,6 +138,7 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
                   top: 4,
                   right: 4,
                   child: Container(
+                    height: adaptiveHeight,  // Use adaptive height here
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.black54,
