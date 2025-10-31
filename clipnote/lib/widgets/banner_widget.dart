@@ -59,6 +59,11 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
       return const SizedBox.shrink();
     }
 
+    // Detect tablet size
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth >= 600; // Standard tablet breakpoint
+    final bannerHeight = isTablet ? 120.0 : widget.height; // Larger for tablets
+
     return Padding(
       padding: widget.padding,
       child: Material(
@@ -67,7 +72,7 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
           onTap: _handleBannerTap,
           borderRadius: BorderRadius.circular(12),
           child: Container(
-            height: widget.height,
+            height: bannerHeight, // Use dynamic height
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
