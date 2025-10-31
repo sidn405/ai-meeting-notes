@@ -51,26 +51,12 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     }
-      }
-  Widget _buildBannerImage(BannerAd banner) {
-    final image = banner.isLocal
-        ? Image.asset(banner.imageUrl, fit: BoxFit.cover)
-        : Image.network(
-            banner.imageUrl,
-            fit: BoxFit.cover,
-            loadingBuilder: (c, child, p) => p == null
-                ? child
-                : const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),
-            errorBuilder: (c, e, s) => const Center(child: Icon(Icons.image_not_supported, color: Colors.white54)),
-          );
-    return image;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_banners.isEmpty) return const SizedBox.shrink();
+    if (_currentBanner == null) return const SizedBox.shrink();
 
-    final currentBanner = _banners[_currentIndex];
     final size = MediaQuery.of(context).size;
     final isLandscape = size.width > size.height;
     final isTablet = size.shortestSide >= 600;
@@ -91,7 +77,11 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final ideal = constraints.maxWidth / bannerAspect;
-              final maxLandscape = size.height * 0.28;
+              
+              // Increased height limits for better text readability in landscape
+              final maxLandscape = isTablet && isLandscape 
+                  ? size.height * 0.32  // Tablets in landscape
+                  : size.height * 0.38; // Phones in landscape
               final maxPortrait = size.height * 0.22;
               const minH = 72.0;
 
@@ -103,7 +93,7 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
               return AnimatedSwitcher(
                 duration: const Duration(milliseconds: 500),
                 child: Container(
-                  key: ValueKey(currentBanner.id),
+                  key: ValueKey(_currentBanner!.id),
                   height: targetHeight,
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.12),
@@ -116,33 +106,14 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        currentBanner.isLocal
-                            ? Image.asset(currentBanner.imageUrl, fit: BoxFit.cover)
+                        _currentBanner!.isLocal
+                            ? Image.asset(_currentBanner!.imageUrl, fit: BoxFit.cover)
                             : Image.network(
-                                currentBanner.imageUrl,
+                                _currentBanner!.imageUrl,
                                 fit: BoxFit.cover,
                                 errorBuilder: (c, e, s) =>
                                     const Center(child: Icon(Icons.image_not_supported, color: Colors.white54)),
                               ),
-                        if (_banners.length > 1)
-                          Positioned(
-                            bottom: 8,
-                            left: 0,
-                            right: 0,
-                            child: Center(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.black45,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  '${_currentIndex + 1}/${_banners.length}',
-                                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -221,7 +192,7 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_currentBanner == null) return const SizedBox.shrink();
+    if (_banners.isEmpty) return const SizedBox.shrink();
 
     final size = MediaQuery.of(context).size;
     final isLandscape = size.width > size.height;
@@ -243,7 +214,11 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final ideal = constraints.maxWidth / bannerAspect;
-              final maxLandscape = size.height * 0.28;
+              
+              // Increased height limits for better text readability in landscape
+              final maxLandscape = isTablet && isLandscape 
+                  ? size.height * 0.32  // Tablets in landscape
+                  : size.height * 0.38; // Phones in landscape
               final maxPortrait = size.height * 0.22;
               const minH = 72.0;
 
@@ -265,7 +240,14 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      _buildBannerImage(_currentBanner!),
+                      _banners[_currentIndex].isLocal
+                          ? Image.asset(_banners[_currentIndex].imageUrl, fit: BoxFit.cover)
+                          : Image.network(
+                              _banners[_currentIndex].imageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (c, e, s) =>
+                                  const Center(child: Icon(Icons.image_not_supported, color: Colors.white54)),
+                            ),
                       Positioned(
                         top: 4,
                         right: 4,
