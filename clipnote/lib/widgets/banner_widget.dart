@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/banner_service.dart';
-import 'dart:math';
 
 class AffiliateBannerWidget extends StatefulWidget {
   final EdgeInsets padding;
@@ -21,7 +20,6 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
   final _bannerService = BannerService.I;
   BannerAd? _currentBanner;
   bool _impressionRecorded = false;
-  final diagonal = math.sqrt((size.width * size.width) + (size.height * size.height));
 
   @override
   void initState() {
@@ -65,7 +63,7 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
     final isTablet = screenWidth >= 600;
     final adaptiveHeight = isTablet ? widget.height * 1.5 : widget.height;
     final adaptivePadding = isTablet 
-        ? EdgeInsets.symmetric(horizontal: 40, vertical: 16)
+        ? const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
         : widget.padding;
 
     return Padding(
@@ -76,7 +74,7 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
           onTap: _handleBannerTap,
           borderRadius: BorderRadius.circular(12),
           child: Container(
-            height: bannerHeight, // Use dynamic height
+            height: adaptiveHeight,
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
@@ -93,7 +91,7 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
                       ? Image.asset(
                           _currentBanner!.imageUrl,
                           width: double.infinity,
-                          height: widget.height,
+                          height: adaptiveHeight,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) {
                             return Container(
@@ -108,7 +106,7 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
                       : Image.network(
                           _currentBanner!.imageUrl,
                           width: double.infinity,
-                          height: widget.height,
+                          height: adaptiveHeight,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) {
                             return Container(
@@ -138,7 +136,6 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
                   top: 4,
                   right: 4,
                   child: Container(
-                    height: adaptiveHeight,  // Use adaptive height here
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.black54,
@@ -232,9 +229,15 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
     }
 
     final currentBanner = _banners[_currentIndex];
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth >= 600;
+    final adaptiveHeight = isTablet ? widget.height * 1.5 : widget.height;
+    final adaptivePadding = isTablet 
+        ? const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
+        : widget.padding;
 
     return Padding(
-      padding: widget.padding,
+      padding: adaptivePadding,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -244,7 +247,7 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
             duration: const Duration(milliseconds: 500),
             child: Container(
               key: ValueKey(currentBanner.id),
-              height: widget.height,
+              height: adaptiveHeight,
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(12),
@@ -261,7 +264,7 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
                         ? Image.asset(
                             currentBanner.imageUrl,
                             width: double.infinity,
-                            height: widget.height,
+                            height: adaptiveHeight,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {
                               return Container(
@@ -276,7 +279,7 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
                         : Image.network(
                             currentBanner.imageUrl,
                             width: double.infinity,
-                            height: widget.height,
+                            height: adaptiveHeight,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {
                               return Container(

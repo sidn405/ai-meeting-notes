@@ -1768,13 +1768,6 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       );
     }
   }
-  // Or use this more robust method
-  bool isTabletDevice(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final diagonal = sqrt((size.width * size.width) + (size.height * size.height));
-    final isTablet = diagonal > 1100.0; // Roughly 7" tablets and larger
-    return isTablet;
-  }
 
   Future<void> _deleteMeeting(int id, String title) async {
     final confirm = await showDialog<bool>(
