@@ -253,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                 if (showBanners) ...[
                   const AffiliateBannerWidget(
                     padding: EdgeInsets.only(bottom: 20),
-                    height: 90,
+                    height: 120,
                   ),
                 ],
                 
@@ -418,7 +418,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                 if (showBanners) ...[
                   const RotatingBannerWidget(
                     padding: EdgeInsets.only(bottom: 20),
-                    height: 80,
+                    height: 100,
                   ),
                 ],
                 
@@ -468,9 +468,9 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                 
                 // Show banner at the bottom for free users
                 if (showBanners) ...[
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 32),
                   const AffiliateBannerWidget(
-                    height: 90,
+                    height: 80,
                   ),
                 ],
               ],

@@ -231,7 +231,7 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
     final currentBanner = _banners[_currentIndex];
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth >= 600;
-    final adaptiveHeight = isTablet ? widget.height * 3.0 : widget.height;
+    final adaptiveHeight = isTablet ? widget.height * 1.5 : widget.height;
     final adaptivePadding = isTablet 
         ? const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
         : widget.padding;
