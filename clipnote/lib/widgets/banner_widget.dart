@@ -51,36 +51,35 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     }
+      }
+  Widget _buildBannerImage(BannerAd banner) {
+    final image = banner.isLocal
+        ? Image.asset(banner.imageUrl, fit: BoxFit.cover)
+        : Image.network(
+            banner.imageUrl,
+            fit: BoxFit.cover,
+            loadingBuilder: (c, child, p) => p == null
+                ? child
+                : const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),
+            errorBuilder: (c, e, s) => const Center(child: Icon(Icons.image_not_supported, color: Colors.white54)),
+          );
+    return image;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_currentBanner == null) {
-      return const SizedBox.shrink();
-    }
+    if (_banners.isEmpty) return const SizedBox.shrink();
 
+    final currentBanner = _banners[_currentIndex];
     final size = MediaQuery.of(context).size;
     final isLandscape = size.width > size.height;
     final isTablet = size.shortestSide >= 600;
-    
-    // Adjust height based on orientation and device type
-    double adaptiveHeight;
-    EdgeInsets adaptivePadding;
-    
-    if (isLandscape) {
-      // Landscape mode - use smaller height
-      adaptiveHeight = isTablet ? 80 : 60;
-      adaptivePadding = EdgeInsets.symmetric(
-        horizontal: isTablet ? 40 : 20,
-        vertical: isTablet ? 8 : 6,
-      );
-    } else {
-      // Portrait mode - use normal/larger height
-      adaptiveHeight = isTablet ? widget.height * 1.5 : widget.height;
-      adaptivePadding = isTablet 
-          ? const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
-          : widget.padding;
-    }
+
+    final EdgeInsets adaptivePadding = isTablet
+        ? const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
+        : widget.padding;
+
+    const double bannerAspect = 1024 / 500;
 
     return Padding(
       padding: adaptivePadding,
@@ -89,93 +88,75 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
         child: InkWell(
           onTap: _handleBannerTap,
           borderRadius: BorderRadius.circular(12),
-          child: Container(
-            height: adaptiveHeight,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.3),
-                width: 1,
-              ),
-            ),
-            child: Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: _currentBanner!.isLocal
-                      ? Image.asset(
-                          _currentBanner!.imageUrl,
-                          width: double.infinity,
-                          height: adaptiveHeight,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.image_not_supported,
-                                color: Colors.white54,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final ideal = constraints.maxWidth / bannerAspect;
+              final maxLandscape = size.height * 0.28;
+              final maxPortrait = size.height * 0.22;
+              const minH = 72.0;
+
+              final targetHeight = (isLandscape
+                      ? ideal.clamp(minH, maxLandscape)
+                      : ideal.clamp(minH, maxPortrait))
+                  .toDouble();
+
+              return AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                child: Container(
+                  key: ValueKey(currentBanner.id),
+                  height: targetHeight,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white.withOpacity(0.25)),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: AspectRatio(
+                    aspectRatio: bannerAspect,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        currentBanner.isLocal
+                            ? Image.asset(currentBanner.imageUrl, fit: BoxFit.cover)
+                            : Image.network(
+                                currentBanner.imageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (c, e, s) =>
+                                    const Center(child: Icon(Icons.image_not_supported, color: Colors.white54)),
                               ),
-                            );
-                          },
-                        )
-                      : Image.network(
-                          _currentBanner!.imageUrl,
-                          width: double.infinity,
-                          height: adaptiveHeight,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.image_not_supported,
-                                color: Colors.white54,
+                        if (_banners.length > 1)
+                          Positioned(
+                            bottom: 8,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.black45,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  '${_currentIndex + 1}/${_banners.length}',
+                                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
+                                ),
                               ),
-                            );
-                          },
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(
-                              child: CircularProgressIndicator(
-                                value: loadingProgress.expectedTotalBytes != null
-                                    ? loadingProgress.cumulativeBytesLoaded /
-                                        loadingProgress.expectedTotalBytes!
-                                    : null,
-                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-                // Optional: Add a "Ad" label
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      'Ad',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
-                      ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
     );
   }
-}
 
+
+}
 // Alternative: Rotating Banner Widget that changes every few seconds
 class RotatingBannerWidget extends StatefulWidget {
   final Duration rotationInterval;
@@ -240,33 +221,17 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_banners.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    if (_currentBanner == null) return const SizedBox.shrink();
 
-    final currentBanner = _banners[_currentIndex];
     final size = MediaQuery.of(context).size;
     final isLandscape = size.width > size.height;
     final isTablet = size.shortestSide >= 600;
-    
-    // Adjust height based on orientation and device type
-    double adaptiveHeight;
-    EdgeInsets adaptivePadding;
-    
-    if (isLandscape) {
-      // Landscape mode - use smaller height
-      adaptiveHeight = isTablet ? 80 : 60;
-      adaptivePadding = EdgeInsets.symmetric(
-        horizontal: isTablet ? 40 : 20,
-        vertical: isTablet ? 8 : 6,
-      );
-    } else {
-      // Portrait mode - use normal/larger height
-      adaptiveHeight = isTablet ? widget.height * 1.5 : widget.height;
-      adaptivePadding = isTablet 
-          ? const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
-          : widget.padding;
-    }
+
+    final EdgeInsets adaptivePadding = isTablet
+        ? const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
+        : widget.padding;
+
+    const double bannerAspect = 1024 / 500;
 
     return Padding(
       padding: adaptivePadding,
@@ -275,103 +240,56 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
         child: InkWell(
           onTap: _handleBannerTap,
           borderRadius: BorderRadius.circular(12),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 500),
-            child: Container(
-              key: ValueKey(currentBanner.id),
-              height: adaptiveHeight,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.3),
-                  width: 1,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final ideal = constraints.maxWidth / bannerAspect;
+              final maxLandscape = size.height * 0.28;
+              final maxPortrait = size.height * 0.22;
+              const minH = 72.0;
+
+              final targetHeight = (isLandscape
+                      ? ideal.clamp(minH, maxLandscape)
+                      : ideal.clamp(minH, maxPortrait))
+                  .toDouble();
+
+              return Container(
+                height: targetHeight,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withOpacity(0.25)),
                 ),
-              ),
-              child: Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: currentBanner.isLocal
-                        ? Image.asset(
-                            currentBanner.imageUrl,
-                            width: double.infinity,
-                            height: adaptiveHeight,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.image_not_supported,
-                                  color: Colors.white54,
-                                ),
-                              );
-                            },
-                          )
-                        : Image.network(
-                            currentBanner.imageUrl,
-                            width: double.infinity,
-                            height: adaptiveHeight,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.image_not_supported,
-                                  color: Colors.white54,
-                                ),
-                              );
-                            },
+                clipBehavior: Clip.antiAlias,
+                child: AspectRatio(
+                  aspectRatio: bannerAspect,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _buildBannerImage(_currentBanner!),
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                  ),
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'Ad',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
+                          child: const Text(
+                            'Ad',
+                            style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                  // Page indicator
-                  if (_banners.length > 1)
-                    Positioned(
-                      bottom: 8,
-                      left: 0,
-                      right: 0,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(_banners.length, (index) {
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 2),
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: index == _currentIndex
-                                  ? Colors.white
-                                  : Colors.white.withOpacity(0.4),
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ),
       ),
     );
   }
+
 }
