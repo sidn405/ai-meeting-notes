@@ -55,17 +55,16 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_currentBanner == null) return const SizedBox.shrink();
+    if (_currentBanner == null) {
+      return const SizedBox.shrink();
+    }
 
-    final size = MediaQuery.of(context).size;
-    final isLandscape = size.width > size.height;
-    final isTablet = size.shortestSide >= 600;
-
-    final EdgeInsets adaptivePadding = isTablet
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth >= 600;
+    final adaptiveHeight = isTablet ? widget.height * 1.5 : widget.height;
+    final adaptivePadding = isTablet 
         ? const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
         : widget.padding;
-
-    const double bannerAspect = 1024 / 500;
 
     return Padding(
       padding: adaptivePadding,
@@ -74,60 +73,93 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
         child: InkWell(
           onTap: _handleBannerTap,
           borderRadius: BorderRadius.circular(12),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final ideal = constraints.maxWidth / bannerAspect;
-              
-              // Increased height limits for better text readability in landscape
-              final maxLandscape = isTablet && isLandscape 
-                  ? size.height * 0.32  // Tablets in landscape
-                  : size.height * 0.38; // Phones in landscape
-              final maxPortrait = size.height * 0.22;
-              const minH = 72.0;
-
-              final targetHeight = (isLandscape
-                      ? ideal.clamp(minH, maxLandscape)
-                      : ideal.clamp(minH, maxPortrait))
-                  .toDouble();
-
-              return AnimatedSwitcher(
-                duration: const Duration(milliseconds: 500),
-                child: Container(
-                  key: ValueKey(_currentBanner!.id),
-                  height: targetHeight,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withOpacity(0.25)),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: AspectRatio(
-                    aspectRatio: bannerAspect,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        _currentBanner!.isLocal
-                            ? Image.asset(_currentBanner!.imageUrl, fit: BoxFit.cover)
-                            : Image.network(
-                                _currentBanner!.imageUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (c, e, s) =>
-                                    const Center(child: Icon(Icons.image_not_supported, color: Colors.white54)),
+          child: Container(
+            height: adaptiveHeight,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: _currentBanner!.isLocal
+                      ? Image.asset(
+                          _currentBanner!.imageUrl,
+                          width: double.infinity,
+                          height: adaptiveHeight,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                Icons.image_not_supported,
+                                color: Colors.white54,
                               ),
-                      ],
+                            );
+                          },
+                        )
+                      : Image.network(
+                          _currentBanner!.imageUrl,
+                          width: double.infinity,
+                          height: adaptiveHeight,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                Icons.image_not_supported,
+                                color: Colors.white54,
+                              ),
+                            );
+                          },
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                    : null,
+                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                // Optional: Add a "Ad" label
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'Ad',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
-              );
-            },
+              ],
+            ),
           ),
         ),
       ),
     );
   }
-
-
 }
+
 // Alternative: Rotating Banner Widget that changes every few seconds
 class RotatingBannerWidget extends StatefulWidget {
   final Duration rotationInterval;
@@ -192,17 +224,17 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_banners.isEmpty) return const SizedBox.shrink();
+    if (_banners.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
-    final size = MediaQuery.of(context).size;
-    final isLandscape = size.width > size.height;
-    final isTablet = size.shortestSide >= 600;
-
-    final EdgeInsets adaptivePadding = isTablet
+    final currentBanner = _banners[_currentIndex];
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth >= 600;
+    final adaptiveHeight = isTablet ? widget.height * 1.5 : widget.height;
+    final adaptivePadding = isTablet 
         ? const EdgeInsets.symmetric(horizontal: 40, vertical: 16)
         : widget.padding;
-
-    const double bannerAspect = 1024 / 500;
 
     return Padding(
       padding: adaptivePadding,
@@ -211,67 +243,103 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
         child: InkWell(
           onTap: _handleBannerTap,
           borderRadius: BorderRadius.circular(12),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final ideal = constraints.maxWidth / bannerAspect;
-              
-              // Increased height limits for better text readability in landscape
-              final maxLandscape = isTablet && isLandscape 
-                  ? size.height * 0.32  // Tablets in landscape
-                  : size.height * 0.38; // Phones in landscape
-              final maxPortrait = size.height * 0.22;
-              const minH = 72.0;
-
-              final targetHeight = (isLandscape
-                      ? ideal.clamp(minH, maxLandscape)
-                      : ideal.clamp(minH, maxPortrait))
-                  .toDouble();
-
-              return Container(
-                height: targetHeight,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withOpacity(0.25)),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            child: Container(
+              key: ValueKey(currentBanner.id),
+              height: adaptiveHeight,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.3),
+                  width: 1,
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: AspectRatio(
-                  aspectRatio: bannerAspect,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      _banners[_currentIndex].isLocal
-                          ? Image.asset(_banners[_currentIndex].imageUrl, fit: BoxFit.cover)
-                          : Image.network(
-                              _banners[_currentIndex].imageUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) =>
-                                  const Center(child: Icon(Icons.image_not_supported, color: Colors.white54)),
-                            ),
-                      Positioned(
-                        top: 4,
-                        right: 4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
+              ),
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: currentBanner.isLocal
+                        ? Image.asset(
+                            currentBanner.imageUrl,
+                            width: double.infinity,
+                            height: adaptiveHeight,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.image_not_supported,
+                                  color: Colors.white54,
+                                ),
+                              );
+                            },
+                          )
+                        : Image.network(
+                            currentBanner.imageUrl,
+                            width: double.infinity,
+                            height: adaptiveHeight,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.image_not_supported,
+                                  color: Colors.white54,
+                                ),
+                              );
+                            },
                           ),
-                          child: const Text(
-                            'Ad',
-                            style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600),
-                          ),
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'Ad',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              );
-            },
+                  // Page indicator
+                  if (_banners.length > 1)
+                    Positioned(
+                      bottom: 8,
+                      left: 0,
+                      right: 0,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(_banners.length, (index) {
+                          return Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: index == _currentIndex
+                                  ? Colors.white
+                                  : Colors.white.withOpacity(0.4),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
     );
   }
-
 }
