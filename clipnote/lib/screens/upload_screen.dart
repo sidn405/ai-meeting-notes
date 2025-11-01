@@ -552,8 +552,10 @@ class _UploadScreenState extends State<UploadScreen> {
                               ),
                               contentPadding: const EdgeInsets.all(16),
                             ),
+                            onChanged: (value) {          // ← ADD THIS
+                              setModalState(() {});       // ← ADD THIS
+                            },                            // ← ADD THIS
                           ),
-                          
                           const SizedBox(height: 6),
                           const Text(
                             'Supported file formats: .txt, .doc, .docx, .pdf',
