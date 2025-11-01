@@ -23,7 +23,14 @@ def _try_pg_engine():
     if not DATABASE_URL:
         return None
     try:
-        eng = create_engine(_pg_url(DATABASE_URL), pool_pre_ping=True)
+        eng = create_engine(
+            _pg_url(DATABASE_URL),
+            pool_pre_ping=True,      # Keep this
+            pool_size=20,            # ADD THIS - more connections
+            max_overflow=30,         # ADD THIS - more overflow
+            pool_recycle=3600,       # ADD THIS - recycle hourly
+            pool_timeout=30,         # ADD THIS - connection timeout
+        )
         with eng.connect() as conn:
             conn.execute(text("SELECT 1"))
         return eng
