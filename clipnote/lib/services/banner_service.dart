@@ -22,8 +22,6 @@ class BannerService {
   }
   
   void _loadLocalBanners() {
-    print('📱 Loading local banners from assets');
-    // Local banners from assets folder
     _banners = [
       BannerAd(
         id: 'banner_001',
@@ -122,14 +120,12 @@ class BannerService {
         isLocal: true,
       ),
     ];
-  
-    print('✅ Loaded ${_banners.length} local banners');
   }
 
-  // Filter by our naming convention: ids with 'p' are portrait
+  // Filter by our naming convention: ids with '0p' pattern are portrait
   List<BannerAd> _filterByOrientation(BannerOrientation o) {
     return _banners.where((b) {
-      final isPortrait = b.id.contains('p'); // e.g., banner_0p1
+      final isPortrait = b.id.contains('0p');
       return o == BannerOrientation.portrait ? isPortrait : !isPortrait;
     }).toList();
   }
@@ -138,7 +134,7 @@ class BannerService {
   BannerAd? _weightedPick(List<BannerAd> list) {
     if (list.isEmpty) return null;
     final total = list.fold<int>(0, (sum, b) => sum + (b.weight ?? 1));
-    var roll = Random().nextInt(total); // 0..total-1
+    var roll = Random().nextInt(total);
     for (final b in list) {
       roll -= (b.weight ?? 1);
       if (roll < 0) return b;
@@ -160,7 +156,6 @@ class BannerService {
   BannerAd? getRandomBanner() {
     if (_banners.isEmpty) return null;
     
-    // Weighted random selection
     final totalWeight = _banners.fold<int>(0, (sum, banner) => sum + banner.weight);
     var random = (DateTime.now().millisecondsSinceEpoch % totalWeight);
     
@@ -176,41 +171,30 @@ class BannerService {
   
   List<BannerAd> getAllBanners() => List.unmodifiable(_banners);
   
-  // Force refresh banners (reload from assets)
   Future<void> refresh() async {
     _loadLocalBanners();
   }
   
   Future<void> recordClick(String bannerId) async {
-    print('🖱️ Banner clicked: $bannerId');
-    
-    // Send click analytics to server (fire and forget - don't block UI)
     try {
       await http.post(
         Uri.parse('$_apiBaseUrl/api/banners/click'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'banner_id': bannerId}),
       ).timeout(const Duration(seconds: 5));
-      print('✅ Click recorded on server');
     } catch (e) {
-      print('⚠️ Failed to record click on server: $e');
       // Fail silently - don't impact user experience
     }
   }
   
   Future<void> recordImpression(String bannerId) async {
-    print('👁️ Banner impression: $bannerId');
-    
-    // Send impression analytics to server (fire and forget - don't block UI)
     try {
       await http.post(
         Uri.parse('$_apiBaseUrl/api/banners/impression'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'banner_id': bannerId}),
       ).timeout(const Duration(seconds: 5));
-      print('✅ Impression recorded on server');
     } catch (e) {
-      print('⚠️ Failed to record impression on server: $e');
       // Fail silently - don't impact user experience
     }
   }
@@ -222,7 +206,7 @@ class BannerAd {
   final String clickUrl;
   final String title;
   final int weight;
-  final bool isLocal; // true if using local asset, false if network image
+  final bool isLocal;
   
   BannerAd({
     required this.id,

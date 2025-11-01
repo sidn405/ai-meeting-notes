@@ -32,11 +32,10 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _loadBannerForOrientation(); // reload when MediaQuery changes
+    _loadBannerForOrientation();
   }
 
   void _loadBanner() {
-    // Initial load - will be replaced by _loadBannerForOrientation once context is available
     _currentBanner = BannerService.I.getRandomBanner();
   }
 
@@ -46,29 +45,18 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
         ? BannerOrientation.portrait
         : BannerOrientation.landscape;
 
-    print('📱 Loading banner for orientation: ${flutterOrientation.name} -> ${svcOrientation.name}');
-
-    // If forceBannerId is specified, try to find it first
     if (widget.forceBannerId != null) {
-      print('🎯 Force banner ID requested: ${widget.forceBannerId}');
       final allBanners = BannerService.I.getAllByOrientation(svcOrientation);
       final forced = allBanners.where((b) => b.id == widget.forceBannerId).toList();
       final chosen = forced.isNotEmpty 
           ? forced.first 
           : (BannerService.I.getRandomByOrientation(svcOrientation) ?? BannerService.I.getRandomBanner());
-      if (mounted) {
-        print('✅ Selected banner: ${chosen?.id}');
-        setState(() => _currentBanner = chosen);
-      }
+      if (mounted) setState(() => _currentBanner = chosen);
     } else {
       final chosen = BannerService.I.getRandomByOrientation(svcOrientation) ?? BannerService.I.getRandomBanner();
-      if (mounted) {
-        print('✅ Selected banner: ${chosen?.id}');
-        setState(() => _currentBanner = chosen);
-      }
+      if (mounted) setState(() => _currentBanner = chosen);
     }
 
-    // Record impression if not already recorded
     if (_currentBanner != null && !_impressionRecorded) {
       _bannerService.recordImpression(_currentBanner!.id);
       _impressionRecorded = true;
@@ -164,7 +152,6 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
                           },
                         ),
                 ),
-                // Optional: Add a "Ad" label
                 Positioned(
                   top: 4,
                   right: 4,
@@ -220,7 +207,6 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
   @override
   void initState() {
     super.initState();
-    // Nothing here; we load when dependencies (MediaQuery) are available
   }
 
   @override
@@ -235,12 +221,9 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
         ? BannerOrientation.portrait
         : BannerOrientation.landscape;
 
-    print('🔄 Rotating widget loading for orientation: ${flutterOrientation.name} -> ${svcOrientation.name}');
-
     BannerAd? chosen;
 
     if (widget.forceBannerId != null) {
-      print('🎯 Force banner ID requested: ${widget.forceBannerId}');
       final list = BannerService.I.getAllByOrientation(svcOrientation);
       chosen = list.cast<BannerAd?>().firstWhere(
         (b) => b?.id == widget.forceBannerId,
@@ -251,14 +234,11 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
     }
 
     if (mounted && chosen != null) {
-      print('✅ Rotating widget selected banner: ${chosen.id}');
       setState(() {
         _banners = [chosen!];
         _currentIndex = 0;
       });
       _bannerService.recordImpression(chosen.id);
-    } else {
-      print('❌ No banner chosen for rotating widget');
     }
   }
 
@@ -363,7 +343,6 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
                       ),
                     ),
                   ),
-                  // Page indicator
                   if (_banners.length > 1)
                     Positioned(
                       bottom: 8,

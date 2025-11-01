@@ -3,7 +3,8 @@ from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPExce
 from typing import Optional
 from fastapi.responses import FileResponse, StreamingResponse
 from pathlib import Path
-from sqlmodel import select, Session
+from sqlmodel import select, Session, func
+from datetime import datetime
 from ..db import get_session, DATA_DIR
 from ..models import Meeting, License, LicenseTier, TIER_LIMITS, LicenseUsage
 from ..services.pipeline import process_meeting, send_summary_email, process_meeting_transcribe_summarize, process_meeting_transcribe_only
@@ -70,6 +71,242 @@ def require_license(
     
     tier_config = TIER_LIMITS[license.tier]
     return license, tier_config
+
+# Add to your router
+@router.get("/stats/diagnose")
+def diagnose_usage_stats(
+    license: License = Depends(get_license_from_key),
+    db: Session = Depends(get_session),
+):
+    """
+    Diagnose discrepancies between Meeting table and LicenseUsage table
+    Shows what the stats SHOULD be based on actual meetings
+    """
+    now = datetime.utcnow()
+    
+    # Get current usage record
+    usage_record = db.exec(
+        select(LicenseUsage).where(
+            LicenseUsage.license_key == license.license_key,
+            LicenseUsage.year == now.year,
+            LicenseUsage.month == now.month
+        )
+    ).first()
+    
+    # Count actual meetings created this month
+    first_day_this_month = datetime(now.year, now.month, 1)
+    actual_meetings_this_month = db.exec(
+        select(func.count(Meeting.id)).where(
+            Meeting.license_id == license.id,
+            Meeting.created_at >= first_day_this_month
+        )
+    ).one()
+    
+    # Count all meetings ever
+    total_all_time = db.exec(
+        select(func.count(Meeting.id)).where(Meeting.license_id == license.id)
+    ).one()
+    
+    # Count completed
+    completed_statuses = ["delivered", "ready_for_download", "uploaded_to_cloud", "downloaded_to_device"]
+    completed_count = db.exec(
+        select(func.count(Meeting.id)).where(
+            Meeting.license_id == license.id,
+            Meeting.status.in_(completed_statuses)
+        )
+    ).one()
+    
+    # Get what LicenseUsage table says
+    usage_table_says = usage_record.meetings_used if usage_record else 0
+    
+    return {
+        "license_key": license.license_key[:8] + "...",
+        "current_month": now.strftime("%B %Y"),
+        "diagnosis": {
+            "usage_table_says": usage_table_says,
+            "actual_meetings_this_month": actual_meetings_this_month,
+            "discrepancy": actual_meetings_this_month - usage_table_says,
+            "is_accurate": usage_table_says == actual_meetings_this_month
+        },
+        "additional_info": {
+            "total_meetings_all_time": total_all_time,
+            "completed_meetings": completed_count,
+        },
+        "recommendation": (
+            "✅ Usage tracking is accurate" 
+            if usage_table_says == actual_meetings_this_month 
+            else f"⚠️ Usage table shows {usage_table_says} but actual meetings created this month: {actual_meetings_this_month}. Run /stats/repair to fix."
+        )
+    }
+
+
+@router.post("/stats/repair")
+def repair_usage_stats(
+    license: License = Depends(get_license_from_key),
+    db: Session = Depends(get_session),
+):
+    """
+    Repair LicenseUsage table by recalculating from actual Meeting records
+    This will sync the usage count with the actual number of meetings created this month
+    
+    WARNING: Only use this if you're sure the Meeting table is correct
+    """
+    now = datetime.utcnow()
+    first_day_this_month = datetime(now.year, now.month, 1)
+    
+    # Count actual meetings created this month
+    actual_meetings_this_month = db.exec(
+        select(func.count(Meeting.id)).where(
+            Meeting.license_id == license.id,
+            Meeting.created_at >= first_day_this_month
+        )
+    ).one()
+    
+    # Get or create usage record
+    usage_record = db.exec(
+        select(LicenseUsage).where(
+            LicenseUsage.license_key == license.license_key,
+            LicenseUsage.year == now.year,
+            LicenseUsage.month == now.month
+        )
+    ).first()
+    
+    old_value = usage_record.meetings_used if usage_record else 0
+    
+    if usage_record:
+        # Update existing record
+        usage_record.meetings_used = actual_meetings_this_month
+        db.add(usage_record)
+    else:
+        # Create new record
+        usage_record = LicenseUsage(
+            license_key=license.license_key,
+            year=now.year,
+            month=now.month,
+            meetings_used=actual_meetings_this_month
+        )
+        db.add(usage_record)
+    
+    db.commit()
+    db.refresh(usage_record)
+    
+    return {
+        "status": "repaired",
+        "license_key": license.license_key[:8] + "...",
+        "month": now.strftime("%B %Y"),
+        "old_value": old_value,
+        "new_value": usage_record.meetings_used,
+        "correction": usage_record.meetings_used - old_value,
+        "message": f"Usage count updated from {old_value} to {usage_record.meetings_used} based on actual meeting records"
+    }
+
+
+# IMPROVED stats endpoint with auto-repair option
+@router.get("/stats/v2")
+def get_meeting_stats_v2(
+    auto_repair: bool = False,  # Set to True to automatically fix discrepancies
+    license: License = Depends(get_license_from_key),
+    db: Session = Depends(get_session),
+):
+    """
+    Enhanced stats endpoint with optional auto-repair
+    
+    Query params:
+    - auto_repair: If True, automatically fixes discrepancies between 
+      LicenseUsage table and actual Meeting records
+    """
+    from datetime import datetime
+    from sqlmodel import func
+    
+    now = datetime.utcnow()
+    first_day_this_month = datetime(now.year, now.month, 1)
+    
+    # Current meetings (excludes deleted) - filtered by license_id
+    total_meetings = db.exec(
+        select(func.count(Meeting.id)).where(Meeting.license_id == license.id)
+    ).one()
+    
+    # Count all successfully completed meetings
+    completed_statuses = ["delivered", "ready_for_download", "uploaded_to_cloud", "downloaded_to_device"]
+    completed_meetings = db.exec(
+        select(func.count(Meeting.id)).where(
+            (Meeting.license_id == license.id) & 
+            (Meeting.status.in_(completed_statuses))
+        )
+    ).one()
+    
+    processing_meetings = db.exec(
+        select(func.count(Meeting.id)).where(
+            (Meeting.license_id == license.id) & 
+            ((Meeting.status == "processing") | (Meeting.status == "queued"))
+        )
+    ).one()
+    
+    # Count actual meetings created this month
+    actual_meetings_this_month = db.exec(
+        select(func.count(Meeting.id)).where(
+            Meeting.license_id == license.id,
+            Meeting.created_at >= first_day_this_month
+        )
+    ).one()
+    
+    # Get usage record
+    usage = db.exec(
+        select(LicenseUsage).where(
+            LicenseUsage.license_key == license.license_key,
+            LicenseUsage.year == now.year,
+            LicenseUsage.month == now.month
+        )
+    ).first()
+    
+    usage_table_value = usage.meetings_used if usage else 0
+    
+    # Check for discrepancy
+    has_discrepancy = usage_table_value != actual_meetings_this_month
+    
+    # Auto-repair if requested and there's a discrepancy
+    if auto_repair and has_discrepancy:
+        if usage:
+            usage.meetings_used = actual_meetings_this_month
+            db.add(usage)
+        else:
+            usage = LicenseUsage(
+                license_key=license.license_key,
+                year=now.year,
+                month=now.month,
+                meetings_used=actual_meetings_this_month
+            )
+            db.add(usage)
+        db.commit()
+        meetings_this_month = actual_meetings_this_month
+        was_repaired = True
+    else:
+        meetings_this_month = usage_table_value
+        was_repaired = False
+    
+    response = {
+        "total_meetings": total_meetings,
+        "completed": completed_meetings,
+        "processing": processing_meetings,
+        "meetings_this_month": meetings_this_month,
+        "current_month": now.strftime("%B %Y"),
+    }
+    
+    # Add diagnostic info if there was a discrepancy
+    if has_discrepancy:
+        response["_diagnostic"] = {
+            "had_discrepancy": True,
+            "was_auto_repaired": was_repaired,
+            "old_value": usage_table_value,
+            "correct_value": actual_meetings_this_month,
+            "message": (
+                f"Automatically corrected from {usage_table_value} to {actual_meetings_this_month}"
+                if was_repaired
+                else f"Discrepancy detected: showing {usage_table_value} but actual is {actual_meetings_this_month}. Add ?auto_repair=true to fix."
+            )
+        }
+    
+    return response
 
 def track_meeting_usage(db: Session, license_key: str):
     """

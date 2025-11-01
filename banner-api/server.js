@@ -64,6 +64,60 @@ const banners = [
     weight: 15,
     active: true,
     is_local: false
+  },
+  {
+    id: 'banner_0p1',
+    image_url: 'https://your-cdn.com/p1.jpg',
+    click_url: 'https://villiersjets.com/?id=7275',
+    title: 'Product p1',
+    weight: 10,
+    active: true,
+    is_local: false
+  },
+  {
+    id: 'banner_0p2',
+    image_url: 'https://your-cdn.com/p2.jpg',
+    click_url: 'https://villiersjets.com/?id=7275',
+    title: 'Product p2',
+    weight: 5,
+    active: true,
+    is_local: false
+  },
+  {
+    id: 'banner_0p3',
+    image_url: 'https://your-cdn.com/p3.jpg',
+    click_url: 'https://villiersjets.com/?id=7275',
+    title: 'Product 3',
+    weight: 15,
+    active: true,
+    is_local: false
+  },
+  {
+    id: 'banner_0p4',
+    image_url: 'https://your-cdn.com/p4.jpg',
+    click_url: 'https://villiersjets.com/?id=7275',
+    title: 'Product p4',
+    weight: 10,
+    active: true,
+    is_local: false
+  },
+  {
+    id: 'banner_0p5',
+    image_url: 'https://your-cdn.com/p5.jpg',
+    click_url: 'https://villiersjets.com/?id=7275',
+    title: 'Product p5',
+    weight: 5,
+    active: true,
+    is_local: false
+  },
+  {
+    id: 'banner_0p6',
+    image_url: 'https://your-cdn.com/p6.jpg',
+    click_url: 'https://www.villiersjets.com/?id=7275',
+    title: 'Product p6',
+    weight: 15,
+    active: true,
+    is_local: false
   }
 ];
 
