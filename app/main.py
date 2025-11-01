@@ -2512,9 +2512,10 @@ def documentation_page():
     <h3>Step 1: Purchase Your License</h3>
     <p>Visit our <a href="/#pricing">pricing page</a> and select your tier:</p>
     <ul>
-      <li><strong>Starter:</strong> $0 free – 5 meetings/month, 25MB files</li>
-      <li><strong>Professional:</strong> $69 one-time – 50 meetings/month, 200MB files, priority processing</li>
-      <li><strong>Business:</strong> $119 one-time – 100 meetings/month, 500MB files, API access</li>
+      <li><strong>Free:</strong> $0 free – 5 meetings/month, 25MB files</li>
+      <li><strong>Starter:</strong> $29 free – 25 meetings/month, 50MB files</li>
+      <li><strong>Professional:</strong> $69 one-time – 50 meetings/month, 200MB files, Cloud Storage</li>
+      <li><strong>Business:</strong> $119 one-time – 100 meetings/month, 500MB files, Cloud Storage, Record Video</li>
     </ul>
     
     <h3>Step 2: Receive Your License Key</h3>

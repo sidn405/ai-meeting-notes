@@ -1964,13 +1964,48 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     try {
       final downloadInfo = await _api.downloadMeetingFile(id, type);
       final url = downloadInfo['download_url'];
-      final uri = Uri.parse(url);
       
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        throw Exception('Could not open download URL');
+      // Determine file extension based on type
+      String extension = '.html';
+      if (type == 'transcript') {
+        extension = '.html';
+      } else if (type == 'summary') {
+        extension = '.html';
       }
+      
+      final filename = '${type}_${DateTime.now().millisecondsSinceEpoch}$extension';
+      
+      // Download file bytes using Dio
+      final dio = Dio();
+      final response = await dio.get(
+        url,
+        options: Options(
+          responseType: ResponseType.bytes,
+          followRedirects: true,
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+      
+      // Check if download was successful
+      if (response.statusCode != 200 || response.data == null) {
+        throw Exception('Download failed with status ${response.statusCode}');
+      }
+      
+      final bytes = Uint8List.fromList(response.data);
+      
+      // Verify we got actual data
+      if (bytes.isEmpty) {
+        throw Exception('Downloaded file is empty');
+      }
+      
+      // Save using offline storage (this also updates the local database)
+      final saved = await offline.saveBytesForMeeting(
+        meetingId: id,
+        filename: filename,
+        bytes: bytes,
+      );
+      
+      print('[MeetingsList] ✅ Saved $filename (${bytes.length} bytes) to device at ${saved.path}');
     } catch (e) {
       print('[MeetingsList] Error downloading $type: $e');
       rethrow;

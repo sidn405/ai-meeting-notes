@@ -428,27 +428,61 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
     );
   }
 
+  // In your meetings list builder
   Widget _buildMeetingsList() {
-    return RefreshIndicator(
-      onRefresh: _loadMeetings,
-      color: const Color(0xFF667eea),
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _filteredMeetings.length,
-        itemBuilder: (context, index) {
-          final meeting = _filteredMeetings[index];
-          return _meetingCard(
-            id: meeting['id'],
-            title: meeting['title'] ?? 'Untitled Meeting',
-            date: _formatDate(meeting['created_at']),
-            status: meeting['status'] ?? 'unknown',
-            progress: meeting['progress'] ?? 0,
-            hasTranscript: meeting['has_transcript'] ?? false,
-            hasSummary: meeting['has_summary'] ?? false,
-          );
-        },
-      ),
-    );
+    final isTablet = MediaQuery.of(context).size.shortestSide >= 600;
+    
+    if (isTablet) {
+      // Use grid layout for tablets
+      return RefreshIndicator(
+        onRefresh: _loadMeetings,
+        color: const Color(0xFF667eea),
+        child: GridView.builder(
+          padding: const EdgeInsets.all(16),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2, // 2 columns on tablet
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 1.5, // Adjust based on card height
+          ),
+          itemCount: _filteredMeetings.length,
+          itemBuilder: (context, index) {
+            final meeting = _filteredMeetings[index];
+            return _meetingCard(
+              id: meeting['id'],
+              title: meeting['title'] ?? 'Untitled Meeting',
+              date: _formatDate(meeting['created_at']),
+              status: meeting['status'] ?? 'unknown',
+              progress: meeting['progress'] ?? 0,
+              hasTranscript: meeting['has_transcript'] ?? false,
+              hasSummary: meeting['has_summary'] ?? false,
+            );
+          },
+        ),
+      );
+    } else {
+      // Original list layout for phones
+      return RefreshIndicator(
+        onRefresh: _loadMeetings,
+        color: const Color(0xFF667eea),
+        child: ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: _filteredMeetings.length,
+          itemBuilder: (context, index) {
+            final meeting = _filteredMeetings[index];
+            return _meetingCard(
+              id: meeting['id'],
+              title: meeting['title'] ?? 'Untitled Meeting',
+              date: _formatDate(meeting['created_at']),
+              status: meeting['status'] ?? 'unknown',
+              progress: meeting['progress'] ?? 0,
+              hasTranscript: meeting['has_transcript'] ?? false,
+              hasSummary: meeting['has_summary'] ?? false,
+            );
+          },
+        ),
+      );
+    }
   }
 
   Widget _meetingCard({
@@ -1734,7 +1768,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       );
     }
   }
-  
+
   Future<void> _deleteMeeting(int id, String title) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -1803,7 +1837,7 @@ class _MeetingsListScreenState extends State<MeetingsListScreen> {
       );
     }
   }
-
+  
   Widget _actionButton({
     required IconData icon,
     required String label,
