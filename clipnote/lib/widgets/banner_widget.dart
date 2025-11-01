@@ -5,11 +5,13 @@ import '../services/banner_service.dart';
 class AffiliateBannerWidget extends StatefulWidget {
   final EdgeInsets padding;
   final double height;
+  final String? forceBannerId;
   
   const AffiliateBannerWidget({
     super.key,
     this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
     this.height = 80,
+    this.forceBannerId,
   });
 
   @override
@@ -33,25 +35,36 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
     _loadBannerForOrientation(); // reload when MediaQuery changes
   }
 
-  void _loadBannerForOrientation() {
-    final orientation = MediaQuery.of(context).orientation;
+  void _loadBanner() {
+    // Initial load - will be replaced by _loadBannerForOrientation once context is available
+    _currentBanner = BannerService.I.getRandomBanner();
+  }
 
-    // If you added forceBannerId, keep that logic first:
+  void _loadBannerForOrientation() {
+    final flutterOrientation = MediaQuery.of(context).orientation;
+    final svcOrientation = flutterOrientation == Orientation.portrait
+        ? BannerOrientation.portrait
+        : BannerOrientation.landscape;
+
+    // If forceBannerId is specified, try to find it first
     if (widget.forceBannerId != null) {
-      final forced = BannerService.I
-          .getAllByOrientation(orientation)
-          .where((b) => b.id == widget.forceBannerId)
-          .toList();
-      final chosen = forced.isNotEmpty ? forced.first : BannerService.I.getRandomByOrientation(orientation);
+      final allBanners = BannerService.I.getAllByOrientation(svcOrientation);
+      final forced = allBanners.where((b) => b.id == widget.forceBannerId).toList();
+      final chosen = forced.isNotEmpty 
+          ? forced.first 
+          : (BannerService.I.getRandomByOrientation(svcOrientation) ?? BannerService.I.getRandomBanner());
       if (mounted) setState(() => _currentBanner = chosen);
     } else {
-      final chosen = BannerService.I.getRandomByOrientation(orientation);
+      final chosen = BannerService.I.getRandomByOrientation(svcOrientation) ?? BannerService.I.getRandomBanner();
       if (mounted) setState(() => _currentBanner = chosen);
     }
 
-    // (Optional) Impression logic stays the same as before
+    // Record impression if not already recorded
+    if (_currentBanner != null && !_impressionRecorded) {
+      _bannerService.recordImpression(_currentBanner!.id);
+      _impressionRecorded = true;
+    }
   }
-
 
   Future<void> _handleBannerTap() async {
     if (_currentBanner == null) return;
@@ -176,12 +189,14 @@ class RotatingBannerWidget extends StatefulWidget {
   final Duration rotationInterval;
   final EdgeInsets padding;
   final double height;
+  final String? forceBannerId;
   
   const RotatingBannerWidget({
     super.key,
     this.rotationInterval = const Duration(seconds: 10),
     this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
     this.height = 80,
+    this.forceBannerId,
   });
 
   @override
@@ -196,30 +211,41 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
   @override
   void initState() {
     super.initState();
-    _loadBanners();
-    _startRotation();
+    // Nothing here; we load when dependencies (MediaQuery) are available
   }
 
-  void _loadBanners() {
-    final orientation = MediaQuery.of(context).orientation;
-    final all = BannerService.I.getAllByOrientation(orientation);
-
-    setState(() {
-      _banners = all;
-      _currentIndex = 0;
-      if (_banners.isNotEmpty) {
-        _bannerService.recordImpression(_banners[_currentIndex].id);
-      }
-    });
-  }
-
-  // Reload the list when orientation changes:
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _loadBanners();
+    _loadBannerForOrientation();
   }
 
+  void _loadBannerForOrientation() {
+    final flutterOrientation = MediaQuery.of(context).orientation;
+    final svcOrientation = flutterOrientation == Orientation.portrait
+        ? BannerOrientation.portrait
+        : BannerOrientation.landscape;
+
+    BannerAd? chosen;
+
+    if (widget.forceBannerId != null) {
+      final list = BannerService.I.getAllByOrientation(svcOrientation);
+      chosen = list.cast<BannerAd?>().firstWhere(
+        (b) => b?.id == widget.forceBannerId,
+        orElse: () => BannerService.I.getRandomByOrientation(svcOrientation) ?? BannerService.I.getRandomBanner(),
+      );
+    } else {
+      chosen = BannerService.I.getRandomByOrientation(svcOrientation) ?? BannerService.I.getRandomBanner();
+    }
+
+    if (mounted && chosen != null) {
+      setState(() {
+        _banners = [chosen!];
+        _currentIndex = 0;
+      });
+      _bannerService.recordImpression(chosen.id);
+    }
+  }
 
   Future<void> _handleBannerTap() async {
     if (_banners.isEmpty) return;

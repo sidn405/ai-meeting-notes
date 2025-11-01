@@ -1,5 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'dart:math';
+
+// Keep UI-agnostic: define our own enum instead of Flutter's Orientation
+enum BannerOrientation { portrait, landscape }
 
 class BannerService {
   static final BannerService _instance = BannerService._internal();
@@ -122,40 +126,36 @@ class BannerService {
     print('✅ Loaded ${_banners.length} local banners');
   }
 
-  // Orientation-aware accessors
-  List<BannerAd> getPortraitBanners() =>
-      _banners.where((b) => b.id.contains('p')).toList();
+  // Filter by our naming convention: ids with 'p' are portrait
+  List<BannerAd> _filterByOrientation(BannerOrientation o) {
+    return _banners.where((b) {
+      final isPortrait = b.id.contains('p'); // e.g., banner_0p1
+      return o == BannerOrientation.portrait ? isPortrait : !isPortrait;
+    }).toList();
+  }
 
-  List<BannerAd> getLandscapeBanners() =>
-      _banners.where((b) => !b.id.contains('p')).toList(); // or: b.id.contains('l')
-
-  // Weighted random pick from a list (reuse your weight field)
+  // Weighted random from a list
   BannerAd? _weightedPick(List<BannerAd> list) {
     if (list.isEmpty) return null;
     final total = list.fold<int>(0, (sum, b) => sum + (b.weight ?? 1));
-    var roll = Random().nextInt(total) + 1;
+    var roll = Random().nextInt(total); // 0..total-1
     for (final b in list) {
       roll -= (b.weight ?? 1);
-      if (roll <= 0) return b;
+      if (roll < 0) return b;
     }
     return list.first;
   }
 
-  // Public API to get a random by orientation
-  BannerAd? getRandomByOrientation(Orientation orientation) {
-    final list = orientation == Orientation.portrait
-        ? getPortraitBanners()
-        : getLandscapeBanners();
+  // Public: random by orientation
+  BannerAd? getRandomByOrientation(BannerOrientation o) {
+    final list = _filterByOrientation(o);
     return _weightedPick(list) ?? getRandomBanner();
   }
 
-  // Public API to get all by orientation (for rotator)
-  List<BannerAd> getAllByOrientation(Orientation orientation) {
-    return orientation == Orientation.portrait
-        ? getPortraitBanners()
-        : getLandscapeBanners();
+  // Public: all by orientation
+  List<BannerAd> getAllByOrientation(BannerOrientation o) {
+    return _filterByOrientation(o);
   }
-
   
   BannerAd? getRandomBanner() {
     if (_banners.isEmpty) return null;
