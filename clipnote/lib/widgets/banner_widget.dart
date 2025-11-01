@@ -46,17 +46,26 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
         ? BannerOrientation.portrait
         : BannerOrientation.landscape;
 
+    print('📱 Loading banner for orientation: ${flutterOrientation.name} -> ${svcOrientation.name}');
+
     // If forceBannerId is specified, try to find it first
     if (widget.forceBannerId != null) {
+      print('🎯 Force banner ID requested: ${widget.forceBannerId}');
       final allBanners = BannerService.I.getAllByOrientation(svcOrientation);
       final forced = allBanners.where((b) => b.id == widget.forceBannerId).toList();
       final chosen = forced.isNotEmpty 
           ? forced.first 
           : (BannerService.I.getRandomByOrientation(svcOrientation) ?? BannerService.I.getRandomBanner());
-      if (mounted) setState(() => _currentBanner = chosen);
+      if (mounted) {
+        print('✅ Selected banner: ${chosen?.id}');
+        setState(() => _currentBanner = chosen);
+      }
     } else {
       final chosen = BannerService.I.getRandomByOrientation(svcOrientation) ?? BannerService.I.getRandomBanner();
-      if (mounted) setState(() => _currentBanner = chosen);
+      if (mounted) {
+        print('✅ Selected banner: ${chosen?.id}');
+        setState(() => _currentBanner = chosen);
+      }
     }
 
     // Record impression if not already recorded
@@ -226,9 +235,12 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
         ? BannerOrientation.portrait
         : BannerOrientation.landscape;
 
+    print('🔄 Rotating widget loading for orientation: ${flutterOrientation.name} -> ${svcOrientation.name}');
+
     BannerAd? chosen;
 
     if (widget.forceBannerId != null) {
+      print('🎯 Force banner ID requested: ${widget.forceBannerId}');
       final list = BannerService.I.getAllByOrientation(svcOrientation);
       chosen = list.cast<BannerAd?>().firstWhere(
         (b) => b?.id == widget.forceBannerId,
@@ -239,11 +251,14 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
     }
 
     if (mounted && chosen != null) {
+      print('✅ Rotating widget selected banner: ${chosen.id}');
       setState(() {
         _banners = [chosen!];
         _currentIndex = 0;
       });
       _bannerService.recordImpression(chosen.id);
+    } else {
+      print('❌ No banner chosen for rotating widget');
     }
   }
 

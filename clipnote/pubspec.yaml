@@ -110,6 +110,12 @@ flutter:
      - assets/banners/banner4.png
      - assets/banners/banner5.png
      - assets/banners/banner6.png
+     - assets/banners/p1.png
+     - assets/banners/p2.png
+     - assets/banners/p3.png
+     - assets/banners/p4.png
+     - assets/banners/p5.png
+     - assets/banners/p6.png
      - assets/animations/
      - assets/images/
 
