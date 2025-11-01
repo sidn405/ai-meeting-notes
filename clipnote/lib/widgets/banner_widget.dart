@@ -27,20 +27,31 @@ class _AffiliateBannerWidgetState extends State<AffiliateBannerWidget> {
     _loadBanner();
   }
 
-  void _loadBanner() {
-    final banner = _bannerService.getRandomBanner();
-    if (banner != null && mounted) {
-      setState(() => _currentBanner = banner);
-      
-      // Record impression after a short delay to ensure visibility
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && !_impressionRecorded) {
-          _bannerService.recordImpression(banner.id);
-          _impressionRecorded = true;
-        }
-      });
-    }
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadBannerForOrientation(); // reload when MediaQuery changes
   }
+
+  void _loadBannerForOrientation() {
+    final orientation = MediaQuery.of(context).orientation;
+
+    // If you added forceBannerId, keep that logic first:
+    if (widget.forceBannerId != null) {
+      final forced = BannerService.I
+          .getAllByOrientation(orientation)
+          .where((b) => b.id == widget.forceBannerId)
+          .toList();
+      final chosen = forced.isNotEmpty ? forced.first : BannerService.I.getRandomByOrientation(orientation);
+      if (mounted) setState(() => _currentBanner = chosen);
+    } else {
+      final chosen = BannerService.I.getRandomByOrientation(orientation);
+      if (mounted) setState(() => _currentBanner = chosen);
+    }
+
+    // (Optional) Impression logic stays the same as before
+  }
+
 
   Future<void> _handleBannerTap() async {
     if (_currentBanner == null) return;
@@ -190,25 +201,25 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
   }
 
   void _loadBanners() {
+    final orientation = MediaQuery.of(context).orientation;
+    final all = BannerService.I.getAllByOrientation(orientation);
+
     setState(() {
-      _banners = _bannerService.getAllBanners();
+      _banners = all;
+      _currentIndex = 0;
       if (_banners.isNotEmpty) {
         _bannerService.recordImpression(_banners[_currentIndex].id);
       }
     });
   }
 
-  void _startRotation() {
-    Future.delayed(widget.rotationInterval, () {
-      if (mounted && _banners.isNotEmpty) {
-        setState(() {
-          _currentIndex = (_currentIndex + 1) % _banners.length;
-        });
-        _bannerService.recordImpression(_banners[_currentIndex].id);
-        _startRotation();
-      }
-    });
+  // Reload the list when orientation changes:
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadBanners();
   }
+
 
   Future<void> _handleBannerTap() async {
     if (_banners.isEmpty) return;

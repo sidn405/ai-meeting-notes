@@ -69,9 +69,93 @@ class BannerService {
         weight: 15,
         isLocal: true,
       ),
+      BannerAd(
+        id: 'banner_0p1',
+        imageUrl: 'assets/banners/p1.png',
+        clickUrl: 'https://villiersjets.com/?id=7275',
+        title: 'Product p1',
+        weight: 10,
+        isLocal: true,
+      ),
+      BannerAd(
+        id: 'banner_0p2',
+        imageUrl: 'assets/banners/p2.png',
+        clickUrl: 'https://villiersjets.com/?id=7275',
+        title: 'Product p2',
+        weight: 5,
+        isLocal: true,
+      ),
+      BannerAd(
+        id: 'banner_0p3',
+        imageUrl: 'assets/banners/p3.png',
+        clickUrl: 'https://villiersjets.com/?id=7275',
+        title: 'Product p3',
+        weight: 15,
+        isLocal: true,
+      ),
+      BannerAd(
+        id: 'banner_0p4',
+        imageUrl: 'assets/banners/p4.png',
+        clickUrl: 'https://villiersjets.com/?id=7275',
+        title: 'Product p4',
+        weight: 8,
+        isLocal: true,
+      ),
+      BannerAd(
+        id: 'banner_0p5',
+        imageUrl: 'assets/banners/p5.png',
+        clickUrl: 'https://villiersjets.com/?id=7275',
+        title: 'Product p5',
+        weight: 8,
+        isLocal: true,
+      ),
+      BannerAd(
+        id: 'banner_0p6',
+        imageUrl: 'assets/banners/p6.png',
+        clickUrl: 'https://villiersjets.com/?id=7275',
+        title: 'Product p6',
+        weight: 15,
+        isLocal: true,
+      ),
     ];
+  
     print('✅ Loaded ${_banners.length} local banners');
   }
+
+  // Orientation-aware accessors
+  List<BannerAd> getPortraitBanners() =>
+      _banners.where((b) => b.id.contains('p')).toList();
+
+  List<BannerAd> getLandscapeBanners() =>
+      _banners.where((b) => !b.id.contains('p')).toList(); // or: b.id.contains('l')
+
+  // Weighted random pick from a list (reuse your weight field)
+  BannerAd? _weightedPick(List<BannerAd> list) {
+    if (list.isEmpty) return null;
+    final total = list.fold<int>(0, (sum, b) => sum + (b.weight ?? 1));
+    var roll = Random().nextInt(total) + 1;
+    for (final b in list) {
+      roll -= (b.weight ?? 1);
+      if (roll <= 0) return b;
+    }
+    return list.first;
+  }
+
+  // Public API to get a random by orientation
+  BannerAd? getRandomByOrientation(Orientation orientation) {
+    final list = orientation == Orientation.portrait
+        ? getPortraitBanners()
+        : getLandscapeBanners();
+    return _weightedPick(list) ?? getRandomBanner();
+  }
+
+  // Public API to get all by orientation (for rotator)
+  List<BannerAd> getAllByOrientation(Orientation orientation) {
+    return orientation == Orientation.portrait
+        ? getPortraitBanners()
+        : getLandscapeBanners();
+  }
+
   
   BannerAd? getRandomBanner() {
     if (_banners.isEmpty) return null;
