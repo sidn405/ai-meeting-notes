@@ -313,7 +313,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                             // ✅ Add upgrade button for Starter users
                             if (_licenseInfo?['tier'] == 'starter') ...[
                               TextButton.icon(
-                                onPressed: _iapService.isBusy ? null : _showUpgradeSheet,
+                                onPressed: _iapService.isBusy ? null : () => _showUpgradeSheet(hideStarter: true), // ✅ Hide starter
                                 icon: const Icon(Icons.arrow_upward, size: 16, color: Colors.white),
                                 label: const Text(
                                   'Upgrade',
@@ -624,7 +624,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     );
   }
 
-  void _showUpgradeSheet({bool showBusinessOnly = false}) {
+  void _showUpgradeSheet({bool showBusinessOnly = false, bool hideStarter = false}) {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
@@ -652,8 +652,8 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                 ),
                 const SizedBox(height: 20),
                 
-                // ✅ Show Starter only if not filtering
-                if (!showBusinessOnly) ...[
+                // ✅ Show Starter only if not filtering and not hidden
+                if (!showBusinessOnly && !hideStarter) ...[
                   _planTile(
                     context: c,
                     icon: Icons.verified,
@@ -664,7 +664,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                   const SizedBox(height: 20),
                 ],
                 
-                // ✅ Show Professional only if not filtering
+                // ✅ Show Professional only if not business-only
                 if (!showBusinessOnly) ...[
                   _planTile(
                     context: c,

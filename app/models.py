@@ -49,6 +49,7 @@ class License(SQLModel, table=True):
     
 # Tier Limits Configuration
 TIER_LIMITS = {
+    # Enum keys (for internal use)
     LicenseTier.FREE: {
         "tier_name": "Free",
         "max_file_size_mb": 25,
@@ -58,7 +59,7 @@ TIER_LIMITS = {
         "description": "Free plan with basic capture"
     },
     LicenseTier.STARTER: {   
-        "tier_name": "Starter",# Created new tier
+        "tier_name": "Starter",
         "max_file_size_mb": 50,
         "meetings_per_month": 25,
         "price": 29,
@@ -76,7 +77,41 @@ TIER_LIMITS = {
     LicenseTier.BUSINESS: {
         "tier_name": "Business",
         "max_file_size_mb": 500,
-        "meetings_per_month": 100,  # Was Effectively unlimited
+        "meetings_per_month": 100,
+        "price": 119,
+        "name": "Business",
+        "description": "Team-size volume and cloud storage"
+    },
+    
+    # ✅ String keys (for database values from IAP)
+    "free": {
+        "tier_name": "Free",
+        "max_file_size_mb": 25,
+        "meetings_per_month": 5,
+        "price": 0,
+        "name": "Free",
+        "description": "Free plan with basic capture"
+    },
+    "starter": {
+        "tier_name": "Starter",
+        "max_file_size_mb": 50,
+        "meetings_per_month": 25,
+        "price": 29,
+        "name": "Starter",
+        "description": "Starter plan with basic capture"
+    },
+    "pro": {  # ✅ Note: "pro" not "professional"
+        "tier_name": "Professional",
+        "max_file_size_mb": 200,
+        "meetings_per_month": 50,
+        "price": 69,
+        "name": "Professional",
+        "description": "Power user plan with cloud storage"
+    },
+    "business": {
+        "tier_name": "Business",
+        "max_file_size_mb": 500,
+        "meetings_per_month": 100,
         "price": 119,
         "name": "Business",
         "description": "Team-size volume and cloud storage"
