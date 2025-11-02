@@ -95,11 +95,11 @@ class IapService {
   }
 
   /// Public helpers to kick off purchases
-  Future<String> purchaseStarter()  => purchaseProduct(kStarterMonthlyId);
-  Future<String> purchasePro()      => purchaseProduct(kProMonthlyId);
-  Future<String> purchaseBusiness() => purchaseProduct(kBusinessMonthlyId);
+  Future<String> purchaseStarter()  => _purchaseProduct(kStarterMonthlyId);
+  Future<String> purchasePro()      => _purchaseProduct(kProMonthlyId);
+  Future<String> purchaseBusiness() => _purchaseProduct(kBusinessMonthlyId);
 
-  Future<String> purchaseProduct(String productId) async {
+  Future<String> _purchaseProduct(String productId) async {
     await init();
     if (!_available) {
       throw Exception('IAP not available on this device/store.');
@@ -293,15 +293,11 @@ class IapService {
     required String purchaseToken,
     required String userId,
   }) async {
-    // ✅ Use the /iap/verify endpoint
-    final uri = Uri.parse('${_api.baseUrl}/iap/verify');
-    
+    final uri = Uri.parse('${_api.baseUrl}/google/iap/verify/google');
     final body = {
-      "receipt": purchaseToken,        // ✅ Changed from "purchase_token"
-      "store": "google_play",          // ✅ Added store field
-      "product_id": productId,
       "user_id": userId,
-      "email": null,                   // Optional: add email if you have it
+      "purchase_token": purchaseToken,
+      "product_id": productId,
     };
 
     debugPrint('[IapService] 📡 POST $uri');
@@ -321,8 +317,9 @@ class IapService {
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       
-      // ✅ iap.py returns "license_key" directly
-      final licenseKey = data['license_key'] as String;
+      // Expecting: { success, tier, is_active, expires_at, license_key? }
+      final licenseKey = (data['license_key'] as String?) ??
+          'LK-${DateTime.now().millisecondsSinceEpoch}';
       
       return licenseKey;
     }

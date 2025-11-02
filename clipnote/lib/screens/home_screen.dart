@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../services/banner_service.dart';
 import '../utils/route_observer.dart';
 import '../widgets/banner_widget.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -585,8 +586,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                   icon: Icons.verified,
                   title: 'Starter',
                   subtitle: '25 meetings per month\n50MB max file size\nNo ads',
-                  price: _iapService.starterProduct?.price ?? '\$29/month',
-                  isPro: true,
+                  product: _iapService.starterProduct,  // ✅
                 ),
                 const SizedBox(height: 20),
                 _planTile(
@@ -594,8 +594,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                   icon: Icons.verified,
                   title: 'Professional',
                   subtitle: '50 meetings per month\n200MB max file size\nNo ads',
-                  price: _iapService.proProduct?.price ?? '\$69/month',
-                  isPro: true,
+                  product: _iapService.proProduct,  // ✅
                 ),
                 const SizedBox(height: 12),
                 _planTile(
@@ -603,8 +602,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                   icon: Icons.business,
                   title: 'Business',
                   subtitle: '100 meetings per month\n500MB max file size\nNo ads',
-                  price: _iapService.businessProduct?.price ?? '\$119/month',
-                  isPro: false,
+                  product: _iapService.businessProduct,  // ✅
                 ),
               ],
             ),
@@ -619,9 +617,11 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     required IconData icon,
     required String title,
     required String subtitle,
-    required String price,
-    required bool isPro,
+    required ProductDetails? product,  // ✅ Changed from price and isPro
   }) {
+    final price = product?.price ?? 'Unavailable';
+    final isAvailable = product != null;
+    
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300),
@@ -642,7 +642,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
           price,
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
-        onTap: () async {
+        onTap: !isAvailable ? null : () async {  // ✅ Disable if product unavailable
           Navigator.pop(context);
           
           showDialog(
@@ -652,9 +652,8 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
           );
           
           try {
-            final result = isPro 
-                ? await _iapService.purchasePro()
-                : await _iapService.purchaseBusiness();
+            // ✅ Use the product's ID directly
+            final result = await _iapService.purchaseProduct(product!.id);
             
             if (!mounted) return;
             Navigator.pop(this.context);
