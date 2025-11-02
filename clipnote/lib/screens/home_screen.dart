@@ -585,7 +585,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                   icon: Icons.verified,
                   title: 'Starter',
                   subtitle: '25 meetings per month\n50MB max file size\nNo ads',
-                  price: _iapService.proProduct?.price ?? '\$29/month',
+                  price: _iapService.starterProduct?.price ?? '\$29/month',
                   isPro: true,
                 ),
                 const SizedBox(height: 20),

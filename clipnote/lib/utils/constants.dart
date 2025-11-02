@@ -18,9 +18,14 @@ class AppConstants {
   
   // Tier Limits
   static const Map<String, Map<String, dynamic>> tierLimits = {
-    'starter': {
+    'free': {
       'meetings_per_month': 5,
       'max_file_size_mb': 25,
+      'name': 'Free'
+    },
+    'starter': {
+      'meetings_per_month': 25,
+      'max_file_size_mb': 50,
       'name': 'Starter'
     },
     'professional': {
