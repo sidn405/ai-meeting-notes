@@ -30,7 +30,7 @@ android {
         applicationId = "com.fourdgaming.clipnote"
         minSdkVersion = flutter.minSdkVersion
         targetSdkVersion = 36  // ✅ Fixed - was "targetSdk"
-        versionCode 5
+        versionCode 6
         versionName "1.0.1"
     }
 

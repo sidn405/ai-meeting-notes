@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/banner_service.dart';
@@ -203,6 +204,7 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
   final _bannerService = BannerService.I;
   List<BannerAd> _banners = [];
   int _currentIndex = 0;
+  Timer? _rotationTimer;
 
   @override
   void initState() {
@@ -221,24 +223,48 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
         ? BannerOrientation.portrait
         : BannerOrientation.landscape;
 
-    BannerAd? chosen;
+    List<BannerAd> availableBanners;
 
     if (widget.forceBannerId != null) {
       final list = BannerService.I.getAllByOrientation(svcOrientation);
-      chosen = list.cast<BannerAd?>().firstWhere(
-        (b) => b?.id == widget.forceBannerId,
-        orElse: () => BannerService.I.getRandomByOrientation(svcOrientation) ?? BannerService.I.getRandomBanner(),
-      );
+      final forced = list.where((b) => b.id == widget.forceBannerId).toList();
+      availableBanners = forced.isNotEmpty 
+          ? forced 
+          : (BannerService.I.getAllByOrientation(svcOrientation).isNotEmpty
+              ? BannerService.I.getAllByOrientation(svcOrientation)
+              : [BannerService.I.getRandomBanner()].whereType<BannerAd>().toList());
     } else {
-      chosen = BannerService.I.getRandomByOrientation(svcOrientation) ?? BannerService.I.getRandomBanner();
+      availableBanners = BannerService.I.getAllByOrientation(svcOrientation);
+      if (availableBanners.isEmpty) {
+        final randomBanner = BannerService.I.getRandomBanner();
+        if (randomBanner != null) {
+          availableBanners = [randomBanner];
+        }
+      }
     }
 
-    if (mounted && chosen != null) {
+    if (mounted && availableBanners.isNotEmpty) {
       setState(() {
-        _banners = [chosen!];
+        _banners = availableBanners;
         _currentIndex = 0;
       });
-      _bannerService.recordImpression(chosen.id);
+      _bannerService.recordImpression(availableBanners[0].id);
+      _startRotationTimer();
+    }
+  }
+
+  void _startRotationTimer() {
+    _rotationTimer?.cancel();
+    
+    if (_banners.length > 1) {
+      _rotationTimer = Timer.periodic(widget.rotationInterval, (timer) {
+        if (mounted) {
+          setState(() {
+            _currentIndex = (_currentIndex + 1) % _banners.length;
+          });
+          _bannerService.recordImpression(_banners[_currentIndex].id);
+        }
+      });
     }
   }
 
@@ -252,6 +278,12 @@ class _RotatingBannerWidgetState extends State<RotatingBannerWidget> {
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     }
+  }
+
+  @override
+  void dispose() {
+    _rotationTimer?.cancel();
+    super.dispose();
   }
 
   @override
