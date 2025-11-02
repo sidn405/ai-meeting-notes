@@ -310,10 +310,53 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                                 ),
                               ),
                             ),
+                            // ✅ Add upgrade button for Starter users
+                            if (_licenseInfo?['tier'] == 'starter') ...[
+                              TextButton.icon(
+                                onPressed: _iapService.isBusy ? null : _showUpgradeSheet,
+                                icon: const Icon(Icons.arrow_upward, size: 16, color: Colors.white),
+                                label: const Text(
+                                  'Upgrade',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                style: TextButton.styleFrom(
+                                  backgroundColor: Colors.white.withOpacity(0.2),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                              ),
+                            ],
+                            // ✅ Add upgrade button for Professional users
+                            if (_licenseInfo?['tier'] == 'pro') ...[
+                              TextButton.icon(
+                                onPressed: _iapService.isBusy ? null : () => _showUpgradeSheet(showBusinessOnly: true),
+                                icon: const Icon(Icons.arrow_upward, size: 16, color: Colors.white),
+                                label: const Text(
+                                  'Upgrade',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                style: TextButton.styleFrom(
+                                  backgroundColor: Colors.white.withOpacity(0.2),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 16),
-                        
                       ],
                     ),
                   ),
@@ -581,7 +624,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     );
   }
 
-  void _showUpgradeSheet() {
+  void _showUpgradeSheet({bool showBusinessOnly = false}) {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
@@ -596,38 +639,50 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Choose Your Plan',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                Text(
+                  showBusinessOnly ? 'Upgrade to Business' : 'Choose Your Plan',
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Remove ads and unlock more features',
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                Text(
+                  showBusinessOnly 
+                      ? 'Get more meetings and larger file uploads'
+                      : 'Remove ads and unlock more features',
+                  style: const TextStyle(fontSize: 14, color: Colors.grey),
                 ),
                 const SizedBox(height: 20),
-                _planTile(
-                  context: c,
-                  icon: Icons.verified,
-                  title: 'Starter',
-                  subtitle: '25 meetings per month\n50MB max file size\nNo ads',
-                  product: _iapService.starterProduct,  // ✅
-                ),
-                const SizedBox(height: 20),
-                _planTile(
-                  context: c,
-                  icon: Icons.verified,
-                  title: 'Professional',
-                  subtitle: '50 meetings per month\n200MB max file size\nNo ads',
-                  product: _iapService.proProduct,  // ✅
-                ),
-                const SizedBox(height: 12),
+                
+                // ✅ Show Starter only if not filtering
+                if (!showBusinessOnly) ...[
+                  _planTile(
+                    context: c,
+                    icon: Icons.verified,
+                    title: 'Starter',
+                    subtitle: '25 meetings per month\n50MB max file size\nNo ads',
+                    product: _iapService.starterProduct,
+                  ),
+                  const SizedBox(height: 20),
+                ],
+                
+                // ✅ Show Professional only if not filtering
+                if (!showBusinessOnly) ...[
+                  _planTile(
+                    context: c,
+                    icon: Icons.verified,
+                    title: 'Professional',
+                    subtitle: '50 meetings per month\n200MB max file size\nNo ads',
+                    product: _iapService.proProduct,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                
+                // ✅ Always show Business
                 _planTile(
                   context: c,
                   icon: Icons.business,
                   title: 'Business',
                   subtitle: '100 meetings per month\n500MB max file size\nNo ads',
-                  product: _iapService.businessProduct,  // ✅
+                  product: _iapService.businessProduct,
                 ),
               ],
             ),
