@@ -259,7 +259,7 @@ class IapService {
       
       // Call backend verification
       final licenseKey = await _verifyIapAndGetLicense(
-        packageName: Platform.isAndroid ? 'com.yourcompany.clipnote' : 'com.yourcompany.clipnote',
+        packageName: Platform.isAndroid ? 'com.fourdgaming.clipnote' : 'com.fourdgaming.clipnote',
         productId: purchase.productID,
         purchaseToken: receipt,
         userId: deviceId,
@@ -270,12 +270,15 @@ class IapService {
       // Save license key
       await _api.saveLicenseKey(licenseKey);
       
-      // Reload license info to get tier
+      // ✅ Reload license info to get tier (this refreshes the data)
       await _api.getLicenseInfo();
       
-      // Notify callback
+      debugPrint('[IapService] ✅ License info refreshed - Tier: ${_api.currentTier}');
+      
+      // ✅ Notify callback (this should trigger UI update)
       if (_onPurchaseSuccess != null) {
         final tier = _api.currentTier ?? 'free';
+        debugPrint('[IapService] 🔔 Calling success callback with tier: $tier');
         _onPurchaseSuccess!(licenseKey, tier);
       }
       

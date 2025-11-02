@@ -32,6 +32,31 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     _initIAP();
     _initializeLicenseAndLoadData();
     _initBanners();
+    _loadData();
+
+    // ✅ Set up the purchase success callback
+    _iapService.setOnPurchaseSuccessCallback((licenseKey, tier) {
+      debugPrint('🎉 Purchase successful! Tier: $tier');
+      
+      // ✅ Refresh the UI automatically
+      if (mounted) {
+        setState(() {
+          // This will trigger a rebuild with the new tier
+        });
+        
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Upgraded to $tier tier!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        
+        // ✅ Reload data to update the UI
+        _loadData();
+      }
+    });
   }
 
   Future<void> _initBanners() async {
