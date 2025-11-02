@@ -9,6 +9,7 @@ class AppConstants {
   static const String licenseInfoEndpoint = '/license/info';
   
   // In-App Purchase Product IDs
+  static const String starterTierProductId = 'com.clipnote.starter';
   static const String professionalTierProductId = 'clipnote_professional';
   static const String businessTierProductId = 'clipnote_business';
   
