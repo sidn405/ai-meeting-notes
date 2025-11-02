@@ -1149,7 +1149,7 @@ def get_cloud_status(
     
     # Can upload to cloud if: Pro/Business tier + files are local + meeting is complete
     can_upload_to_cloud = (
-        tier in ("professional", "business") and
+        tier in ("pro", "professional", "business") and
         storage_location == "local" and
         meeting.status in ("completed", "delivered")
     )
