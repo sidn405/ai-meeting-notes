@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>4D Gaming - Professional Apps & SaaS Tools</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        /* Header */
+        header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1.5rem 0;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        nav {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #333;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: #667eea;
+        }
+
+        /* Hero Section */
+        .hero {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+            text-align: center;
+            color: white;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .hero p {
+            font-size: 1.3rem;
+            margin-bottom: 2rem;
+            opacity: 0.95;
+        }
+
+        .cta-button {
+            display: inline-block;
+            padding: 1rem 2.5rem;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Apps Section */
+        .apps-section {
+            background: white;
+            padding: 4rem 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+            color: #333;
+        }
+
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .app-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            padding: 2rem;
+            color: white;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+
+        .app-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4);
+        }
+
+        .app-icon {
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .app-card h3 {
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+        }
+
+        .app-card p {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+            opacity: 0.95;
+        }
+
+        .app-features {
+            list-style: none;
+            margin-bottom: 1.5rem;
+        }
+
+        .app-features li {
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .app-features li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+
+        .app-link {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: bold;
+            transition: transform 0.3s;
+        }
+
+        .app-link:hover {
+            transform: scale(1.05);
+        }
+
+        /* Stats Section */
+        .stats-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 4rem 2rem;
+            color: white;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .stat-card {
+            padding: 2rem;
+        }
+
+        .stat-number {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        /* Technologies Section */
+        .tech-section {
+            background: #f8f9fa;
+            padding: 4rem 2rem;
+        }
+
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .tech-item {
+            padding: 2rem;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s;
+        }
+
+        .tech-item:hover {
+            transform: translateY(-5px);
+        }
+
+        .tech-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .tech-name {
+            font-weight: bold;
+            color: #333;
+        }
+
+        /* Contact Section */
+        .contact-section {
+            background: white;
+            padding: 4rem 2rem;
+            text-align: center;
+        }
+
+        .contact-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+        }
+
+        .contact-button {
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: bold;
+            transition: transform 0.3s;
+        }
+
+        .contact-button:hover {
+            transform: translateY(-3px);
+        }
+
+        /* Footer */
+        footer {
+            background: #2d3748;
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .apps-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <nav>
+            <div class="logo">4D Gaming</div>
+            <ul class="nav-links">
+                <li><a href="#apps">Apps</a></li>
+                <li><a href="#technologies">Technologies</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <h1>Professional Apps & SaaS Tools</h1>
+        <p>Building innovative solutions that solve real problems</p>
+        <a href="#apps" class="cta-button">Explore My Work</a>
+    </section>
+
+    <!-- Apps Section -->
+    <section class="apps-section" id="apps">
+        <div class="container">
+            <h2 class="section-title">Featured Applications</h2>
+            <div class="apps-grid">
+                
+                <!-- Clipnote -->
+                <div class="app-card">
+                    <div class="app-icon">🎙️</div>
+                    <h3>Clipnote</h3>
+                    <p>AI-powered meeting transcription and summarization tool that turns your audio and video into actionable insights.</p>
+                    <ul class="app-features">
+                        <li>Accurate AI transcription</li>
+                        <li>Smart summaries & action items</li>
+                        <li>Email delivery</li>
+                        <li>Multiple file formats</li>
+                    </ul>
+                    <a href="https://ai-meeting-notes-production-81d7.up.railway.app/" class="app-link" target="_blank">View App →</a>
+                </div>
+
+                <!-- Luxury Travel Bot -->
+                <div class="app-card">
+                    <div class="app-icon">✈️</div>
+                    <h3>Luxury Travel Bot</h3>
+                    <p>AI-powered travel planning assistant that creates personalized luxury itineraries with professional PDF exports.</p>
+                    <ul class="app-features">
+                        <li>Custom travel itineraries</li>
+                        <li>Dialogflow integration</li>
+                        <li>PDF generation</li>
+                        <li>Affiliate partnerships</li>
+                    </ul>
+                    <a href="https://4dgaming.games" class="app-link" target="_blank">View Demo →</a>
+                </div>
+
+                <!-- Add Your Other Apps Here -->
+                <div class="app-card">
+                    <div class="app-icon">🚀</div>
+                    <h3>Your Next Project</h3>
+                    <p>Have a project in mind? Let's build something amazing together with cutting-edge technology.</p>
+                    <ul class="app-features">
+                        <li>Full-stack development</li>
+                        <li>AI & ML integration</li>
+                        <li>Cloud deployment</li>
+                        <li>Scalable architecture</li>
+                    </ul>
+                    <a href="#contact" class="app-link">Get in Touch →</a>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="stats-section">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">2+</div>
+                    <div class="stat-label">Production Apps</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">100%</div>
+                    <div class="stat-label">Client Satisfaction</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">24/7</div>
+                    <div class="stat-label">Support</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">∞</div>
+                    <div class="stat-label">Possibilities</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technologies Section -->
+    <section class="tech-section" id="technologies">
+        <div class="container">
+            <h2 class="section-title">Technologies I Use</h2>
+            <div class="tech-grid">
+                <div class="tech-item">
+                    <div class="tech-icon">🐍</div>
+                    <div class="tech-name">Python</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">📱</div>
+                    <div class="tech-name">Flutter</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">☁️</div>
+                    <div class="tech-name">Google Cloud</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">🤖</div>
+                    <div class="tech-name">AI/ML</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">⚛️</div>
+                    <div class="tech-name">React</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">🔥</div>
+                    <div class="tech-name">Firebase</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section class="contact-section" id="contact">
+        <div class="container">
+            <h2 class="section-title">Let's Work Together</h2>
+            <p style="font-size: 1.2rem; margin-bottom: 2rem; color: #666;">
+                Have a project in mind? I'm available for freelance work and exciting collaborations.
+            </p>
+            <div class="contact-buttons">
+                <a href="mailto:your-email@4dgaming.games" class="contact-button">📧 Email Me</a>
+                <a href="https://www.freelancer.com" class="contact-button" target="_blank">💼 Hire on Freelancer</a>
+                <a href="https://github.com/yourusername" class="contact-button" target="_blank">🔗 GitHub</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <p>&copy; 2025 4D Gaming. All rights reserved.</p>
+        <p style="margin-top: 0.5rem; opacity: 0.8;">Built with passion and cutting-edge technology</p>
+    </footer>
+
+</body>
+</html>
