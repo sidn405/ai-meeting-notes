@@ -213,8 +213,16 @@
             font-weight: bold;
         }
 
+        .app-links {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
         .app-link {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
             padding: 0.75rem 1.5rem;
             background: white;
             color: #667eea;
@@ -222,6 +230,17 @@
             border-radius: 10px;
             font-weight: bold;
             transition: transform 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .app-link.play-store {
+            background: #01875f;
+            color: white;
+        }
+
+        .app-link.amazon-store {
+            background: #FF9900;
+            color: white;
         }
 
         .app-link:hover {
@@ -389,7 +408,18 @@
                         <li>Email delivery</li>
                         <li>Multiple file formats</li>
                     </ul>
-                    <a href="https://ai-meeting-notes-production-81d7.up.railway.app/" class="app-link" target="_blank">View App →</a>
+                    <!-- UPDATE THESE BUTTONS: -->
+                    <div class="app-links">
+                        <a href="https://ai-meeting-notes-production-81d7.up.railway.app/" class="app-link" target="_blank">
+                            🌐 Web App
+                        </a>
+                        <a href="https://play.google.com/store/apps/details?id=com.fourdgaming.clipnote" class="app-link play-store" target="_blank">
+                            ▶ Google Play
+                        </a>
+                        <a href="https://www.amazon.com/dp/YOUR_AMAZON_ID" class="app-link amazon-store" target="_blank">
+                            📦 Amazon
+                        </a>
+                    </div>
                 </div>
 
                 <!-- Luxury Travel Bot -->
