@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>4D Gaming - Professional Apps & SaaS Tools</title>
     <!-- Favicons -->
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png">
-    <link rel="manifest" href="/site.webmanifest">
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/android-chrome-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/assets/android-chrome-512x512.png">
+    <link rel="manifest" href="/assets/site.webmanifest">
     <style>
         * {
             margin: 0;
@@ -50,12 +50,25 @@
         .logo {
             display: flex;
             align-items: center;
+            gap: 12px;
+            text-decoration: none;
         }
 
         .logo img {
-            height: 45px;
+            height: 50px;
             width: auto;
             transition: transform 0.3s;
+        }
+
+        .logo-text {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+            transition: color 0.3s;
+        }
+
+        .logo:hover .logo-text {
+            color: #667eea;
         }
 
         .logo img:hover {
@@ -340,9 +353,10 @@
     <!-- Header -->
     <header>
         <nav>
-            <div class="logo">
-                <img src="/assets/logo.png" alt="4D Gaming">
-            </div>
+            <a href="/" class="logo">
+                <img src="/assets/logo.png" alt="4D Gaming Logo">
+                <span class="logo-text">4D Gaming</span>  <!-- ADD THIS LINE -->
+            </a>
             <ul class="nav-links">
                 <li><a href="#apps">Apps</a></li>
                 <li><a href="#technologies">Technologies</a></li>
