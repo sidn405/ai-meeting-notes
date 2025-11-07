@@ -27,10 +27,10 @@ app = FastAPI(title="Clipnote")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "*",  # Allow all for ClipNote
-        "https://4dgaming.games",  # Also allow 4D Gaming
+        "https://4dgaming.games",
         "https://ai-meeting-notes-production-81d7.up.railway.app",
         "http://localhost:8080",
+        "http://localhost:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
