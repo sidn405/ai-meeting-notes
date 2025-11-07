@@ -247,6 +247,32 @@
             transform: scale(1.05);
         }
 
+        /* Stripe Payment Buttons */
+        .hire-button {
+            display: inline-block;
+            padding: 0.8rem 1.5rem;
+            background: #635bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1rem;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 1rem;
+        }
+
+        .hire-button:hover {
+            background: #5045e5;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(99, 91, 255, 0.4);
+        }
+
+        .hire-button:active {
+            transform: translateY(0);
+        }
+
         /* Stats Section */
         .stats-section {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -264,7 +290,11 @@
         }
 
         .stat-card {
+            text-align: center;
             padding: 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
         }
 
         .stat-number {
@@ -331,17 +361,20 @@
         }
 
         .contact-button {
+            display: inline-block;
             padding: 1rem 2rem;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             text-decoration: none;
             border-radius: 10px;
             font-weight: bold;
-            transition: transform 0.3s;
+            transition: transform 0.3s, box-shadow 0.3s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
         }
 
         .contact-button:hover {
             transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
         }
 
         /* Footer */
@@ -757,15 +790,30 @@
     </footer>
 
     <script>
-        // Initialize Stripe
-        const BACKEND_URL = 'https://ai-meeting-notes-production-81d7.up.railway.app';
+        // Backend URL - Your custom domain!
+        // Since your Railway service serves both backend API and frontend HTML,
+        // you can use your custom domain (cleaner) or Railway URL (works too)
+        const BACKEND_URL = 'https://4dgaming.games';
+        // Alternative: 'https://ai-meeting-notes-production-81d7.up.railway.app'
+        
+        // Initialize Stripe (will be set after fetching config)
+        let stripe;
 
-        // Fetch key from backend at runtime
+        // Fetch Stripe publishable key from backend
         async function initializeStripe() {
-            const response = await fetch(`${BACKEND_URL}/config`);
-            const config = await response.json();
-            stripe = Stripe(config.publishableKey); // From Railway! ✅
+            try {
+                const response = await fetch(`${BACKEND_URL}/config`);
+                const config = await response.json();
+                stripe = Stripe(config.publishableKey);
+                console.log('Stripe initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Stripe:', error);
+                alert('Unable to initialize payment system. Please contact us at info@4dgaming.games');
+            }
         }
+
+        // Initialize Stripe when page loads
+        initializeStripe();
 
         // Service pricing mapping
         const servicePrices = {
@@ -789,9 +837,15 @@
                 return;
             }
 
+            // Make sure Stripe is initialized
+            if (!stripe) {
+                alert('Payment system is still loading. Please try again in a moment.');
+                return;
+            }
+
             try {
                 // Call your backend to create a Checkout Session
-                const response = await fetch('https://lead-generation-app.railway.app/create-checkout-session', {
+                const response = await fetch(`${BACKEND_URL}/create-checkout-session`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
