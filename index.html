@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>4D Gaming - Professional Apps & SaaS Tools</title>
+    <!-- Favicons -->
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/android-chrome-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/assets/android-chrome-512x512.png">
+    <link rel="manifest" href="/assets/site.webmanifest">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        /* Header */
+        header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1.5rem 0;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        nav {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+
+        .logo img {
+            height: 50px;
+            width: auto;
+            transition: transform 0.3s;
+        }
+
+        .logo-text {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+            transition: color 0.3s;
+        }
+
+        .logo:hover .logo-text {
+            color: #667eea;
+        }
+
+        .logo img:hover {
+            transform: scale(1.05);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #333;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: #667eea;
+        }
+
+        /* Hero Section */
+        .hero {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+            text-align: center;
+            color: white;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .hero p {
+            font-size: 1.3rem;
+            margin-bottom: 2rem;
+            opacity: 0.95;
+        }
+
+        .cta-button {
+            display: inline-block;
+            padding: 1rem 2.5rem;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Apps Section */
+        .apps-section {
+            background: white;
+            padding: 4rem 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+            color: #333;
+        }
+
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .app-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            padding: 2rem;
+            color: white;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+
+        .app-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4);
+        }
+
+        .app-icon {
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .app-card h3 {
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+        }
+
+        .app-card p {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+            opacity: 0.95;
+        }
+
+        .app-features {
+            list-style: none;
+            margin-bottom: 1.5rem;
+        }
+
+        .app-features li {
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .app-features li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+
+        .app-links {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .app-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 0.75rem 1.5rem;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: bold;
+            transition: transform 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .app-link.play-store {
+            background: #01875f;
+            color: white;
+        }
+
+        .app-link.amazon-store {
+            background: #FF9900;
+            color: white;
+        }
+
+        .app-link:hover {
+            transform: scale(1.05);
+        }
+
+        /* Stripe Payment Buttons */
+        .hire-button {
+            display: inline-block;
+            padding: 0.8rem 1.5rem;
+            background: #635bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1rem;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 1rem;
+        }
+
+        .hire-button:hover {
+            background: #5045e5;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(99, 91, 255, 0.4);
+        }
+
+        .hire-button:active {
+            transform: translateY(0);
+        }
+
+        /* Stats Section */
+        .stats-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 4rem 2rem;
+            color: white;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .stat-card {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-number {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        /* Technologies Section */
+        .tech-section {
+            background: white;
+            padding: 4rem 2rem;
+        }
+
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .tech-item {
+            text-align: center;
+            padding: 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            color: white;
+            transition: transform 0.3s;
+        }
+
+        .tech-item:hover {
+            transform: translateY(-5px);
+        }
+
+        .tech-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .tech-name {
+            font-weight: bold;
+            color: #333;
+        }
+
+        /* Contact Section */
+        .contact-section {
+            background: white;
+            padding: 4rem 2rem;
+            text-align: center;
+        }
+
+        .contact-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+        }
+
+        .contact-button {
+            display: inline-block;
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: bold;
+            transition: transform 0.3s, box-shadow 0.3s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .contact-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Footer */
+        footer {
+            background: #2d3748;
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .apps-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* New Badge */
+        .new-badge {
+            display: inline-block;
+            background: #ff6b6b;
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-left: 0.5rem;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <nav>
+            <a href="/" class="logo">
+                <img src="/assets/logo.png" alt="4D Gaming Logo">
+                <span class="logo-text">4D Gaming</span>  <!-- ADD THIS LINE -->
+            </a>
+            <ul class="nav-links">
+                <li><a href="#apps">Apps</a></li>
+                <li><a href="#services">Services</a></li>
+                <li><a href="#technologies">Technologies</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <h1>Building the Future with AI, Blockchain & Mobile Apps</h1>
+        <p>Full-stack developer specializing in AI chatbots, Flutter apps, Web3 solutions, and automation</p>
+        <p style="font-size: 1rem; margin-top: 1rem; opacity: 0.9;">
+            8+ Published Apps • 10+ Years Experience • Multi-Platform Developer
+        </p>
+        <a href="#services" class="cta-button">Hire Me Directly</a>
+    </section>
+
+    <!-- Apps Section -->
+    <section class="apps-section" id="apps">
+        <div class="container">
+            <h2 class="section-title">Featured Applications & Games</h2>
+            <p style="text-align: center; font-size: 1.2rem; margin-bottom: 3rem; color: #666;">
+                8+ Published Apps Across Google Play & Amazon Appstore
+            </p>
+            
+            <div class="apps-grid">
+                
+                <!-- Clipnote -->
+                <div class="app-card">
+                    <div class="app-icon">🎙️</div>
+                    <h3>Clipnote</h3>
+                    <p>AI-powered meeting transcription and summarization tool that turns your audio and video into actionable insights.</p>
+                    <ul class="app-features">
+                        <li>Accurate AI transcription</li>
+                        <li>Smart summaries & action items</li>
+                        <li>Email delivery</li>
+                        <li>Multiple file formats</li>
+                    </ul>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem;">
+                        <a href="https://play.google.com/store/apps/details?id=com.fourdgaming.clipnote" class="app-link" target="_blank" style="background: #01875f; color: white;">
+                            ▶ Google Play
+                        </a>
+                        <!----<a href="https://ai-meeting-notes-production-81d7.up.railway.app/" class="app-link" target="_blank">
+                            🌐 Web App
+                        </a> -->
+                    </div>
+                </div>
+
+                <!-- Lead Generator Empire -->
+                <div class="app-card">
+                    <div class="app-icon">👑</div>
+                    <h3>Lead Generator Empire</h3>
+                    <p>Enterprise-grade lead generation with multi-platform scraping across 8 social media platforms in 12+ languages.</p>
+                    <ul class="app-features">
+                        <li>8-platform coverage</li>
+                        <li>Real-time lead scraping</li>
+                        <li>12+ language support</li>
+                        <li>ROI calculator & forecasting</li>
+                    </ul>
+                    <a href="https://leadgeneratorempire.com/" class="app-link">Request Demo →</a>
+                </div>
+
+                <!-- Luxury Travel Bot -->
+                <div class="app-card">
+                    <div class="app-icon">✈️</div>
+                    <h3>Luxury Travel Bot</h3>
+                    <p>AI-powered travel planning assistant that creates personalized luxury itineraries with professional PDF exports.</p>
+                    <ul class="app-features">
+                        <li>Custom travel itineraries</li>
+                        <li>Dialogflow integration</li>
+                        <li>PDF generation with images</li>
+                        <li>Affiliate partnerships</li>
+                    </ul>
+                    <a href="https://ecofriendlyluxurytravels.com" class="app-link" target="_blank">View Demo →</a>
+                </div>
+
+                <!-- Mobile Games Portfolio -->
+                <div class="app-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <div class="app-icon">🎮</div>
+                    <h3>Mobile Games</h3>
+                    <p>Published multiple mobile games on Amazon Appstore including Block Puzzle Kings, Guitar Pro, and Square Dash.</p>
+                    <ul class="app-features">
+                        <li>3+ published games</li>
+                        <li>Amazon Appstore</li>
+                        <li>Game reskinning expertise</li>
+                        <li>Monetization integration</li>
+                    </ul>
+                    <a href="https://www.amazon.com/s?k=4d+gaming+block+puzzle" class="app-link" target="_blank" style="background: #FF9900; color: white;">
+                        📦 Amazon Store
+                    </a>
+                </div>
+
+                <!-- Meal Planner Bot -->
+                <div class="app-card">
+                    <div class="app-icon">🍽️</div>
+                    <h3>Meal Planner Bot</h3>
+                    <p>Intelligent Dialogflow CX chatbot that creates custom meal plans, recipes, and downloadable PDF grocery lists.</p>
+                    <ul class="app-features">
+                        <li>Custom meal plan generation</li>
+                        <li>Recipe recommendations</li>
+                        <li>PDF grocery list export</li>
+                        <li>Dietary preference support</li>
+                    </ul>
+                    <a href="#contact" class="app-link">Coming Soon →</a>
+                </div>
+
+                <!-- Crypto Trading Bot -->
+                <div class="app-card">
+                    <div class="app-icon">📈</div>
+                    <h3>Crypto Trading Bot</h3>
+                    <p>Automated cryptocurrency trading system with real-time market analysis and algorithmic strategy execution.</p>
+                    <ul class="app-features">
+                        <li>Real-time market data</li>
+                        <li>Automated trading strategies</li>
+                        <li>Risk management tools</li>
+                        <li>Multi-exchange support</li>
+                    </ul>
+                    <a href="#contact" class="app-link">Request Info →</a>
+                </div>
+
+                <!-- NEW: NFT/Web3 Projects -->
+                <div class="app-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <div class="app-icon">🎨</div>
+                    <h3>NFT & Web3 Projects <span class="new-badge">NEW</span></h3>
+                    <p>Digital assets and metaverse projects including Sandbox voxel assets and NFT collections.</p>
+                    <ul class="app-features">
+                        <li>The Sandbox assets</li>
+                        <li>OpenSea NFT collections</li>
+                        <li>Smart contract development</li>
+                        <li>Metaverse integration</li>
+                    </ul>
+                    <a href="#contact" class="app-link">View Portfolio →</a>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Services Section -->
+    <section class="apps-section" style="background: #f8f9fa;" id="services">
+        <div class="container">
+            <h2 class="section-title">Services I Offer <span style="font-size: 1rem; color: #667eea;">💳 Hire Me Directly with Stripe</span></h2>
+            <div class="apps-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+                
+                <div class="app-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                    <div class="app-icon">🤖</div>
+                    <h3>AI Chatbot Development</h3>
+                    <p>Custom Dialogflow chatbots with natural conversations, webhook integrations, and PDF exports.</p>
+                    <p style="margin-top: 1rem; font-weight: bold; font-size: 1.3rem;">Starting at $150</p>
+                    <button class="hire-button" onclick="createCheckout('chatbot')">💳 Hire Now with Stripe</button>
+                </div>
+
+                <div class="app-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                    <div class="app-icon">📱</div>
+                    <h3>Mobile App Development</h3>
+                    <p>Cross-platform Flutter apps for iOS and Android with beautiful UI and smooth performance.</p>
+                    <p style="margin-top: 1rem; font-weight: bold; font-size: 1.3rem;">Starting at $500</p>
+                    <button class="hire-button" onclick="createCheckout('mobile')">💳 Hire Now with Stripe</button>
+                </div>
+
+                <div class="app-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <div class="app-icon">🎮</div>
+                    <h3>Game Development & Reskinning</h3>
+                    <p>Mobile game development, reskinning, and publishing to Google Play and Amazon Appstore.</p>
+                    <p style="margin-top: 1rem; font-weight: bold; font-size: 1.3rem;">Starting at $200</p>
+                    <button class="hire-button" onclick="createCheckout('game')">💳 Hire Now with Stripe</button>
+                </div>
+
+                <!-- NEW: Web3/Blockchain Services -->
+                <div class="app-card" style="background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%);">
+                    <div class="app-icon">⛓️</div>
+                    <h3>Web3 & Blockchain Development <span class="new-badge">NEW</span></h3>
+                    <p>Smart contracts, NFT minting, DApp development, and metaverse asset creation.</p>
+                    <p style="margin-top: 1rem; font-weight: bold; font-size: 1.3rem;">Starting at $300</p>
+                    <button class="hire-button" onclick="createCheckout('web3')">💳 Hire Now with Stripe</button>
+                </div>
+
+                <div class="app-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                    <div class="app-icon">🔍</div>
+                    <h3>Web Scraping & Lead Gen</h3>
+                    <p>Professional data extraction and lead generation from any website or platform.</p>
+                    <p style="margin-top: 1rem; font-weight: bold; font-size: 1.3rem;">Starting at $50</p>
+                    <button class="hire-button" onclick="createCheckout('scraping')">💳 Hire Now with Stripe</button>
+                </div>
+
+                <div class="app-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                    <div class="app-icon">📄</div>
+                    <h3>PDF Generation</h3>
+                    <p>Automated PDF creation with custom layouts, images, tables, and professional formatting.</p>
+                    <p style="margin-top: 1rem; font-weight: bold; font-size: 1.3rem;">Starting at $200</p>
+                    <button class="hire-button" onclick="createCheckout('pdf')">💳 Hire Now with Stripe</button>
+                </div>
+
+                <!-- NEW: NFT/Metaverse Services -->
+                <div class="app-card" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
+                    <div class="app-icon">🎨</div>
+                    <h3>NFT & Metaverse Assets <span class="new-badge">NEW</span></h3>
+                    <p>Create NFT collections, Sandbox voxel assets, and metaverse-ready 3D models.</p>
+                    <p style="margin-top: 1rem; font-weight: bold; font-size: 1.3rem;">Starting at $250</p>
+                    <button class="hire-button" onclick="createCheckout('nft')">💳 Hire Now with Stripe</button>
+                </div>
+
+                <div class="app-card" style="background: linear-gradient(135deg, #ffecd2 0%, #f5576c 100%);">
+                    <div class="app-icon">📦</div>
+                    <h3>App Store Publishing</h3>
+                    <p>Expert app submission to Google Play and Amazon Appstore. Get your app live fast.</p>
+                    <p style="margin-top: 1rem; font-weight: bold; font-size: 1.3rem;">Starting at $100</p>
+                    <button class="hire-button" onclick="createCheckout('publishing')">💳 Hire Now with Stripe</button>
+                </div>
+
+                <div class="app-card" style="background: linear-gradient(135deg, #715CBA 0%, #fed6e3 100%);">
+                    <div class="app-icon">🎙️</div>
+                    <h3>AI Transcription Service</h3>
+                    <p>Professional audio and video transcription with summaries and action items.</p>
+                    <p style="margin-top: 1rem; font-weight: bold; font-size: 1.3rem;">Starting at $10</p>
+                    <button class="hire-button" onclick="createCheckout('transcription')">💳 Hire Now with Stripe</button>
+                </div>
+
+                <div class="app-card" style="background: linear-gradient(135deg, #ffafbd 0%, #fed6e3 100%);">
+                    <div class="app-icon">📈</div>
+                    <h3>Trading Bot Development</h3>
+                    <p>Custom automated trading bots with real-time data and strategy execution.</p>
+                    <p style="margin-top: 1rem; font-weight: bold; font-size: 1.3rem;">Starting at $500</p>
+                    <button class="hire-button" onclick="createCheckout('trading')">💳 Hire Now with Stripe</button>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="stats-section">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">10+</div>
+                    <div class="stat-label">Published Apps</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">2</div>
+                    <div class="stat-label">App Stores</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">10+</div>
+                    <div class="stat-label">Years Experience</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">100%</div>
+                    <div class="stat-label">Client Satisfaction</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technologies Section -->
+    <section class="tech-section" id="technologies">
+        <div class="container">
+            <h2 class="section-title">Technologies I Use</h2>
+            <div class="tech-grid">
+                <div class="tech-item">
+                    <div class="tech-icon">🐍</div>
+                    <div class="tech-name">Python</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">📱</div>
+                    <div class="tech-name">Flutter</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">☁️</div>
+                    <div class="tech-name">Google Cloud</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">🤖</div>
+                    <div class="tech-name">AI/ML</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">⚛️</div>
+                    <div class="tech-name">React</div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">🔥</div>
+                    <div class="tech-name">Firebase</div>
+                </div>
+                <!-- NEW: Web3 Technologies -->
+                <div class="tech-item" style="background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%);">
+                    <div class="tech-icon">⛓️</div>
+                    <div class="tech-name">Ethereum</div>
+                </div>
+                <div class="tech-item" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <div class="tech-icon">🎨</div>
+                    <div class="tech-name">NFTs</div>
+                </div>
+                <div class="tech-item" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
+                    <div class="tech-icon">🌐</div>
+                    <div class="tech-name">Web3.js</div>
+                </div>
+                <div class="tech-item" style="background: linear-gradient(135deg, #ffecd2 0%, #f5576c 100%);">
+                    <div class="tech-icon">🧊</div>
+                    <div class="tech-name">Solidity</div>
+                </div>
+                <div class="tech-item" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                    <div class="tech-icon">🏝️</div>
+                    <div class="tech-name">The Sandbox</div>
+                </div>
+                <div class="tech-item" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                    <div class="tech-icon">🖼️</div>
+                    <div class="tech-name">OpenSea</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section class="contact-section" id="contact">
+        <div class="container">
+            <h2 class="section-title">Let's Work Together</h2>
+            <p style="font-size: 1.2rem; margin-bottom: 2rem; color: #666;">
+                Need an AI chatbot, mobile app, game reskin, Web3 solution, or automation tool?<br>
+                Hire me directly with Stripe or reach out through email.
+            </p>
+            <div class="contact-buttons">
+                <a href="mailto:info@4dgaming.games" class="contact-button">📧 Email Me</a>
+                <a href="#services" class="contact-button">💳 Pay with Stripe</a>
+                <a href="https://www.freelancer.com/u/sidneym31" class="contact-button" target="_blank">💼 Freelancer</a>
+            </div>
+            
+            <div style="margin-top: 3rem; padding: 2rem; background: white; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                <h3 style="margin-bottom: 1rem; color: #333;">What I Can Help With:</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; text-align: left;">
+                    <div>
+                        <strong style="color: #667eea;">🤖 AI & Chatbots</strong>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem; color: #666;">Dialogflow, OpenAI API, Custom AI solutions</p>
+                    </div>
+                    <div>
+                        <strong style="color: #667eea;">📱 Mobile Apps</strong>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem; color: #666;">Flutter, iOS & Android, Cross-platform</p>
+                    </div>
+                    <div>
+                        <strong style="color: #667eea;">🎮 Game Development</strong>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem; color: #666;">Game reskinning, Publishing, Monetization</p>
+                    </div>
+                    <div>
+                        <strong style="color: #ff6b6b;">⛓️ Web3 & Blockchain</strong>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem; color: #666;">Smart contracts, NFTs, DApps, Metaverse</p>
+                    </div>
+                    <div>
+                        <strong style="color: #667eea;">🔍 Web Scraping</strong>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem; color: #666;">Data extraction, Lead generation, Automation</p>
+                    </div>
+                    <div>
+                        <strong style="color: #f093fb;">🎨 NFT Creation</strong>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem; color: #666;">Collections, Sandbox assets, Metaverse integration</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <p>&copy; 2025 4D Gaming. All rights reserved.</p>
+        <p style="margin-top: 0.5rem; opacity: 0.8;">Built with passion and cutting-edge technology | AI • Blockchain • Mobile</p>
+    </footer>
+
+    <script>
+        // Backend URL - Your custom domain!
+        // Since your Railway service serves both backend API and frontend HTML,
+        // you can use your custom domain (cleaner) or Railway URL (works too)
+        const BACKEND_URL = 'https://4dgaming.games';
+        // Alternative: 'https://ai-meeting-notes-production-81d7.up.railway.app'
+        
+        // Initialize Stripe (will be set after fetching config)
+        let stripe;
+
+        // Fetch Stripe publishable key from backend
+        async function initializeStripe() {
+            try {
+                const response = await fetch(`${BACKEND_URL}/config`);
+                const config = await response.json();
+                stripe = Stripe(config.publishableKey);
+                console.log('Stripe initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Stripe:', error);
+                alert('Unable to initialize payment system. Please contact us at info@4dgaming.games');
+            }
+        }
+
+        // Initialize Stripe when page loads
+        initializeStripe();
+
+        // Service pricing mapping
+        const servicePrices = {
+            'chatbot': { price: 15000, name: 'AI Chatbot Development' },
+            'mobile': { price: 50000, name: 'Mobile App Development' },
+            'game': { price: 20000, name: 'Game Development & Reskinning' },
+            'web3': { price: 30000, name: 'Web3 & Blockchain Development' },
+            'scraping': { price: 5000, name: 'Web Scraping & Lead Gen' },
+            'pdf': { price: 20000, name: 'PDF Generation' },
+            'nft': { price: 25000, name: 'NFT & Metaverse Assets' },
+            'publishing': { price: 10000, name: 'App Store Publishing' },
+            'transcription': { price: 1000, name: 'AI Transcription Service' },
+            'trading': { price: 50000, name: 'Trading Bot Development' }
+        };
+
+        async function createCheckout(serviceType) {
+            const service = servicePrices[serviceType];
+            
+            if (!service) {
+                alert('Invalid service selected');
+                return;
+            }
+
+            // Make sure Stripe is initialized
+            if (!stripe) {
+                alert('Payment system is still loading. Please try again in a moment.');
+                return;
+            }
+
+            try {
+                // Call your backend to create a Checkout Session
+                const response = await fetch(`${BACKEND_URL}/create-checkout-session`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        service: serviceType,
+                        price: service.price,
+                        name: service.name
+                    })
+                });
+
+                const session = await response.json();
+
+                // Redirect to Stripe Checkout
+                const result = await stripe.redirectToCheckout({
+                    sessionId: session.id
+                });
+
+                if (result.error) {
+                    alert(result.error.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('There was an error processing your request. Please contact me directly at info@4dgaming.games');
+            }
+        }
+
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

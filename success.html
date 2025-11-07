@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Successful - 4D Gaming</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .success-card {
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            max-width: 600px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .success-icon {
+            font-size: 5rem;
+            margin-bottom: 1rem;
+            animation: bounce 1s ease-in-out;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+
+        h1 {
+            color: #2c3e50;
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        p {
+            color: #666;
+            font-size: 1.2rem;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+
+        .details {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            text-align: left;
+        }
+
+        .details h3 {
+            color: #333;
+            margin-bottom: 1rem;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .detail-value {
+            color: #333;
+        }
+
+        .btn-home {
+            display: inline-block;
+            padding: 1rem 2.5rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            transition: transform 0.3s, box-shadow 0.3s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-home:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .contact-info {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 2px solid #f0f0f0;
+        }
+
+        .contact-info p {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="success-card">
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Loading payment details...</p>
+        </div>
+
+        <div id="success-content" style="display: none;">
+            <div class="success-icon">✅</div>
+            <h1>Payment Successful!</h1>
+            <p>Thank you for hiring 4D Gaming! Your payment has been processed successfully.</p>
+            
+            <div class="details" id="payment-details">
+                <!-- Payment details will be loaded here -->
+            </div>
+
+            <div class="contact-info">
+                <h3 style="color: #333; margin-bottom: 1rem;">What Happens Next?</h3>
+                <p>📧 You'll receive a confirmation email within the next few minutes</p>
+                <p>📞 I'll reach out within 24 hours to discuss your project details</p>
+                <p>🚀 We'll start working on your project immediately after our initial consultation</p>
+            </div>
+
+            <a href="/" class="btn-home">← Back to Home</a>
+
+            <div style="margin-top: 2rem; padding: 1rem; background: #fff3cd; border-radius: 10px;">
+                <p style="color: #856404; font-size: 0.9rem; margin: 0;">
+                    <strong>Questions?</strong> Contact me at <a href="mailto:info@4dgaming.games" style="color: #667eea;">info@4dgaming.games</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Backend URL - Your custom domain (same as index.html)
+        const BACKEND_URL = 'https://4dgaming.games';
+        // Alternative: 'https://ai-meeting-notes-production-81d7.up.railway.app'
+        
+        // Get session ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session_id');
+
+        if (sessionId) {
+            // Fetch session details from backend
+            fetch(`${BACKEND_URL}/checkout-session?sessionId=${sessionId}`)
+                .then(response => response.json())
+                .then(session => {
+                    // Hide loading, show success
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('success-content').style.display = 'block';
+
+                    // Populate payment details
+                    const detailsHtml = `
+                        <h3>Payment Details</h3>
+                        <div class="detail-row">
+                            <span class="detail-label">Service:</span>
+                            <span class="detail-value">${session.line_items?.data[0]?.description || 'Service'}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Amount Paid:</span>
+                            <span class="detail-value">$${(session.amount_total / 100).toFixed(2)}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Payment ID:</span>
+                            <span class="detail-value">${session.payment_intent || sessionId}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Email:</span>
+                            <span class="detail-value">${session.customer_email || 'Will be sent to you'}</span>
+                        </div>
+                    `;
+                    document.getElementById('payment-details').innerHTML = detailsHtml;
+                })
+                .catch(error => {
+                    console.error('Error fetching session:', error);
+                    // Still show success even if we can't fetch details
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('success-content').style.display = 'block';
+                    document.getElementById('payment-details').innerHTML = `
+                        <h3>Payment Confirmed</h3>
+                        <p>Your payment has been processed successfully. You'll receive a confirmation email shortly.</p>
+                    `;
+                });
+        } else {
+            // No session ID, redirect to home
+            window.location.href = '/';
+        }
+    </script>
+</body>
+</html>

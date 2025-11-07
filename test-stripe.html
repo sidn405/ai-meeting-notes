@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stripe Integration Test</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            background: #1e1e1e;
+            color: #00ff00;
+        }
+        .test-box {
+            background: #2a2a2a;
+            border: 2px solid #00ff00;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .status {
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .success { background: #00ff00; color: #000; }
+        .error { background: #ff0000; color: #fff; }
+        .pending { background: #ffaa00; color: #000; }
+        button {
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 10px 5px;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #00cc00;
+        }
+        pre {
+            background: #000;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        h2 {
+            color: #00ffff;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Stripe Integration Diagnostic Tool</h1>
+    <p>This tool tests your 4D Gaming Stripe integration step by step.</p>
+
+    <div class="test-box">
+        <h2>Step 1: Configuration</h2>
+        <p>Update this with your Railway backend URL:</p>
+        <input type="text" id="backendUrl" placeholder="https://your-railway-app.railway.app" 
+               style="width: 100%; padding: 10px; font-size: 14px; background: #1e1e1e; color: #00ff00; border: 1px solid #00ff00;">
+        <button onclick="saveConfig()">Save Config</button>
+    </div>
+
+    <div class="test-box">
+        <h2>Step 2: Backend Health Check</h2>
+        <p id="test1">Test 1: Backend Reachable <span id="status1" class="status pending">PENDING</span></p>
+        <button onclick="testBackend()">Test Backend</button>
+        <pre id="result1" style="display: none;"></pre>
+    </div>
+
+    <div class="test-box">
+        <h2>Step 3: Config Endpoint</h2>
+        <p id="test2">Test 2: Get Stripe Publishable Key <span id="status2" class="status pending">PENDING</span></p>
+        <button onclick="testConfig()">Test Config</button>
+        <pre id="result2" style="display: none;"></pre>
+    </div>
+
+    <div class="test-box">
+        <h2>Step 4: Initialize Stripe</h2>
+        <p id="test3">Test 3: Stripe.js Initialization <span id="status3" class="status pending">PENDING</span></p>
+        <button onclick="testStripe()">Initialize Stripe</button>
+        <pre id="result3" style="display: none;"></pre>
+    </div>
+
+    <div class="test-box">
+        <h2>Step 5: Create Checkout Session</h2>
+        <p id="test4">Test 4: Backend Creates Session <span id="status4" class="status pending">PENDING</span></p>
+        <button onclick="testCheckout()">Test Checkout</button>
+        <pre id="result4" style="display: none;"></pre>
+    </div>
+
+    <div class="test-box">
+        <h2>Step 6: Full Stripe Redirect</h2>
+        <p id="test5">Test 5: Complete Stripe Flow <span id="status5" class="status pending">PENDING</span></p>
+        <button onclick="testFullFlow()">Test Full Flow (Will Redirect!)</button>
+        <pre id="result5" style="display: none;"></pre>
+    </div>
+
+    <div class="test-box">
+        <h2>📋 Results Summary</h2>
+        <div id="summary"></div>
+    </div>
+
+    <script src="https://js.stripe.com/v3/"></script>
+    <script>
+        let BACKEND_URL = '';
+        let stripe = null;
+        let testResults = {
+            test1: false,
+            test2: false,
+            test3: false,
+            test4: false,
+            test5: false
+        };
+
+        function saveConfig() {
+            BACKEND_URL = document.getElementById('backendUrl').value.trim();
+            if (!BACKEND_URL.startsWith('https://')) {
+                alert('Backend URL must start with https://');
+                return;
+            }
+            localStorage.setItem('BACKEND_URL', BACKEND_URL);
+            alert('Backend URL saved! ✅\n\n' + BACKEND_URL);
+            updateSummary();
+        }
+
+        // Load saved config
+        window.onload = function() {
+            const saved = localStorage.getItem('BACKEND_URL');
+            if (saved) {
+                document.getElementById('backendUrl').value = saved;
+                BACKEND_URL = saved;
+            }
+            updateSummary();
+        };
+
+        async function testBackend() {
+            if (!BACKEND_URL) {
+                alert('Please set Backend URL first!');
+                return;
+            }
+
+            const status = document.getElementById('status1');
+            const result = document.getElementById('result1');
+            
+            status.textContent = 'TESTING...';
+            status.className = 'status pending';
+            result.style.display = 'none';
+
+            try {
+                const response = await fetch(BACKEND_URL);
+                const text = await response.text();
+                
+                testResults.test1 = true;
+                status.textContent = '✅ SUCCESS';
+                status.className = 'status success';
+                result.textContent = `Backend is reachable!\n\nStatus: ${response.status}\nResponse: ${text || '(empty response - that\'s okay!)'}`;
+                result.style.display = 'block';
+            } catch (error) {
+                testResults.test1 = false;
+                status.textContent = '❌ FAILED';
+                status.className = 'status error';
+                result.textContent = `Error: ${error.message}\n\nBackend URL: ${BACKEND_URL}\n\nCheck:\n1. Is Railway deployed?\n2. Is the URL correct?\n3. Run: railway status`;
+                result.style.display = 'block';
+            }
+            updateSummary();
+        }
+
+        async function testConfig() {
+            if (!BACKEND_URL) {
+                alert('Please set Backend URL first!');
+                return;
+            }
+
+            const status = document.getElementById('status2');
+            const result = document.getElementById('result2');
+            
+            status.textContent = 'TESTING...';
+            status.className = 'status pending';
+            result.style.display = 'none';
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/config`);
+                const config = await response.json();
+                
+                if (config.publishableKey) {
+                    testResults.test2 = true;
+                    status.textContent = '✅ SUCCESS';
+                    status.className = 'status success';
+                    result.textContent = `Config endpoint working!\n\nPublishable Key: ${config.publishableKey}\n\nKey Type: ${config.publishableKey.startsWith('pk_live') ? 'LIVE' : 'TEST'}`;
+                    result.style.display = 'block';
+                } else {
+                    testResults.test2 = false;
+                    status.textContent = '❌ FAILED';
+                    status.className = 'status error';
+                    result.textContent = `Config endpoint returned but no publishableKey!\n\nResponse: ${JSON.stringify(config)}\n\nCheck:\n1. Is STRIPE_PUBLISHABLE_KEY set in Railway?\n2. Run: railway variables`;
+                    result.style.display = 'block';
+                }
+            } catch (error) {
+                testResults.test2 = false;
+                status.textContent = '❌ FAILED';
+                status.className = 'status error';
+                result.textContent = `Error: ${error.message}\n\nEndpoint: ${BACKEND_URL}/config\n\nCheck:\n1. Is server.js deployed with /config endpoint?\n2. Check Railway logs: railway logs`;
+                result.style.display = 'block';
+            }
+            updateSummary();
+        }
+
+        async function testStripe() {
+            if (!BACKEND_URL) {
+                alert('Please set Backend URL and test config first!');
+                return;
+            }
+
+            const status = document.getElementById('status3');
+            const result = document.getElementById('result3');
+            
+            status.textContent = 'TESTING...';
+            status.className = 'status pending';
+            result.style.display = 'none';
+
+            try {
+                // Fetch config
+                const response = await fetch(`${BACKEND_URL}/config`);
+                const config = await response.json();
+                
+                // Initialize Stripe
+                stripe = Stripe(config.publishableKey);
+                
+                testResults.test3 = true;
+                status.textContent = '✅ SUCCESS';
+                status.className = 'status success';
+                result.textContent = `Stripe initialized successfully!\n\nStripe object: ${typeof stripe}\nPublishable Key: ${config.publishableKey}`;
+                result.style.display = 'block';
+            } catch (error) {
+                testResults.test3 = false;
+                status.textContent = '❌ FAILED';
+                status.className = 'status error';
+                result.textContent = `Error: ${error.message}\n\nCheck:\n1. Is Stripe.js loaded? (see top of page)\n2. Is publishable key valid?\n3. Try test2 first`;
+                result.style.display = 'block';
+            }
+            updateSummary();
+        }
+
+        async function testCheckout() {
+            if (!stripe) {
+                alert('Please initialize Stripe first (Test 3)!');
+                return;
+            }
+
+            const status = document.getElementById('status4');
+            const result = document.getElementById('result4');
+            
+            status.textContent = 'TESTING...';
+            status.className = 'status pending';
+            result.style.display = 'none';
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/create-checkout-session`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        service: 'chatbot',
+                        price: 15000,
+                        name: 'AI Chatbot Development'
+                    })
+                });
+
+                const session = await response.json();
+                
+                if (session.id) {
+                    testResults.test4 = true;
+                    status.textContent = '✅ SUCCESS';
+                    status.className = 'status success';
+                    result.textContent = `Checkout session created!\n\nSession ID: ${session.id}\n\nBackend is ready to process payments!`;
+                    result.style.display = 'block';
+                } else {
+                    testResults.test4 = false;
+                    status.textContent = '❌ FAILED';
+                    status.className = 'status error';
+                    result.textContent = `Backend responded but no session ID!\n\nResponse: ${JSON.stringify(session)}\n\nCheck:\n1. Is STRIPE_SECRET_KEY set in Railway?\n2. Is it a valid key?\n3. Check Railway logs`;
+                    result.style.display = 'block';
+                }
+            } catch (error) {
+                testResults.test4 = false;
+                status.textContent = '❌ FAILED';
+                status.className = 'status error';
+                result.textContent = `Error: ${error.message}\n\nEndpoint: ${BACKEND_URL}/create-checkout-session\n\nCheck:\n1. Is endpoint deployed?\n2. Check Railway logs\n3. CORS enabled?`;
+                result.style.display = 'block';
+            }
+            updateSummary();
+        }
+
+        async function testFullFlow() {
+            if (!stripe) {
+                alert('Please initialize Stripe first (Test 3)!');
+                return;
+            }
+
+            const status = document.getElementById('status5');
+            const result = document.getElementById('result5');
+            
+            status.textContent = 'REDIRECTING...';
+            status.className = 'status pending';
+            result.style.display = 'none';
+
+            try {
+                // Create session
+                const response = await fetch(`${BACKEND_URL}/create-checkout-session`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        service: 'chatbot',
+                        price: 15000,
+                        name: 'AI Chatbot Development'
+                    })
+                });
+
+                const session = await response.json();
+                
+                // Redirect to Stripe Checkout
+                const redirectResult = await stripe.redirectToCheckout({
+                    sessionId: session.id
+                });
+
+                if (redirectResult.error) {
+                    testResults.test5 = false;
+                    status.textContent = '❌ FAILED';
+                    status.className = 'status error';
+                    result.textContent = `Stripe redirect error!\n\n${redirectResult.error.message}`;
+                    result.style.display = 'block';
+                } else {
+                    testResults.test5 = true;
+                    // This won't run if redirect succeeds
+                    status.textContent = '✅ SUCCESS';
+                    status.className = 'status success';
+                }
+            } catch (error) {
+                testResults.test5 = false;
+                status.textContent = '❌ FAILED';
+                status.className = 'status error';
+                result.textContent = `Error: ${error.message}`;
+                result.style.display = 'block';
+            }
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const summary = document.getElementById('summary');
+            const total = Object.values(testResults).filter(v => v === true).length;
+            const passed = total;
+            const failed = 5 - total;
+            
+            let html = `<h3>Tests Passed: ${passed}/5</h3>`;
+            html += `<p style="color: #00ff00;">✅ Passed: ${passed}</p>`;
+            html += `<p style="color: #ff0000;">❌ Failed: ${failed}</p>`;
+            
+            if (BACKEND_URL) {
+                html += `<p>Backend URL: ${BACKEND_URL}</p>`;
+            } else {
+                html += `<p style="color: #ffaa00;">⚠️ Backend URL not set!</p>`;
+            }
+            
+            if (passed === 5) {
+                html += `<h2 style="color: #00ff00;">🎉 ALL TESTS PASSED!</h2>`;
+                html += `<p>Your Stripe integration is working correctly!</p>`;
+            } else if (passed > 0) {
+                html += `<p style="color: #ffaa00;">⚠️ Some tests failing. Check above for details.</p>`;
+            } else {
+                html += `<p style="color: #ff0000;">❌ No tests passed yet. Start with Step 1!</p>`;
+            }
+            
+            summary.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
