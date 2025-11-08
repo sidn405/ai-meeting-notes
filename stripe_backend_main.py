@@ -26,16 +26,16 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 # Service pricing (in cents)
 SERVICE_PRICES = {
-    "chatbot": {"price": 15000, "name": "AI Chatbot Development"},
-    "mobile": {"price": 50000, "name": "Mobile App Development"},
-    "game": {"price": 20000, "name": "Game Development & Reskinning"},
-    "web3": {"price": 30000, "name": "Web3 & Blockchain Development"},
+    "chatbot": {"price": 150000, "name": "AI Chatbot Development"},
+    "mobile": {"price": 350000, "name": "Mobile App Development"},
+    "game": {"price": 200000, "name": "Game Development & Reskinning"},
+    "web3": {"price": 400000, "name": "Web3 & Blockchain Development"},
     "scraping": {"price": 5000, "name": "Web Scraping & Lead Gen"},
-    "pdf": {"price": 20000, "name": "PDF Generation"},
-    "nft": {"price": 25000, "name": "NFT & Metaverse Assets"},
-    "publishing": {"price": 10000, "name": "App Store Publishing"},
-    "transcription": {"price": 1000, "name": "AI Transcription Service"},
-    "trading": {"price": 50000, "name": "Trading Bot Development"}
+    "pdf": {"price": 60000, "name": "PDF Generation"},
+    "nft": {"price": 100000, "name": "NFT & Metaverse Assets"},
+    "publishing": {"price": 35000, "name": "App Store Publishing"},
+    "transcription": {"price": 4900, "name": "AI Transcription Service"},
+    "trading": {"price": 750000, "name": "Trading Bot Development"}
 }
 
 @app.get("/")
