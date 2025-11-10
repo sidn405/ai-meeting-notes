@@ -3,7 +3,7 @@
 import os
 from datetime import datetime, timedelta
 from typing import List, Optional
-
+import bcrypt
 import boto3
 from fastapi import (
     APIRouter,
@@ -51,11 +51,14 @@ s3_client = boto3.client(
 MAX_BCRYPT_LEN = 72  # bcrypt limit in bytes; we’ll just truncate the string
 
 def hash_password(password: str) -> str:
-    # Truncate to avoid ValueError: password cannot be longer than 72 bytes
-    return pwd_context.hash(password[:MAX_BCRYPT_LEN])
+    """Hash password using bcrypt directly"""
+    truncated = password[:MAX_BCRYPT_LEN].encode('utf-8')
+    return bcrypt.hashpw(truncated, bcrypt.gensalt()).decode('utf-8')
 
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain[:MAX_BCRYPT_LEN], hashed)
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify password against hash"""
+    truncated = plain_password[:MAX_BCRYPT_LEN].encode('utf-8')
+    return bcrypt.checkpw(truncated, hashed_password.encode('utf-8'))
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
