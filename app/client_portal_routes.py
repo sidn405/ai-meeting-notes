@@ -19,7 +19,7 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 from sqlmodel import SQLModel, Field, Session, select
 
-from app.portal_db import (
+from .portal_db import (
     get_session,
     PortalUser,
     Project,

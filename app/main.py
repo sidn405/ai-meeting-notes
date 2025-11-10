@@ -11,7 +11,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from sqlmodel import select, Session
 from .portal_db import init_db
-from client_portal_routes import router as client_portal_router
+from .client_portal_routes import router as client_portal_router
 from app.models import Meeting
 import warnings
 warnings.filterwarnings("ignore", message="Field .* has conflict with protected namespace 'model_'")
