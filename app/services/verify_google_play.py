@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
-from db import UserSubscription
+from app.portal_db import UserSubscription
 
 router = APIRouter(prefix="/google", tags=["google"])
 

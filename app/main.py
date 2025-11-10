@@ -10,7 +10,7 @@ from .services.branding import render_meeting_notes_email_html
 from pathlib import Path
 from dotenv import load_dotenv
 from sqlmodel import select, Session
-from db import init_db
+from .portal_db import init_db
 from client_portal_routes import router as client_portal_router
 from app.models import Meeting
 import warnings

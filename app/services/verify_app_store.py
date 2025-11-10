@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
-from db import UserSubscription
+from app.portal_db import UserSubscription
 
 router = APIRouter(prefix="/apple", tags=["apple"])
 
