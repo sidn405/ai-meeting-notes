@@ -1,6 +1,8 @@
 # client_portal_routes.py
 
 import os
+import json
+import stripe
 from datetime import datetime, timedelta
 from typing import List, Optional
 import bcrypt
@@ -510,3 +512,59 @@ def admin_create_message(
     db.commit()
     db.refresh(msg)
     return MessageOut(id=msg.id, sender=msg.sender, body=msg.body, created_at=msg.created_at)
+
+class CheckoutResponse(SQLModel):
+    checkout_url: str
+
+@router.post("/projects/{project_id}/checkout", response_model=CheckoutResponse)
+def create_checkout_for_first_milestone(
+    project_id: int,
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    project = get_project_or_404(project_id, current_user, db)
+
+    details = {}
+    if project.notes:
+        try:
+            details = json.loads(project.notes)
+        except Exception:
+            pass
+
+    pricing = details.get("pricing") or {}
+    milestones = pricing.get("milestones") or []
+    if not milestones:
+        raise HTTPException(status_code=400, detail="No milestones configured for this project")
+
+    first = milestones[0]
+    amount_usd = first.get("amount") or pricing.get("totalPrice")
+    if not amount_usd:
+        raise HTTPException(status_code=400, detail="No amount configured for first milestone")
+
+    currency = pricing.get("currency", "usd")
+    amount_cents = int(amount_usd * 100)
+
+    session = stripe.checkout.Session.create(
+        mode="payment",
+        line_items=[
+            {
+                "price_data": {
+                    "currency": currency,
+                    "product_data": {
+                        "name": f"{project.name} – Milestone 1",
+                    },
+                    "unit_amount": amount_cents,
+                },
+                "quantity": 1,
+            }
+        ],
+        success_url="https://4dgaming.games/client-portal.html?payment=success",
+        cancel_url="https://4dgaming.games/client-portal.html?payment=cancel",
+        customer_email=current_user.email,
+        metadata={
+            "project_id": str(project.id),
+            "milestone": "1",
+        },
+    )
+
+    return CheckoutResponse(checkout_url=session.url)
