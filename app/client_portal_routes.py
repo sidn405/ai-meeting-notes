@@ -48,12 +48,14 @@ s3_client = boto3.client(
 )
 
 
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+MAX_BCRYPT_LEN = 72  # bcrypt limit in bytes; we’ll just truncate the string
 
+def hash_password(password: str) -> str:
+    # Truncate to avoid ValueError: password cannot be longer than 72 bytes
+    return pwd_context.hash(password[:MAX_BCRYPT_LEN])
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return pwd_context.verify(plain[:MAX_BCRYPT_LEN], hashed)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
