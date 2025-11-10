@@ -1,0 +1,505 @@
+# client_portal_routes.py
+
+import os
+from datetime import datetime, timedelta
+from typing import List, Optional
+
+import boto3
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    UploadFile,
+    File,
+    Request,
+    Response,
+    status,
+)
+from jose import jwt, JWTError
+from passlib.context import CryptContext
+from sqlmodel import SQLModel, Field, Session, select
+
+from db import (
+    get_session,
+    PortalUser,
+    Project,
+    ProjectFile,
+    ProjectMessage,
+)
+
+# ---------- CONFIG ----------
+
+SECRET_KEY = os.getenv("SECRET_KEY", "CHANGE_ME_SUPER_SECRET")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+
+B2_ENDPOINT_URL = os.getenv("B2_ENDPOINT_URL")  # e.g. https://s3.us-west-004.backblazeb2.com
+B2_ACCESS_KEY_ID = os.getenv("B2_ACCESS_KEY_ID")
+B2_SECRET_ACCESS_KEY = os.getenv("B2_SECRET_ACCESS_KEY")
+B2_BUCKET_NAME = os.getenv("B2_BUCKET_NAME", "4dgaming-client-files")
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+s3_client = boto3.client(
+    "s3",
+    endpoint_url=B2_ENDPOINT_URL,
+    aws_access_key_id=B2_ACCESS_KEY_ID,
+    aws_secret_access_key=B2_SECRET_ACCESS_KEY,
+)
+
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def upload_to_b2(file_obj, key: str, content_type: str) -> str:
+    s3_client.upload_fileobj(
+        file_obj,
+        B2_BUCKET_NAME,
+        key,
+        ExtraArgs={"ContentType": content_type},
+    )
+    return f"{B2_ENDPOINT_URL}/{B2_BUCKET_NAME}/{key}"
+
+
+# ---------- SCHEMAS ----------
+
+class RegisterRequest(SQLModel):
+    name: str
+    email: str
+    password: str
+
+
+class LoginRequest(SQLModel):
+    email: str
+    password: str
+
+
+class UserOut(SQLModel):
+    id: int
+    name: str
+    email: str
+    is_admin: bool
+
+
+class ProjectCreate(SQLModel):
+    service: str
+    name: str
+    notes: Optional[str] = None
+
+
+class ProjectOut(SQLModel):
+    id: int
+    name: str
+    service: str
+    status: str
+    notes: Optional[str]
+    created_at: datetime
+    service_label: Optional[str] = None
+
+
+class AdminProjectOut(ProjectOut):
+    owner_name: str
+    owner_email: str
+
+
+class MessageCreate(SQLModel):
+    body: str
+
+
+class MessageOut(SQLModel):
+    id: int
+    sender: str
+    body: str
+    created_at: datetime
+
+
+class FileOut(SQLModel):
+    id: int
+    original_name: str
+    url: str
+    created_at: datetime
+
+
+# ---------- CURRENT USER ----------
+
+async def get_current_user(
+    request: Request,
+    db: Session = Depends(get_session),
+) -> PortalUser:
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = int(payload.get("sub"))
+    except (JWTError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    user = db.get(PortalUser, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
+
+
+async def require_admin(current_user: PortalUser = Depends(get_current_user)) -> PortalUser:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    return current_user
+
+
+# ---------- CONSTANTS ----------
+
+SERVICE_LABELS = {
+    "chatbot": "AI Chatbot Development",
+    "mobile": "Mobile App Development",
+    "game": "Game Development & Reskinning",
+    "web3": "Web3 & Blockchain Development",
+    "scraping": "Web Scraping & Lead Gen",
+    "pdf": "PDF Generation Service",
+    "nft": "NFT & Metaverse Assets",
+    "trading": "Trading Bot Development",
+}
+
+router = APIRouter(prefix="/api", tags=["client-portal"])
+
+
+# ======================
+# AUTH ROUTES
+# ======================
+
+@router.post("/auth/register", response_model=UserOut)
+def register_user(
+    data: RegisterRequest,
+    response: Response,
+    db: Session = Depends(get_session),
+):
+    existing = db.exec(
+        select(PortalUser).where(PortalUser.email == data.email.strip().lower())
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    user = PortalUser(
+        name=data.name.strip(),
+        email=data.email.strip().lower(),
+        hashed_password=hash_password(data.password),
+        is_admin=False,  # clients only; set admin manually in DB
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    token = create_access_token({"sub": str(user.id)})
+    response.set_cookie(
+        "access_token",
+        token,
+        httponly=True,
+        secure=True,   # set False for local dev if not using HTTPS
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+    return UserOut(id=user.id, name=user.name, email=user.email, is_admin=user.is_admin)
+
+
+@router.post("/auth/login", response_model=UserOut)
+def login_user(
+    data: LoginRequest,
+    response: Response,
+    db: Session = Depends(get_session),
+):
+    user = db.exec(
+        select(PortalUser).where(PortalUser.email == data.email.strip().lower())
+    ).first()
+    if not user or not verify_password(data.password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect email or password")
+
+    token = create_access_token({"sub": str(user.id)})
+    response.set_cookie(
+        "access_token",
+        token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+    return UserOut(id=user.id, name=user.name, email=user.email, is_admin=user.is_admin)
+
+
+@router.get("/auth/me", response_model=UserOut)
+def get_me(current_user: PortalUser = Depends(get_current_user)):
+    return UserOut(
+        id=current_user.id,
+        name=current_user.name,
+        email=current_user.email,
+        is_admin=current_user.is_admin,
+    )
+
+
+# ======================
+# PROJECT HELPERS
+# ======================
+
+def get_project_or_404(
+    project_id: int,
+    current_user: PortalUser,
+    db: Session,
+) -> Project:
+    project = db.get(Project, project_id)
+    # allow owner OR admin
+    if not project or (project.owner_id != current_user.id and not current_user.is_admin):
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+# ======================
+# CLIENT PROJECT ROUTES
+# ======================
+
+@router.get("/projects", response_model=List[ProjectOut])
+def list_projects(
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    projects = db.exec(
+        select(Project)
+        .where(Project.owner_id == current_user.id)
+        .order_by(Project.created_at.desc())
+    ).all()
+    out: List[ProjectOut] = []
+    for p in projects:
+        out.append(
+            ProjectOut(
+                id=p.id,
+                name=p.name,
+                service=p.service,
+                status=p.status,
+                notes=p.notes,
+                created_at=p.created_at,
+                service_label=SERVICE_LABELS.get(p.service),
+            )
+        )
+    return out
+
+
+@router.post("/projects", response_model=ProjectOut)
+def create_project(
+    payload: ProjectCreate,
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    project = Project(
+        owner_id=current_user.id,
+        name=payload.name.strip(),
+        service=payload.service,
+        notes=payload.notes,
+        status="pending",
+    )
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+
+    return ProjectOut(
+        id=project.id,
+        name=project.name,
+        service=project.service,
+        status=project.status,
+        notes=project.notes,
+        created_at=project.created_at,
+        service_label=SERVICE_LABELS.get(project.service),
+    )
+
+
+# ======================
+# ADMIN PROJECT ROUTES
+# ======================
+
+@router.get("/admin/projects", response_model=List[AdminProjectOut])
+def admin_list_projects(
+    current_user: PortalUser = Depends(require_admin),
+    db: Session = Depends(get_session),
+):
+    projects = db.exec(select(Project).order_by(Project.created_at.desc())).all()
+    out: List[AdminProjectOut] = []
+    for p in projects:
+        owner = db.get(PortalUser, p.owner_id)
+        out.append(
+            AdminProjectOut(
+                id=p.id,
+                name=p.name,
+                service=p.service,
+                status=p.status,
+                notes=p.notes,
+                created_at=p.created_at,
+                service_label=SERVICE_LABELS.get(p.service),
+                owner_name=owner.name if owner else "Unknown",
+                owner_email=owner.email if owner else "unknown",
+            )
+        )
+    return out
+
+
+class StatusUpdate(SQLModel):
+    status: str
+
+
+@router.patch("/admin/projects/{project_id}/status", response_model=ProjectOut)
+def admin_update_status(
+    project_id: int,
+    payload: StatusUpdate,
+    current_user: PortalUser = Depends(require_admin),
+    db: Session = Depends(get_session),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project.status = payload.status
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+    return ProjectOut(
+        id=project.id,
+        name=project.name,
+        service=project.service,
+        status=project.status,
+        notes=project.notes,
+        created_at=project.created_at,
+        service_label=SERVICE_LABELS.get(project.service),
+    )
+
+
+# ======================
+# FILES
+# ======================
+
+@router.get("/projects/{project_id}/files", response_model=List[FileOut])
+def list_files(
+    project_id: int,
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    _ = get_project_or_404(project_id, current_user, db)
+    files = db.exec(
+        select(ProjectFile)
+        .where(ProjectFile.project_id == project_id)
+        .order_by(ProjectFile.created_at)
+    ).all()
+    return [
+        FileOut(id=f.id, original_name=f.original_name, url=f.url, created_at=f.created_at)
+        for f in files
+    ]
+
+
+@router.post("/projects/{project_id}/files", response_model=List[FileOut])
+async def upload_files(
+    project_id: int,
+    files: List[UploadFile] = File(...),
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    project = get_project_or_404(project_id, current_user, db)
+    created: List[FileOut] = []
+
+    for uf in files:
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
+        safe_name = uf.filename.replace(" ", "_")
+        key = f"projects/{project.id}/{timestamp}_{safe_name}"
+
+        uf.file.seek(0)
+        url = upload_to_b2(uf.file, key, uf.content_type or "application/octet-stream")
+
+        pf = ProjectFile(
+            project_id=project.id,
+            original_name=uf.filename,
+            s3_key=key,
+            url=url,
+        )
+        db.add(pf)
+        db.commit()
+        db.refresh(pf)
+        created.append(
+            FileOut(
+                id=pf.id,
+                original_name=pf.original_name,
+                url=pf.url,
+                created_at=pf.created_at,
+            )
+        )
+
+    return created
+
+
+# ======================
+# MESSAGES
+# ======================
+
+@router.get("/projects/{project_id}/messages", response_model=List[MessageOut])
+def list_messages(
+    project_id: int,
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    _ = get_project_or_404(project_id, current_user, db)
+    msgs = db.exec(
+        select(ProjectMessage)
+        .where(ProjectMessage.project_id == project_id)
+        .order_by(ProjectMessage.created_at)
+    ).all()
+    return [
+        MessageOut(id=m.id, sender=m.sender, body=m.body, created_at=m.created_at)
+        for m in msgs
+    ]
+
+
+@router.post("/projects/{project_id}/messages", response_model=MessageOut)
+def create_message(
+    project_id: int,
+    payload: MessageCreate,
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    project = get_project_or_404(project_id, current_user, db)
+    msg = ProjectMessage(
+        project_id=project.id,
+        sender="client",
+        body=payload.body,
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return MessageOut(id=msg.id, sender=msg.sender, body=msg.body, created_at=msg.created_at)
+
+
+@router.post("/admin/projects/{project_id}/messages", response_model=MessageOut)
+def admin_create_message(
+    project_id: int,
+    payload: MessageCreate,
+    current_user: PortalUser = Depends(require_admin),
+    db: Session = Depends(get_session),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    msg = ProjectMessage(
+        project_id=project.id,
+        sender="owner",
+        body=payload.body,
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return MessageOut(id=msg.id, sender=msg.sender, body=msg.body, created_at=msg.created_at)

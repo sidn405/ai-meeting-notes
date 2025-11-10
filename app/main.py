@@ -10,7 +10,8 @@ from .services.branding import render_meeting_notes_email_html
 from pathlib import Path
 from dotenv import load_dotenv
 from sqlmodel import select, Session
-
+from db import init_db
+from client_portal_routes import router as client_portal_router
 from app.models import Meeting
 import warnings
 warnings.filterwarnings("ignore", message="Field .* has conflict with protected namespace 'model_'")
@@ -84,6 +85,7 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(meetings.router)
 app.include_router(admin.router)
+app.include_router(client_portal_router)
 
 @app.get("/healthz")
 def healthz():
