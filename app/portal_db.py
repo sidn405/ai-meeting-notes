@@ -1,9 +1,8 @@
-# db.py
+# portal_db.py
 import os
-from datetime import datetime
 from typing import Optional
-
 from sqlmodel import SQLModel, Field, Session, create_engine
+from datetime import datetime
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -49,7 +48,7 @@ class ProjectMessage(SQLModel, table=True):
     body: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-
+    
 # ---------- SESSION HELPERS ----------
 
 def get_session():

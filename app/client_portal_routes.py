@@ -18,7 +18,7 @@ from fastapi import (
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from sqlmodel import SQLModel, Field, Session, select
-
+import secrets
 from .portal_db import (
     get_session,
     PortalUser,
@@ -48,7 +48,7 @@ s3_client = boto3.client(
 )
 
 
-MAX_BCRYPT_LEN = 72  # bcrypt limit in bytes; we’ll just truncate the string
+MAX_BCRYPT_LEN = 72  # bcrypt limit in bytes; we'll just truncate the string
 
 def hash_password(password: str) -> str:
     """Hash password using bcrypt directly"""
@@ -207,15 +207,17 @@ def register_user(
     db.commit()
     db.refresh(user)
 
+    # Create JWT token and set cookie (same as login)
     token = create_access_token({"sub": str(user.id)})
     response.set_cookie(
         "access_token",
         token,
         httponly=True,
-        secure=True,   # set False for local dev if not using HTTPS
-        samesite="lax",
+        secure=True,
+        samesite="none",  # Required for cross-origin
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
+    
     return UserOut(id=user.id, name=user.name, email=user.email, is_admin=user.is_admin)
 
 
@@ -237,7 +239,7 @@ def login_user(
         token,
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",  # Changed from "lax" to match register
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
     return UserOut(id=user.id, name=user.name, email=user.email, is_admin=user.is_admin)
