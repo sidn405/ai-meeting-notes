@@ -35,10 +35,15 @@ SECRET_KEY = os.getenv("SECRET_KEY", "CHANGE_ME_SUPER_SECRET")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
+stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
+WEBHOOK_SECRET = os.environ["STRIPE_WEBHOOK_SECRET"]
+
 B2_ENDPOINT_URL = os.getenv("B2_ENDPOINT_URL")  # e.g. https://s3.us-west-004.backblazeb2.com
 B2_ACCESS_KEY_ID = os.getenv("B2_ACCESS_KEY_ID")
 B2_SECRET_ACCESS_KEY = os.getenv("B2_SECRET_ACCESS_KEY")
 B2_BUCKET_NAME = os.getenv("B2_BUCKET_NAME", "4dgaming-client-files")
+
+FRONTEND_URL = "https://4dgaming.games"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -330,6 +335,162 @@ def create_project(
         service_label=SERVICE_LABELS.get(project.service),
     )
 
+# ======================
+# STRIPE CHECKOUT - MILESTONE PAYMENTS
+# ======================
+
+@router.post("/projects/{project_id}/checkout")
+async def create_milestone_checkout(
+    project_id: int,
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Create Stripe Checkout session for first milestone payment"""
+    project = get_project_or_404(project_id, current_user, db)
+    
+    # Parse project details to get milestone info
+    try:
+        details = json.loads(project.notes) if project.notes else {}
+    except json.JSONDecodeError:
+        details = {}
+    
+    pricing = details.get('pricing', {})
+    milestones = pricing.get('milestones', [])
+    
+    if not milestones:
+        raise HTTPException(
+            status_code=400,
+            detail="No milestones found for this project. Please contact support."
+        )
+    
+    # Get first milestone (or find next unpaid milestone)
+    first_milestone = milestones[0]
+    amount = first_milestone.get('amount', 0)
+    milestone_name = first_milestone.get('name', 'Discovery & Setup')
+    milestone_week = first_milestone.get('weeksFromStart', 1)
+    
+    if amount <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid milestone amount"
+        )
+    
+    try:
+        # Create Stripe Checkout Session with dynamic pricing
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=['card', 'cashapp', 'affirm', 'klarna'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'unit_amount': int(amount * 100),  # Convert dollars to cents
+                    'product_data': {
+                        'name': f"4D Gaming - {project.name}",
+                        'description': f"Milestone 1: {milestone_name} (Week {milestone_week})",
+                        'metadata': {
+                            'project_id': str(project_id),
+                            'milestone_number': '1',
+                            'business': '4D Gaming'
+                        }
+                    },
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=f"{FRONTEND_URL}/client-portal?payment=success&project_id={project_id}",
+            cancel_url=f"{FRONTEND_URL}/client-portal?payment=cancelled&project_id={project_id}",
+            customer_email=current_user.email,
+            metadata={
+                'project_id': str(project_id),
+                'milestone': '1',
+                'user_id': str(current_user.id),
+                'user_email': current_user.email,
+                'user_name': current_user.name,
+                'business': '4D Gaming',
+                'project_name': project.name
+            },
+            # Add custom branding text
+            custom_text={
+                'submit': {
+                    'message': f'Complete payment for {project.name} - Milestone 1'
+                }
+            }
+        )
+        
+        return {
+            'checkout_url': checkout_session.url,
+            'session_id': checkout_session.id
+        }
+        
+    except stripe.error.StripeError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Stripe error: {str(e)}"
+        )
+
+
+# ======================
+# STRIPE WEBHOOK HANDLER
+# ======================
+
+@router.post("/webhooks/stripe")
+async def stripe_webhook(
+    request: Request,
+    db: Session = Depends(get_session)
+):
+    """Handle Stripe webhook events"""
+    payload = await request.body()
+    sig_header = request.headers.get('stripe-signature')
+    
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, WEBHOOK_SECRET
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    
+    # Handle successful payment
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        
+        # Extract metadata
+        project_id = session['metadata'].get('project_id')
+        milestone = session['metadata'].get('milestone')
+        
+        if project_id:
+            # Update project status
+            project = db.get(Project, int(project_id))
+            if project:
+                # Update status based on milestone
+                if milestone == '1':
+                    project.status = 'in-progress'
+                elif milestone == '2':
+                    project.status = 'in-progress'
+                elif milestone == '3':
+                    project.status = 'completed'
+                
+                # You could also store payment info in project notes
+                try:
+                    details = json.loads(project.notes) if project.notes else {}
+                    if 'payments' not in details:
+                        details['payments'] = []
+                    
+                    details['payments'].append({
+                        'milestone': int(milestone),
+                        'amount': session['amount_total'] / 100,  # Convert cents to dollars
+                        'paid_at': datetime.utcnow().isoformat(),
+                        'stripe_session_id': session['id'],
+                        'payment_status': session['payment_status']
+                    })
+                    
+                    project.notes = json.dumps(details)
+                except:
+                    pass  # Don't fail if notes update fails
+                
+                db.commit()
+    
+    return {"status": "success"}
 
 # ======================
 # ADMIN PROJECT ROUTES
@@ -516,55 +677,3 @@ def admin_create_message(
 class CheckoutResponse(SQLModel):
     checkout_url: str
 
-@router.post("/projects/{project_id}/checkout", response_model=CheckoutResponse)
-def create_checkout_for_first_milestone(
-    project_id: int,
-    current_user: PortalUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-):
-    project = get_project_or_404(project_id, current_user, db)
-
-    details = {}
-    if project.notes:
-        try:
-            details = json.loads(project.notes)
-        except Exception:
-            pass
-
-    pricing = details.get("pricing") or {}
-    milestones = pricing.get("milestones") or []
-    if not milestones:
-        raise HTTPException(status_code=400, detail="No milestones configured for this project")
-
-    first = milestones[0]
-    amount_usd = first.get("amount") or pricing.get("totalPrice")
-    if not amount_usd:
-        raise HTTPException(status_code=400, detail="No amount configured for first milestone")
-
-    currency = pricing.get("currency", "usd")
-    amount_cents = int(amount_usd * 100)
-
-    session = stripe.checkout.Session.create(
-        mode="payment",
-        line_items=[
-            {
-                "price_data": {
-                    "currency": currency,
-                    "product_data": {
-                        "name": f"{project.name} – Milestone 1",
-                    },
-                    "unit_amount": amount_cents,
-                },
-                "quantity": 1,
-            }
-        ],
-        success_url="https://4dgaming.games/client-portal.html?payment=success",
-        cancel_url="https://4dgaming.games/client-portal.html?payment=cancel",
-        customer_email=current_user.email,
-        metadata={
-            "project_id": str(project.id),
-            "milestone": "1",
-        },
-    )
-
-    return CheckoutResponse(checkout_url=session.url)
