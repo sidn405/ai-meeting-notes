@@ -27,6 +27,8 @@ from .portal_db import (
     Project,
     ProjectFile,
     ProjectMessage,
+    PasswordReset,
+    Review,
 )
 
 # ---------- CONFIG ----------
@@ -43,6 +45,10 @@ B2_ACCESS_KEY_ID = os.getenv("B2_ACCESS_KEY_ID")
 B2_SECRET_ACCESS_KEY = os.getenv("B2_SECRET_ACCESS_KEY")
 B2_BUCKET_NAME = os.getenv("B2_BUCKET_NAME", "4dgaming-client-files")
 
+# Add Resend configuration after other configs (around line 40)
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "noreply@4dgaming.games")
+
 FRONTEND_URL = "https://4dgaming.games"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -56,6 +62,8 @@ s3_client = boto3.client(
 
 
 MAX_BCRYPT_LEN = 72  # bcrypt limit in bytes; we'll just truncate the string
+
+
 
 def hash_password(password: str) -> str:
     """Hash password using bcrypt directly"""
@@ -261,6 +269,251 @@ def get_me(current_user: PortalUser = Depends(get_current_user)):
         is_admin=current_user.is_admin,
     )
 
+# ==========================================
+# PASSWORD RESET ROUTES (add to router)
+# ==========================================
+
+class ForgotPasswordRequest(SQLModel):
+    email: str
+
+class ResetPasswordRequest(SQLModel):
+    token: str
+    new_password: str
+
+@router.post("/auth/forgot-password")
+def forgot_password(
+    data: ForgotPasswordRequest,
+    db: Session = Depends(get_session),
+):
+    """Send password reset email via Resend"""
+    user = db.exec(
+        select(PortalUser).where(PortalUser.email == data.email.strip().lower())
+    ).first()
+    
+    # Always return success to prevent email enumeration
+    if not user:
+        return {"ok": True, "message": "If that email exists, a reset link has been sent"}
+    
+    # Generate reset token
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(hours=1)
+    
+    # Save to database
+    reset = PasswordReset(
+        email=user.email,
+        token=token,
+        expires_at=expires_at,
+    )
+    db.add(reset)
+    db.commit()
+    
+    # Send email via Resend
+    reset_link = f"{FRONTEND_URL}/reset-password.html?token={token}"
+    
+    try:
+        import requests
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": RESEND_FROM_EMAIL,
+                "to": [user.email],
+                "subject": "Reset Your 4D Gaming Password",
+                "html": f"""
+                    <h2>Password Reset Request</h2>
+                    <p>Hi {user.name},</p>
+                    <p>You requested to reset your password for your 4D Gaming client portal account.</p>
+                    <p>Click the link below to reset your password (valid for 1 hour):</p>
+                    <p><a href="{reset_link}" style="background:#667eea;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block;">Reset Password</a></p>
+                    <p>Or copy this link: {reset_link}</p>
+                    <p>If you didn't request this, you can safely ignore this email.</p>
+                    <p>Thanks,<br>4D Gaming Team</p>
+                """,
+            },
+        )
+        response.raise_for_status()
+    except Exception as e:
+        print(f"Failed to send reset email: {e}")
+        # Don't fail the request - we don't want to leak email existence
+    
+    return {"ok": True, "message": "If that email exists, a reset link has been sent"}
+
+
+@router.post("/auth/reset-password")
+def reset_password(
+    data: ResetPasswordRequest,
+    db: Session = Depends(get_session),
+):
+    """Reset password using token"""
+    # Find valid token
+    reset = db.exec(
+        select(PasswordReset).where(
+            PasswordReset.token == data.token,
+            PasswordReset.used == False,
+            PasswordReset.expires_at > datetime.utcnow(),
+        )
+    ).first()
+    
+    if not reset:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+    
+    # Find user
+    user = db.exec(
+        select(PortalUser).where(PortalUser.email == reset.email)
+    ).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Update password
+    user.hashed_password = hash_password(data.new_password)
+    
+    # Mark token as used
+    reset.used = True
+    
+    db.add(user)
+    db.add(reset)
+    db.commit()
+    
+    return {"ok": True, "message": "Password reset successful"}
+
+
+# ==========================================
+# REVIEW ROUTES (add to router)
+# ==========================================
+
+class ReviewCreate(SQLModel):
+    rating: int = Field(ge=1, le=5)
+    comment: str = Field(min_length=10, max_length=500)
+
+class ReviewOut(SQLModel):
+    id: int
+    user_name: str
+    rating: int
+    comment: str
+    created_at: datetime
+
+@router.post("/reviews", response_model=ReviewOut)
+def create_review(
+    data: ReviewCreate,
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Create a new review (requires authentication)"""
+    # Check if user already has a review
+    existing = db.exec(
+        select(Review).where(Review.user_id == current_user.id)
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="You have already submitted a review")
+    
+    review = Review(
+        user_id=current_user.id,
+        rating=data.rating,
+        comment=data.comment,
+        is_approved=False,  # Requires admin approval
+    )
+    db.add(review)
+    db.commit()
+    db.refresh(review)
+    
+    return ReviewOut(
+        id=review.id,
+        user_name=current_user.name,
+        rating=review.rating,
+        comment=review.comment,
+        created_at=review.created_at,
+    )
+
+
+@router.get("/reviews/public", response_model=List[ReviewOut])
+def get_public_reviews(db: Session = Depends(get_session)):
+    """Get all approved reviews for public display"""
+    reviews = db.exec(
+        select(Review).where(Review.is_approved == True).order_by(Review.created_at.desc())
+    ).all()
+    
+    result = []
+    for review in reviews:
+        user = db.get(PortalUser, review.user_id)
+        if user:
+            result.append(
+                ReviewOut(
+                    id=review.id,
+                    user_name=user.name,
+                    rating=review.rating,
+                    comment=review.comment,
+                    created_at=review.created_at,
+                )
+            )
+    
+    return result
+
+
+@router.get("/admin/reviews", response_model=List[ReviewOut])
+def admin_list_reviews(
+    current_user: PortalUser = Depends(require_admin),
+    db: Session = Depends(get_session),
+):
+    """Admin: Get all reviews (approved and pending)"""
+    reviews = db.exec(
+        select(Review).order_by(Review.created_at.desc())
+    ).all()
+    
+    result = []
+    for review in reviews:
+        user = db.get(PortalUser, review.user_id)
+        if user:
+            result.append(
+                ReviewOut(
+                    id=review.id,
+                    user_name=user.name,
+                    rating=review.rating,
+                    comment=review.comment,
+                    created_at=review.created_at,
+                )
+            )
+    
+    return result
+
+
+@router.patch("/admin/reviews/{review_id}/approve")
+def admin_approve_review(
+    review_id: int,
+    current_user: PortalUser = Depends(require_admin),
+    db: Session = Depends(get_session),
+):
+    """Admin: Approve a review"""
+    review = db.get(Review, review_id)
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    
+    review.is_approved = True
+    db.add(review)
+    db.commit()
+    
+    return {"ok": True}
+
+
+@router.delete("/admin/reviews/{review_id}")
+def admin_delete_review(
+    review_id: int,
+    current_user: PortalUser = Depends(require_admin),
+    db: Session = Depends(get_session),
+):
+    """Admin: Delete a review"""
+    review = db.get(Review, review_id)
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    
+    db.delete(review)
+    db.commit()
+    
+    return {"ok": True}
 
 # ======================
 # PROJECT HELPERS

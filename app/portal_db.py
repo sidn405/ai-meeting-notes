@@ -58,3 +58,27 @@ def get_session():
 
 def init_db():
     SQLModel.metadata.create_all(engine)
+    
+# Add Review model to portal_db.py
+class Review(SQLModel, table=True):
+    """Client reviews for 4D Gaming services"""
+    __tablename__ = "reviews"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="portal_users.id")
+    rating: int = Field(ge=1, le=5)  # 1-5 stars
+    comment: str
+    is_approved: bool = Field(default=False)  # Admin must approve before showing publicly
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+# Add PasswordReset model to portal_db.py
+class PasswordReset(SQLModel, table=True):
+    """Password reset tokens"""
+    __tablename__ = "password_resets"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    email: str = Field(index=True)
+    token: str = Field(unique=True, index=True)
+    expires_at: datetime
+    used: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
