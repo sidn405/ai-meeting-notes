@@ -354,7 +354,7 @@ async def create_milestone_checkout(
     except json.JSONDecodeError:
         details = {}
     
-    pricing = details.get('pricing', {})
+    pricing = details.get('pricing') or {}
     milestones = pricing.get('milestones', [])
     
     if not milestones:
