@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore", message="Field .* has conflict with protected 
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
+
 from .portal_db import engine, SQLModel
 SQLModel.metadata.create_all(engine)
 
@@ -67,7 +67,6 @@ SERVICE_PRICES = {
 async def startup_event():
     """Run verification on startup to fix any broken file paths"""
     print("🚀 Application starting up...")
-    create_admin_if_not_exists()
     try:
         verify_and_fix_meeting_paths()
     except Exception as e:
@@ -92,8 +91,6 @@ app.include_router(auth.router)
 app.include_router(meetings.router)
 app.include_router(admin.router)
 app.include_router(client_portal_router)
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 @app.get("/healthz")
 def healthz():
@@ -199,48 +196,6 @@ async def stripe_webhook_handler(request: Request):
         # TODO: Send notification to you
     
     return {"received": True}
-  
-def create_admin_if_not_exists():
-    """Create admin user from environment variables on first run"""
-    from app.portal_db import get_db_session, User
-    from sqlmodel import select
-    
-    admin_email = os.getenv("ADMIN_EMAIL")
-    admin_password = os.getenv("ADMIN_PASSWORD_1")
-    
-    if not admin_email or not admin_password:
-        print("⚠️  Warning: ADMIN_EMAIL or ADMIN_PASSWORD_1 not set in environment variables")
-        print("   Admin portal will not be accessible until these are configured")
-        return
-    
-    db = next(get_db_session())
-    try:
-        # Check if admin exists
-        admin = db.exec(select(User).where(User.email == admin_email)).first()
-        
-        if not admin:
-            # Create admin user
-            hashed_password = pwd_context.hash(admin_password)
-            admin_user = User(
-                email=admin_email,
-                name="Admin",
-                hashed_password=hashed_password,
-                is_admin=True
-            )
-            db.add(admin_user)
-            db.commit()
-            print(f"✅ Admin user created: {admin_email}")
-        else:
-            print(f"ℹ️  Admin user already exists: {admin_email}")
-            # Optionally update password if it changed
-            if not pwd_context.verify(admin_password, admin.hashed_password):
-                admin.hashed_password = pwd_context.hash(admin_password)
-                db.add(admin)
-                db.commit()
-                print(f"🔄 Admin password updated")
-                
-    finally:
-        db.close()
   
 def verify_and_fix_meeting_paths():
     """
