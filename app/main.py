@@ -10,7 +10,8 @@ from .services.branding import render_meeting_notes_email_html
 from pathlib import Path
 from dotenv import load_dotenv
 from sqlmodel import select, Session
-from .portal_db import init_db
+from passlib.context import CryptContext
+from .portal_db import init_db, User
 from .client_portal_routes import router as client_portal_router
 from app.models import Meeting
 import warnings
@@ -21,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from .portal_db import engine, SQLModel
 SQLModel.metadata.create_all(engine)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 load_dotenv()  # ✅ This loads your .env file
 
@@ -67,6 +69,7 @@ SERVICE_PRICES = {
 async def startup_event():
     """Run verification on startup to fix any broken file paths"""
     print("🚀 Application starting up...")
+    create_admin_if_not_exists()
     try:
         verify_and_fix_meeting_paths()
     except Exception as e:
@@ -101,6 +104,35 @@ async def root():
     return {"message": "4D Gaming Stripe Backend", "status": "active"}
 
 # ==================== 4D GAMING STRIPE ENDPOINTS ====================
+
+def create_admin_if_not_exists():
+    """Create admin user from environment variables on first run"""
+    from app.portal_db import get_db_session
+    
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@4dgaming.games")
+    admin_password = os.getenv("ADMIN_PASSWORD_1")
+    
+    if not admin_password:
+        print("⚠️  Warning: ADMIN_PASSWORD_1 not set in environment")
+        return
+    
+    db = next(get_db_session())
+    try:
+        admin = db.exec(select(User).where(User.email == admin_email)).first()
+        
+        if not admin:
+            hashed_password = pwd_context.hash(admin_password)
+            admin_user = User(
+                email=admin_email,
+                name="Admin",
+                hashed_password=hashed_password,
+                is_admin=True
+            )
+            db.add(admin_user)
+            db.commit()
+            print(f"✅ Admin user created: {admin_email}")
+    finally:
+        db.close()
 
 @app.get("/config")
 async def get_stripe_config():
