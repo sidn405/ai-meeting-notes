@@ -65,7 +65,7 @@ class Review(SQLModel, table=True):
     __tablename__ = "reviews"
     
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="portal_users.id")
+    user_id: int = Field(foreign_key="portaluser.id")
     rating: int = Field(ge=1, le=5)  # 1-5 stars
     comment: str
     is_approved: bool = Field(default=False)  # Admin must approve before showing publicly
