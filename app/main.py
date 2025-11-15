@@ -69,7 +69,6 @@ SERVICE_PRICES = {
 async def startup_event():
     """Run verification on startup to fix any broken file paths"""
     print("🚀 Application starting up...")
-    create_admin_if_not_exists()
     try:
         verify_and_fix_meeting_paths()
     except Exception as e:
@@ -104,35 +103,6 @@ async def root():
     return {"message": "4D Gaming Stripe Backend", "status": "active"}
 
 # ==================== 4D GAMING STRIPE ENDPOINTS ====================
-
-def create_admin_if_not_exists():
-    """Create admin user from environment variables on first run"""
-    from app.portal_db import get_session
-    
-    admin_email = os.getenv("ADMIN_EMAIL", "admin@4dgaming.games")
-    admin_password = os.getenv("ADMIN_PASSWORD_1")
-    
-    if not admin_password:
-        print("⚠️  Warning: ADMIN_PASSWORD_1 not set in environment")
-        return
-    
-    db = next(get_session())
-    try:
-        admin = db.exec(select(PortalUser).where(PortalUser.email == admin_email)).first()
-        
-        if not admin:
-            hashed_password = sha256(admin_password.encode()).hexdigest()
-            admin_user = PortalUser(
-                email=admin_email,
-                name="Admin",
-                hashed_password=hashed_password,
-                is_admin=True
-            )
-            db.add(admin_user)
-            db.commit()
-            print(f"✅ Admin user created: {admin_email}")
-    finally:
-        db.close()
 
 @app.get("/config")
 async def get_stripe_config():
