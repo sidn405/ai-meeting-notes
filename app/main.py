@@ -11,7 +11,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from sqlmodel import select, Session
 from passlib.context import CryptContext
-from .portal_db import init_db, User
+from .portal_db import init_db, PortalUser
 from .client_portal_routes import router as client_portal_router
 from app.models import Meeting
 import warnings
