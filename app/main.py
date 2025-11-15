@@ -10,7 +10,8 @@ from .services.branding import render_meeting_notes_email_html
 from pathlib import Path
 from dotenv import load_dotenv
 from sqlmodel import select, Session
-from passlib.context import CryptContext
+
+from hashlib import sha256
 from .portal_db import init_db, PortalUser
 from .client_portal_routes import router as client_portal_router
 from app.models import Meeting
@@ -22,7 +23,6 @@ from sqlalchemy.orm import Session
 
 from .portal_db import engine, SQLModel
 SQLModel.metadata.create_all(engine)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 load_dotenv()  # ✅ This loads your .env file
 
@@ -115,15 +115,13 @@ def create_admin_if_not_exists():
     if not admin_password:
         print("⚠️  Warning: ADMIN_PASSWORD_1 not set in environment")
         return
-      
-    admin_password = admin_password[:72]
     
     db = next(get_session())
     try:
         admin = db.exec(select(PortalUser).where(PortalUser.email == admin_email)).first()
         
         if not admin:
-            hashed_password = pwd_context.hash(admin_password)
+            hashed_password = sha256(admin_password.encode()).hexdigest()
             admin_user = PortalUser(
                 email=admin_email,
                 name="Admin",
