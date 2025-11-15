@@ -15,6 +15,7 @@ from fastapi import (
     File,
     Request,
     Response,
+    Query,
     status,
 )
 from jose import jwt, JWTError
@@ -595,11 +596,14 @@ def create_project(
 @router.post("/projects/{project_id}/checkout")
 async def create_milestone_checkout(
     project_id: int,
-    milestone: Optional[int] = None,  # Optional milestone number from query param
     current_user: PortalUser = Depends(get_current_user),
     db: Session = Depends(get_session),
+    milestone: Optional[int] = Query(None, description="Milestone number to pay for"),
 ):
     """Create Stripe Checkout session for milestone payment"""
+    # Debug logging
+    print(f"🔍 Checkout called - Project: {project_id}, Milestone param: {milestone}")
+    
     project = get_project_or_404(project_id, current_user, db)
     
     # Parse project details to get milestone info
@@ -623,8 +627,12 @@ async def create_milestone_checkout(
         # Calculate next unpaid milestone
         paid_milestones = [p.get('milestone') for p in payments]
         next_milestone_num = max(paid_milestones, default=0) + 1
+        print(f"📊 No milestone specified, calculated next: {next_milestone_num} (paid: {paid_milestones})")
     else:
         next_milestone_num = milestone
+        print(f"✅ Using specified milestone: {next_milestone_num}")
+    
+    print(f"🎯 Final milestone to charge: {next_milestone_num}")
     
     # Validate milestone number
     if next_milestone_num < 1 or next_milestone_num > len(milestones):
