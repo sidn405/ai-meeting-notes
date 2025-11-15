@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import hmac, os
 from typing import Optional
 import jwt  # PyJWT
+from jose import jwt, JWTError
 from fastapi import HTTPException, Depends, Header, Cookie
 from fastapi.security.utils import get_authorization_scheme_param
 from .config import get_settings
@@ -32,6 +33,18 @@ def _decode_token(token: str) -> dict:
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+def verify_token(token: str) -> dict:
+    """Verify and decode JWT token"""
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=["HS256"]
+        )
+        return payload
+    except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 def _const_time_eq(a: str, b: str) -> bool:
