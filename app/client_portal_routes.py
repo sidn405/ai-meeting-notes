@@ -72,9 +72,18 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(truncated, bcrypt.gensalt()).decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify password against hash"""
-    truncated = plain_password[:MAX_BCRYPT_LEN].encode('utf-8')
-    return bcrypt.checkpw(truncated, hashed_password.encode('utf-8'))
+    """Verify password - handles both bcrypt and SHA256 hashes"""
+    from hashlib import sha256
+    
+    # Check if it's a SHA256 hash (64 hex characters)
+    if len(hashed_password) == 64 and all(c in '0123456789abcdef' for c in hashed_password):
+        # SHA256 hash - compare directly
+        computed_hash = sha256(plain_password.encode()).hexdigest()
+        return computed_hash == hashed_password
+    else:
+        # bcrypt hash
+        truncated = plain_password[:72].encode('utf-8')
+        return bcrypt.checkpw(truncated, hashed_password.encode('utf-8'))
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
