@@ -115,6 +115,8 @@ def create_admin_if_not_exists():
     if not admin_password:
         print("⚠️  Warning: ADMIN_PASSWORD_1 not set in environment")
         return
+      
+    admin_password = admin_password[:72]
     
     db = next(get_session())
     try:
