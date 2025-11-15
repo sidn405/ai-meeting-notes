@@ -595,10 +595,11 @@ def create_project(
 @router.post("/projects/{project_id}/checkout")
 async def create_milestone_checkout(
     project_id: int,
+    milestone: Optional[int] = None,  # Optional milestone number from query param
     current_user: PortalUser = Depends(get_current_user),
     db: Session = Depends(get_session),
 ):
-    """Create Stripe Checkout session for first milestone payment"""
+    """Create Stripe Checkout session for milestone payment"""
     project = get_project_or_404(project_id, current_user, db)
     
     # Parse project details to get milestone info
@@ -609,6 +610,7 @@ async def create_milestone_checkout(
     
     pricing = details.get('pricing') or {}
     milestones = pricing.get('milestones', [])
+    payments = details.get('payments', [])
     
     if not milestones:
         raise HTTPException(
@@ -616,11 +618,34 @@ async def create_milestone_checkout(
             detail="No milestones found for this project. Please contact support."
         )
     
-    # Get first milestone (or find next unpaid milestone)
-    first_milestone = milestones[0]
-    amount = first_milestone.get('amount', 0)
-    milestone_name = first_milestone.get('name', 'Discovery & Setup')
-    milestone_week = first_milestone.get('weeksFromStart', 1)
+    # Determine which milestone to pay for
+    if milestone is None:
+        # Calculate next unpaid milestone
+        paid_milestones = [p.get('milestone') for p in payments]
+        next_milestone_num = max(paid_milestones, default=0) + 1
+    else:
+        next_milestone_num = milestone
+    
+    # Validate milestone number
+    if next_milestone_num < 1 or next_milestone_num > len(milestones):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid milestone number. Must be between 1 and {len(milestones)}"
+        )
+    
+    # Check if milestone already paid
+    paid_milestones = [p.get('milestone') for p in payments]
+    if next_milestone_num in paid_milestones:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Milestone {next_milestone_num} has already been paid"
+        )
+    
+    # Get milestone details
+    milestone_data = milestones[next_milestone_num - 1]
+    amount = milestone_data.get('amount', 0)
+    milestone_name = milestone_data.get('name', f'Milestone {next_milestone_num}')
+    milestone_week = milestone_data.get('weeksFromStart', next_milestone_num)
     
     if amount <= 0:
         raise HTTPException(
@@ -638,10 +663,10 @@ async def create_milestone_checkout(
                     'unit_amount': int(amount * 100),  # Convert dollars to cents
                     'product_data': {
                         'name': f"4D Gaming - {project.name}",
-                        'description': f"Milestone 1: {milestone_name} (Week {milestone_week})",
+                        'description': f"Milestone {next_milestone_num}: {milestone_name} (Week {milestone_week})",
                         'metadata': {
                             'project_id': str(project_id),
-                            'milestone_number': '1',
+                            'milestone_number': str(next_milestone_num),
                             'business': '4D Gaming'
                         }
                     },
@@ -654,7 +679,7 @@ async def create_milestone_checkout(
             customer_email=current_user.email,
             metadata={
                 'project_id': str(project_id),
-                'milestone': '1',
+                'milestone': str(next_milestone_num),
                 'user_id': str(current_user.id),
                 'user_email': current_user.email,
                 'user_name': current_user.name,
@@ -664,7 +689,7 @@ async def create_milestone_checkout(
             # Add custom branding text
             custom_text={
                 'submit': {
-                    'message': f'Complete payment for {project.name} - Milestone 1'
+                    'message': f'Complete payment for {project.name} - Milestone {next_milestone_num}'
                 }
             }
         )
@@ -929,4 +954,3 @@ def admin_create_message(
 
 class CheckoutResponse(SQLModel):
     checkout_url: str
-
