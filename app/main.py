@@ -107,7 +107,7 @@ async def root():
 
 def create_admin_if_not_exists():
     """Create admin user from environment variables on first run"""
-    from app.portal_db import get_db_session
+    from app.portal_db import get_session
     
     admin_email = os.getenv("ADMIN_EMAIL", "admin@4dgaming.games")
     admin_password = os.getenv("ADMIN_PASSWORD_1")
@@ -116,13 +116,13 @@ def create_admin_if_not_exists():
         print("⚠️  Warning: ADMIN_PASSWORD_1 not set in environment")
         return
     
-    db = next(get_db_session())
+    db = next(get_session())
     try:
-        admin = db.exec(select(User).where(User.email == admin_email)).first()
+        admin = db.exec(select(PortalUser).where(PortalUser.email == admin_email)).first()
         
         if not admin:
             hashed_password = pwd_context.hash(admin_password)
-            admin_user = User(
+            admin_user = PortalUser(
                 email=admin_email,
                 name="Admin",
                 hashed_password=hashed_password,
