@@ -4,13 +4,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.db import init_db, DATA_DIR, get_session
 from fastapi.responses import JSONResponse
 import stripe
+from pydantic import BaseModel
 import os
+from openai import OpenAI
 from fastapi.responses import HTMLResponse
 from .services.branding import render_meeting_notes_email_html
 from pathlib import Path
 from dotenv import load_dotenv
 from sqlmodel import select, Session
-
+from typing import List, Dict
 from hashlib import sha256
 from .portal_db import init_db, PortalUser
 from .client_portal_routes import router as client_portal_router
@@ -101,6 +103,103 @@ def healthz():
 @app.get("/")
 async def root():
     return {"message": "4D Gaming Stripe Backend", "status": "active"}
+  
+# Initialize OpenAI client
+openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+# Pydantic models for request/response
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatbotRequest(BaseModel):
+    message: str
+    history: List[ChatMessage] = []
+
+class ChatbotResponse(BaseModel):
+    response: str
+    success: bool
+
+# System prompt
+CHATBOT_SYSTEM_PROMPT = """You are the 4D Gaming AI assistant, helping clients with questions about services, pricing, and the development process.
+
+COMPANY INFO:
+- Company: 4D Gaming
+- Experience: 10+ years
+- Published Apps: 8+ on Google Play & Amazon
+- Projects: 100+ completed
+- Client Satisfaction: 98%
+
+SERVICES:
+1. AI Chatbot Development - $2,500 (3-4 weeks)
+   Custom AI chatbots with natural language processing
+   
+2. Mobile App Development - $5,000 (6-8 weeks)
+   Cross-platform mobile apps using Flutter
+   
+3. Game Development & Reskinning - $3,000 (4-6 weeks)
+   Unity-based game development and app reskinning
+   
+4. Web3 & Blockchain - $4,000 (5-7 weeks)
+   Smart contracts, DApps, and blockchain integration
+   
+5. Web Scraping & Lead Generation - $2,000 (2-3 weeks)
+   Automated data extraction and lead generation tools
+   
+6. Trading Bot Development - $4,500 (5-6 weeks)
+   Automated trading bots for crypto and stocks
+
+PAYMENT: 3-milestone system (30% / 50% / 20%)
+WEBSITE: https://4dgaming.games
+
+Keep responses under 150 words, professional but friendly."""
+
+@app.post("/api/chatbot", response_model=ChatbotResponse)
+async def chatbot(request: ChatbotRequest):
+    """
+    Chatbot endpoint for 4D Gaming website
+    """
+    try:
+        if not request.message:
+            raise HTTPException(status_code=400, detail="Message is required")
+        
+        # Build messages for OpenAI
+        messages = [{"role": "system", "content": CHATBOT_SYSTEM_PROMPT}]
+        
+        # Add conversation history (last 10 messages)
+        for msg in request.history[-10:]:
+            messages.append({
+                "role": msg.role,
+                "content": msg.content
+            })
+        
+        # Add current user message
+        messages.append({
+            "role": "user",
+            "content": request.message
+        })
+        
+        # Call OpenAI API
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=500,
+            temperature=0.7
+        )
+        
+        bot_response = response.choices[0].message.content
+        
+        return ChatbotResponse(response=bot_response, success=True)
+        
+    except Exception as e:
+        print(f"Chatbot error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chatbot/health")
+async def chatbot_health():
+    """Health check for chatbot"""
+    return {"status": "healthy", "service": "4D Gaming Chatbot"}
+
 
 # ==================== 4D GAMING STRIPE ENDPOINTS ====================
 
