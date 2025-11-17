@@ -53,25 +53,15 @@ class CSPMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         
-        # CSP policy
-        csp_policy = {
-            "default-src": ["'self'"],
-            "script-src": [
-                "'self'",
-                "https://m.stripe.network",
-                "'unsafe-inline'",  # Needed for inline scripts
-            ],
-            "style-src": ["'self'", "'unsafe-inline'"],
-            "img-src": ["'self'", "data:", "https:"],
-            "connect-src": ["'self'", "https://api.openai.com"],
-            "frame-src": ["https://m.stripe.network"],
-        }
-        
-        # Build CSP string
-        csp = "; ".join([
-            f"{key} {' '.join(values)}"
-            for key, values in csp_policy.items()
-        ])
+        # Stricter CSP - allows scripts from your domain
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self' https://m.stripe.network https://4dgaming.games; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self' https://api.openai.com; "
+            "frame-src https://m.stripe.network;"
+        )
         
         response.headers["Content-Security-Policy"] = csp
         return response
