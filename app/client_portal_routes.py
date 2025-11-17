@@ -21,6 +21,7 @@ from fastapi import (
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from sqlmodel import SQLModel, Field, Session, select
+from pydantic import BaseModel
 import secrets
 from .portal_db import (
     get_session,
@@ -399,7 +400,7 @@ class ReviewCreate(SQLModel):
     rating: int = Field(ge=1, le=5)
     comment: str = Field(min_length=10, max_length=500)
 
-class ReviewOut(SQLModel):
+class ReviewOut(BaseModel):
     id: int
     user_name: str
     rating: int
