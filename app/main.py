@@ -23,6 +23,9 @@ warnings.filterwarnings("ignore", message="Field .* has conflict with protected 
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
 from .portal_db import engine, SQLModel
 SQLModel.metadata.create_all(engine)
 
@@ -45,7 +48,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add CSP middleware
+class CSPMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        
+        # CSP policy
+        csp_policy = {
+            "default-src": ["'self'"],
+            "script-src": [
+                "'self'",
+                "https://m.stripe.network",
+                "'unsafe-inline'",  # Needed for inline scripts
+            ],
+            "style-src": ["'self'", "'unsafe-inline'"],
+            "img-src": ["'self'", "data:", "https:"],
+            "connect-src": ["'self'", "https://api.openai.com"],
+            "frame-src": ["https://m.stripe.network"],
+        }
+        
+        # Build CSP string
+        csp = "; ".join([
+            f"{key} {' '.join(values)}"
+            for key, values in csp_policy.items()
+        ])
+        
+        response.headers["Content-Security-Policy"] = csp
+        return response
 
+app.add_middleware(CSPMiddleware)
 
 init_db()
 
