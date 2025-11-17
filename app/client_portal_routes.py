@@ -407,7 +407,7 @@ class ReviewOut(SQLModel):
     created_at: datetime
     is_approved: bool = False  # Add this field
 
-@router.post("/api/reviews", response_model=ReviewOut)
+@router.post("/reviews", response_model=ReviewOut)
 def create_review(
     data: ReviewCreate,
     current_user: PortalUser = Depends(get_current_user),
@@ -1018,7 +1018,7 @@ class ReviewOut(SQLModel):
     created_at: datetime
 
 
-@router.post("/api/eviews", response_model=ReviewOut)
+@router.post("/reviews", response_model=ReviewOut)
 def create_review(
     payload: ReviewCreate,
     current_user: PortalUser = Depends(get_current_user),
@@ -1100,7 +1100,7 @@ def get_my_review(
     )
 
 
-@router.get("/api/reviews", response_model=List[ReviewOut])
+@router.get("/reviews", response_model=List[ReviewOut])
 def list_approved_reviews(db: Session = Depends(get_session)):
     """Public endpoint - list all approved reviews"""
     reviews = db.exec(

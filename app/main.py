@@ -206,7 +206,7 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(meetings.router)
 app.include_router(admin.router)
-app.include_router(client_portal_router, prefix="/api")
+app.include_router(client_portal_router)
 
 @app.get("/healthz")
 def healthz():
