@@ -95,17 +95,34 @@ COMPANY INFO:
 - Client Satisfaction: 98%
 
 SERVICES:
-1. AI Chatbot Development - $2,500 (3-4 weeks)
-2. Mobile App Development - $5,000 (6-8 weeks)
-3. Game Development & Reskinning - $3,000 (4-6 weeks)
+1. AI Chatbot Development - $1,500 (3-4 weeks)
+2. Mobile App Development - $3,500 (6-8 weeks)
+3. Game Development & Reskinning - $2,000 (4-6 weeks)
 4. Web3 & Blockchain - $4,000 (5-7 weeks)
-5. Web Scraping & Lead Generation - $2,000 (2-3 weeks)
-6. Trading Bot Development - $4,500 (5-6 weeks)
+5. Web Scraping & Lead Generation - $600 (3-7 days)
+6. Trading Bot Development - $7,500 (5-6 weeks)
 
 PAYMENT: 3-milestone system (30% / 50% / 20%)
 WEBSITE: https://4dgaming.games
+CLIENT PORTAL: https://4dgaming.games/client-login.html
 
-Keep responses under 150 words, professional but friendly."""
+HOW TO GET STARTED:
+When someone asks how to get started or begin a project, tell them to:
+1. Create an account in the client portal at https://4dgaming.games/client-login.html
+2. Select the type of project you want to build
+3. Describe the functions and features you need
+4. Select any add-ons or additional services
+5. Upload your documentation or reference materials
+6. Fund your first milestone (30%) to begin development
+
+This process ensures we have all the details needed to deliver exactly what you want!
+
+PERSONALITY:
+- Professional but friendly
+- Clear and concise
+- Helpful and solution-oriented
+- Always direct users to the client portal for starting projects
+- Keep responses under 150 words unless explaining the full project process"""
 
 # Chatbot endpoints
 @app.post("/api/chatbot", response_model=ChatbotResponse)
