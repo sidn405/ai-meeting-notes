@@ -196,6 +196,7 @@ from app.routers import iap
 from app.app_uploads import router as uploads_router
 from app.meeting_api import router as meeting_router
 from app.routers import admin
+from app.client_portal_routes import router as portal_router
 # Include license router
 app.include_router(license.router)
 app.include_router(storage_router)
@@ -206,7 +207,7 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(meetings.router)
 app.include_router(admin.router)
-app.include_router(client_portal_router)
+app.include_router(portal_router)
 
 @app.get("/healthz")
 def healthz():
