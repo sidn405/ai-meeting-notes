@@ -1,5 +1,5 @@
 # client_portal_routes.py
-
+import time
 import os
 import json
 import stripe
@@ -1247,7 +1247,7 @@ def get_subscription_plans():
     ]
 
 
-@router.post("/api/subscriptions/create-checkout-session")
+@router.post("/subscriptions/create-checkout-session")
 async def create_checkout_session(
     data: SubscriptionCreateRequest,
     current_user: PortalUser = Depends(get_current_user),
