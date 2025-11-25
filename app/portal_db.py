@@ -20,7 +20,7 @@ class PortalUser(SQLModel, table=True):
     email: str = Field(index=True, unique=True)
     hashed_password: str
     is_admin: bool = Field(default=False)
-
+    stripe_customer_id: Optional[str] = Field(default=None, index=True)
 
 class Project(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

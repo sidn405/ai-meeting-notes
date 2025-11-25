@@ -950,8 +950,8 @@ def handle_subscription_webhook(event_type: str, event_data: dict, db: Session):
             
             if subscription:
                 subscription.status = stripe_sub['status']
-                subscription.current_period_start = datetime.fromtimestamp(stripe_sub['current_period_start'])
-                subscription.current_period_end = datetime.fromtimestamp(stripe_sub['current_period_end'])
+                subscription.current_period_start = datetime.fromtimestamp(stripe_sub.current_period_start)  # FIX
+                subscription.current_period_end = datetime.fromtimestamp(stripe_sub.current_period_end)  # FIX
                 subscription.cancel_at_period_end = stripe_sub.get('cancel_at_period_end', False)
                 subscription.updated_at = datetime.utcnow()
                 db.add(subscription)
