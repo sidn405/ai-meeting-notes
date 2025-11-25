@@ -59,7 +59,7 @@ SUBSCRIPTION_PLANS = {
     'maintenance_basic': {
         'name': 'Basic Maintenance',
         'price': 497,
-        'stripe_price_id': os.getenv('STRIPE_PRICE_BASIC', 'price_xxxxx'),
+        'stripe_price_id': os.getenv('STRIPE_PRICE_BASIC', 'price_1SXG9PGIMdCB2CY0XUmFPNuy'),
         'description': 'Essential support & hosting',
         'features': [
             'Server hosting & monitoring (99.9% uptime)',
@@ -73,7 +73,7 @@ SUBSCRIPTION_PLANS = {
     'maintenance_pro': {
         'name': 'Professional Maintenance',
         'price': 997,
-        'stripe_price_id': os.getenv('STRIPE_PRICE_PRO', 'price_xxxxx'),
+        'stripe_price_id': os.getenv('STRIPE_PRICE_PRO', 'price_1SXGABGIMdCB2CY0ZwJBkOHE'),
         'description': 'Priority support & optimization',
         'features': [
             'Everything in Basic, PLUS:',
@@ -88,7 +88,7 @@ SUBSCRIPTION_PLANS = {
     'maintenance_enterprise': {
         'name': 'Enterprise Maintenance',
         'price': 1997,
-        'stripe_price_id': os.getenv('STRIPE_PRICE_ENTERPRISE', 'price_xxxxx'),
+        'stripe_price_id': os.getenv('STRIPE_PRICE_ENTERPRISE', 'price_1SXGBJGIMdCB2CY0jsqWtIRE'),
         'description': 'White-glove service & dedicated support',
         'features': [
             'Everything in Professional, PLUS:',
