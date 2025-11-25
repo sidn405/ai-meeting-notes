@@ -1247,54 +1247,63 @@ def get_subscription_plans():
     ]
 
 
-@router.post("/subscriptions/create-checkout-session")
-async def create_subscription_checkout_session(
-    payload: SubscriptionCreateRequest,
+@router.post("/api/subscriptions/create-checkout-session")
+async def create_checkout_session(
+    data: SubscriptionCreateRequest,
     current_user: PortalUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_session)
 ):
-    """Create Stripe Checkout Session for subscription setup"""
-    
-    plan = SUBSCRIPTION_PLANS.get(payload.plan_id)
-    if not plan:
-        raise HTTPException(status_code=400, detail="Invalid subscription plan")
+    """Create a Stripe Checkout Session for subscription"""
+    import time
     
     # Verify project belongs to user
-    project = db.get(Project, payload.project_id)
+    project = db.get(Project, data.project_id)
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Project not found")
     
+    # Get plan details
+    plan = SUBSCRIPTION_PLANS.get(data.plan_id)
+    if not plan:
+        raise HTTPException(status_code=400, detail="Invalid subscription plan")
+    
+    stripe_price_id = plan["stripe_price_id"]
+    if not stripe_price_id:
+        raise HTTPException(status_code=500, detail="Stripe price ID not configured")
+    
     try:
-        # Calculate subscription start date (30 days from now)
-        start_date = int((datetime.utcnow() + timedelta(days=30)).timestamp())
-        
-        # Create Stripe Checkout Session
+        # Create Stripe Checkout Session with metadata
         checkout_session = stripe.checkout.Session.create(
             mode='subscription',
-            customer_email=current_user.email,
             line_items=[{
-                'price': plan['stripe_price_id'],
+                'price': stripe_price_id,
                 'quantity': 1,
             }],
+            success_url=data.success_url,
+            cancel_url=data.cancel_url,
+            customer_email=current_user.email if hasattr(current_user, 'email') else None,
             subscription_data={
-                'billing_cycle_anchor': start_date,
-                'proration_behavior': 'none',
                 'metadata': {
                     'user_id': str(current_user.id),
-                    'project_id': str(payload.project_id),
-                    'plan_id': payload.plan_id,
-                }
+                    'project_id': str(data.project_id),
+                    'plan_id': data.plan_id,
+                },
+                'billing_cycle_anchor': int(time.time()) + (30 * 24 * 60 * 60),  # 30 days
             },
-            success_url=payload.success_url,
-            cancel_url=payload.cancel_url,
+            metadata={
+                'user_id': str(current_user.id),
+                'project_id': str(data.project_id),
+                'plan_id': data.plan_id,
+            },
         )
         
-        return {"success": True, "checkout_url": checkout_session.url, "session_id": checkout_session.id}
+        return {
+            "checkout_url": checkout_session.url,
+            "session_id": checkout_session.id
+        }
         
     except stripe.error.StripeError as e:
+        print(f"Stripe error: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
 @router.get("/subscriptions/list", response_model=List[SubscriptionOut])
