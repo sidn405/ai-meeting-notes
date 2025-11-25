@@ -59,7 +59,7 @@ SUBSCRIPTION_PLANS = {
     'maintenance_basic': {
         'name': 'Basic Maintenance',
         'price': 497,
-        'stripe_price_id': os.getenv('STRIPE_PRICE_BASIC', 'price_1SXG9PGIMdCB2CY0XUmFPNuy'),
+        'stripe_price_id': os.getenv('STRIPE_PRICE_BASIC', 'price_1SXKrx5J07OtCZ90xbFWK1b1'),
         'description': 'Essential support & hosting',
         'features': [
             'Server hosting & monitoring (99.9% uptime)',
