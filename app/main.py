@@ -17,7 +17,7 @@ from sqlmodel import select, Session
 from typing import List, Dict
 from hashlib import sha256
 from .portal_db import init_db, PortalUser
-from .client_portal_routes import router as client_portal_router
+
 from app.models import Meeting
 import warnings
 warnings.filterwarnings("ignore", message="Field .* has conflict with protected namespace 'model_'")
