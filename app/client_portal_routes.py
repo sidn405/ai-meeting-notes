@@ -402,7 +402,7 @@ async def get_admin_transactions(
                             type='milestone_payment',
                             project_id=project.id,
                             project_name=project.name,
-                            client_name=project.owner.username if project.owner else 'Unknown',
+                            client_name=project.owner.username if hasattr(project, 'owner') and project.owner else (db.get(PortalUser, project.owner_id).username if project.owner_id else 'Unknown'),
                             amount=payment.get('amount', 0),
                             currency='usd',
                             status='completed',
@@ -1262,7 +1262,7 @@ async def stripe_webhook(
                         milestone_data = details.get('pricing', {}).get('milestones', [])[int(milestone) - 1]
                         send_milestone_payment_notification(
                             project_name=project.name,
-                            client_name=project.owner.username if project.owner else 'Unknown',
+                            client_name=project.owner.username if hasattr(project, 'owner') and project.owner else (db.get(PortalUser, project.owner_id).username if project.owner_id else 'Unknown'),
                             milestone_number=int(milestone),  # ✅ Use 'milestone' not 'milestone_number'
                             milestone_name=milestone_data.get('name', f'Milestone {milestone}'),
                             amount=session['amount_total'] / 100,  # ✅ Use session data
@@ -1684,19 +1684,7 @@ def get_subscription(
         cancel_at_period_end=subscription.cancel_at_period_end,
         created_at=subscription.created_at
     )
-    
-import os
-import resend  # ✅ Correct import
-from typing import Optional
 
-# Resend configuration
-RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "4sbsid99@gmail.com")
-FROM_EMAIL = os.getenv("NOTIFICATION_FROM_EMAIL", "onboarding@resend.dev")
-
-# Set Resend API key
-if RESEND_API_KEY:
-    resend.api_key = RESEND_API_KEY  # ✅ Correct way to set API key
 
 # ============================================
 # EMAIL SENDING FUNCTION
