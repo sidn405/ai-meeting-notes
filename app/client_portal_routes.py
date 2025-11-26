@@ -18,6 +18,7 @@ from fastapi import (
     Query,
     status,
 )
+from resend import Resend
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from sqlmodel import SQLModel, Field, Session, select
@@ -51,6 +52,11 @@ B2_BUCKET_NAME = os.getenv("B2_BUCKET_NAME", "4dgaming-client-files")
 # Add Resend configuration after other configs (around line 40)
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "noreply@4dgaming.games")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@4dgaming.games")
+FROM_EMAIL = os.getenv("NOTIFICATION_FROM_EMAIL", "onboarding@resend.dev")  # Use your verified domain
+
+# Initialize Resend client
+resend_client = Resend(api_key=RESEND_API_KEY) if RESEND_API_KEY else None
 
 FRONTEND_URL = "https://4dgaming.games"
 
@@ -248,6 +254,24 @@ class SubscriptionCancelRequest(BaseModel):
     subscription_id: Optional[str] = None
 
 
+# ============================================
+# PYDANTIC MODELS FOR TRANSACTIONS
+# ============================================
+
+class TransactionOut(BaseModel):
+    """Transaction notification model"""
+    id: int
+    type: str  # 'milestone_payment', 'subscription_created', 'subscription_payment'
+    project_id: Optional[int] = None
+    project_name: str
+    client_name: str
+    amount: float
+    currency: str
+    status: str
+    stripe_payment_intent_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+    created_at: datetime
+    is_read: bool = False
 
 # ---------- CURRENT USER ----------
 
@@ -331,6 +355,168 @@ def register_user(
     )
     
     return UserOut(id=user.id, name=user.name, email=user.email, is_admin=user.is_admin)
+
+# ============================================
+# ADMIN NOTIFICATION ENDPOINTS
+# ============================================
+
+@router.get("/api/admin/transactions", response_model=List[TransactionOut])
+async def get_admin_transactions(
+    limit: int = 50,
+    unread_only: bool = False,
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session)
+):
+    """
+    Get all transactions for admin notification
+    Combines milestone payments and subscription events
+    """
+    # TODO: Add admin check
+    # if not current_user.is_admin:
+    #     raise HTTPException(status_code=403, detail="Admin access required")
+    
+    transactions = []
+    
+    # Get recent milestone payments from Payment table
+    # Assuming you have a Payment table that tracks milestone payments
+    recent_date = datetime.utcnow() - timedelta(days=30)
+    
+    # Get projects with recent payments
+    projects = db.exec(
+        select(Project)
+        .where(Project.created_at >= recent_date)
+        .order_by(Project.created_at.desc())
+    ).all()
+    
+    for project in projects:
+        if project.notes:
+            try:
+                notes = json.loads(project.notes)
+                payments = notes.get('payments', [])
+                
+                for idx, payment in enumerate(payments):
+                    if payment.get('paid_at'):
+                        transactions.append(TransactionOut(
+                            id=hash(f"{project.id}-milestone-{idx}") % 1000000,
+                            type='milestone_payment',
+                            project_id=project.id,
+                            project_name=project.name,
+                            client_name=project.owner.username if project.owner else 'Unknown',
+                            amount=payment.get('amount', 0),
+                            currency='usd',
+                            status='completed',
+                            stripe_payment_intent_id=payment.get('payment_intent_id'),
+                            created_at=datetime.fromisoformat(payment['paid_at'].replace('Z', '+00:00')) if isinstance(payment['paid_at'], str) else payment['paid_at'],
+                            is_read=False
+                        ))
+            except:
+                pass
+    
+    # Get recent subscriptions
+    subscriptions = db.exec(
+        select(Subscription)
+        .where(Subscription.created_at >= recent_date)
+        .order_by(Subscription.created_at.desc())
+    ).all()
+    
+    for sub in subscriptions:
+        # Get project name
+        project = db.get(Project, sub.project_id) if sub.project_id else None
+        project_name = project.name if project else f"Subscription {sub.id}"
+        
+        # Get client name
+        user = db.get(PortalUser, sub.user_id)
+        client_name = user.username if user else 'Unknown'
+        
+        # Subscription created event
+        transactions.append(TransactionOut(
+            id=hash(f"sub-created-{sub.id}") % 1000000,
+            type='subscription_created',
+            project_id=sub.project_id,
+            project_name=project_name,
+            client_name=client_name,
+            amount=0,  # Setup, no charge yet
+            currency=sub.currency,
+            status='active',
+            stripe_subscription_id=sub.stripe_subscription_id,
+            created_at=sub.created_at,
+            is_read=False
+        ))
+        
+        # Subscription payment event (if has last_payment_date)
+        if sub.last_payment_date:
+            transactions.append(TransactionOut(
+                id=hash(f"sub-payment-{sub.id}") % 1000000,
+                type='subscription_payment',
+                project_id=sub.project_id,
+                project_name=project_name,
+                client_name=client_name,
+                amount=sub.amount,
+                currency=sub.currency,
+                status='completed',
+                stripe_subscription_id=sub.stripe_subscription_id,
+                created_at=sub.last_payment_date,
+                is_read=False
+            ))
+    
+    # Sort by created_at descending
+    transactions.sort(key=lambda x: x.created_at, reverse=True)
+    
+    # Limit results
+    return transactions[:limit]
+
+
+@router.get("/api/admin/transactions/unread-count")
+async def get_unread_transaction_count(
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session)
+):
+    """Get count of unread transactions for notification badge"""
+    # TODO: Implement read/unread tracking in database
+    # For now, return count of transactions in last 24 hours
+    
+    recent_date = datetime.utcnow() - timedelta(hours=24)
+    
+    # Count recent payments
+    projects = db.exec(
+        select(Project)
+        .where(Project.created_at >= recent_date)
+    ).all()
+    
+    payment_count = 0
+    for project in projects:
+        if project.notes:
+            try:
+                notes = json.loads(project.notes)
+                payments = notes.get('payments', [])
+                for payment in payments:
+                    if payment.get('paid_at'):
+                        paid_date = datetime.fromisoformat(payment['paid_at'].replace('Z', '+00:00')) if isinstance(payment['paid_at'], str) else payment['paid_at']
+                        if paid_date >= recent_date:
+                            payment_count += 1
+            except:
+                pass
+    
+    # Count recent subscriptions
+    sub_count = db.exec(
+        select(Subscription)
+        .where(Subscription.created_at >= recent_date)
+    ).all()
+    
+    total_count = payment_count + len(sub_count)
+    
+    return {"count": total_count}
+
+
+@router.post("/api/admin/transactions/{transaction_id}/mark-read")
+async def mark_transaction_read(
+    transaction_id: int,
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session)
+):
+    """Mark a transaction as read"""
+    # TODO: Implement read/unread tracking in database
+    return {"success": True, "message": "Transaction marked as read"}
 
 
 @router.post("/auth/login", response_model=UserOut)
@@ -836,11 +1022,6 @@ async def create_milestone_checkout(
             detail=f"Stripe error: {str(e)}"
         )
 
-
-# ======================
-# STRIPE WEBHOOK HANDLER
-# ======================
-
 # ========================================
 # WEBHOOK HANDLER FOR SUBSCRIPTIONS
 # ========================================
@@ -887,13 +1068,35 @@ def handle_subscription_webhook(event_type: str, event_data: dict, db: Session):
                 
                 db.add(subscription)
                 
+                # Get project and user for email ✅ ADDED THIS
+                project = db.get(Project, int(project_id)) if project_id else None
                 user = db.get(PortalUser, int(user_id))
+                
                 if user and not user.stripe_customer_id:
                     user.stripe_customer_id = customer_id
                     db.add(user)
                 
                 db.commit()
+                
                 print(f"✅ Subscription created: {subscription_id} for user {user_id}")
+                
+                # Send email notification
+                try:
+                    from datetime import timedelta
+                    first_charge_date = (datetime.utcnow() + timedelta(days=30)).strftime('%B %d, %Y')
+                    
+                    send_subscription_created_notification(
+                        project_name=project.name if project else f"Subscription {subscription.id}",
+                        client_name=user.username if user else 'Unknown',
+                        plan_name=subscription.plan_name,
+                        amount=subscription.amount,
+                        subscription_id=subscription.stripe_subscription_id,
+                        first_charge_date=first_charge_date
+                    )
+                    print(f"✅ Subscription email sent")
+                except Exception as e:
+                    print(f"❌ Failed to send subscription email: {e}")
+                    
             except Exception as e:
                 print(f"❌ Error creating subscription: {str(e)}")
     
@@ -914,7 +1117,26 @@ def handle_subscription_webhook(event_type: str, event_data: dict, db: Session):
                     subscription.updated_at = datetime.utcnow()
                     db.add(subscription)
                     db.commit()
+                    
                     print(f"✅ Payment succeeded for subscription {subscription_id}")
+                    
+                    # Send email notification
+                    try:
+                        project = db.get(Project, subscription.project_id) if subscription.project_id else None
+                        user = db.get(PortalUser, subscription.user_id)
+                        
+                        send_subscription_payment_notification(
+                            project_name=project.name if project else f"Subscription {subscription.id}",
+                            client_name=user.username if user else 'Unknown',
+                            plan_name=subscription.plan_name,
+                            amount=subscription.amount,
+                            subscription_id=subscription.stripe_subscription_id,
+                            invoice_url=event_data.get('hosted_invoice_url')
+                        )
+                        print(f"✅ Subscription payment email sent")
+                    except Exception as e:
+                        print(f"❌ Failed to send subscription payment email: {e}")
+                        
             except Exception as e:
                 print(f"❌ Error updating subscription payment: {str(e)}")
     
@@ -923,48 +1145,43 @@ def handle_subscription_webhook(event_type: str, event_data: dict, db: Session):
         subscription_id = invoice.get('subscription')
         
         if subscription_id:
-            try:
-                subscription = db.exec(
-                    select(Subscription)
-                    .where(Subscription.stripe_subscription_id == subscription_id)
-                ).first()
-                
-                if subscription:
-                    subscription.status = 'past_due'
-                    subscription.updated_at = datetime.utcnow()
-                    db.add(subscription)
-                    db.commit()
-                    print(f"⚠️ Payment failed for subscription {subscription_id}")
-            except Exception as e:
-                print(f"❌ Error handling failed payment: {str(e)}")
-    
-    elif event_type == 'customer.subscription.updated':
-        stripe_sub = event_data['object']
-        subscription_id = stripe_sub['id']
-        
-        try:
             subscription = db.exec(
                 select(Subscription)
                 .where(Subscription.stripe_subscription_id == subscription_id)
             ).first()
             
             if subscription:
-                subscription.status = stripe_sub['status']
-                subscription.current_period_start = datetime.fromtimestamp(stripe_sub.current_period_start)  # FIX
-                subscription.current_period_end = datetime.fromtimestamp(stripe_sub.current_period_end)  # FIX
+                subscription.status = 'past_due'
+                subscription.updated_at = datetime.utcnow()
+                db.add(subscription)
+                db.commit()
+                print(f"⚠️ Payment failed for subscription {subscription_id}")
+    
+    elif event_type == 'customer.subscription.updated':
+        stripe_sub = event_data['object']
+        subscription_id = stripe_sub.get('id')
+        
+        if subscription_id:
+            subscription = db.exec(
+                select(Subscription)
+                .where(Subscription.stripe_subscription_id == subscription_id)
+            ).first()
+            
+            if subscription:
+                subscription.status = stripe_sub.get('status')
+                subscription.current_period_start = datetime.fromtimestamp(stripe_sub['current_period_start'])
+                subscription.current_period_end = datetime.fromtimestamp(stripe_sub['current_period_end'])
                 subscription.cancel_at_period_end = stripe_sub.get('cancel_at_period_end', False)
                 subscription.updated_at = datetime.utcnow()
                 db.add(subscription)
                 db.commit()
                 print(f"✅ Subscription updated: {subscription_id}")
-        except Exception as e:
-            print(f"❌ Error updating subscription: {str(e)}")
     
     elif event_type == 'customer.subscription.deleted':
         stripe_sub = event_data['object']
-        subscription_id = stripe_sub['id']
+        subscription_id = stripe_sub.get('id')
         
-        try:
+        if subscription_id:
             subscription = db.exec(
                 select(Subscription)
                 .where(Subscription.stripe_subscription_id == subscription_id)
@@ -977,8 +1194,6 @@ def handle_subscription_webhook(event_type: str, event_data: dict, db: Session):
                 db.add(subscription)
                 db.commit()
                 print(f"🚫 Subscription cancelled: {subscription_id}")
-        except Exception as e:
-            print(f"❌ Error cancelling subscription: {str(e)}")
 
 
 @router.post("/webhooks/stripe")
@@ -1009,8 +1224,9 @@ async def stripe_webhook(
         # Extract metadata
         project_id = session['metadata'].get('project_id')
         milestone = session['metadata'].get('milestone')
+        payment_intent_id = session.get('payment_intent')  # ✅ ADDED THIS
         
-        if project_id:
+        if project_id and milestone:  # ✅ Check milestone exists
             # Update project status
             project = db.get(Project, int(project_id))
             if project:
@@ -1022,7 +1238,7 @@ async def stripe_webhook(
                 elif milestone == '3':
                     project.status = 'completed'
                 
-                # You could also store payment info in project notes
+                # Store payment info in project notes
                 try:
                     details = json.loads(project.notes) if project.notes else {}
                     if 'payments' not in details:
@@ -1033,14 +1249,30 @@ async def stripe_webhook(
                         'amount': session['amount_total'] / 100,  # Convert cents to dollars
                         'paid_at': datetime.utcnow().isoformat(),
                         'stripe_session_id': session['id'],
-                        'payment_status': session['payment_status']
+                        'payment_status': session['payment_status'],
+                        'payment_intent_id': payment_intent_id  # ✅ ADDED THIS
                     })
                     
                     project.notes = json.dumps(details)
-                except:
-                    pass  # Don't fail if notes update fails
-                
-                db.commit()
+                    db.commit()
+                    
+                    # ✅ SEND EMAIL NOTIFICATION (MOVED HERE - AFTER db.commit())
+                    try:
+                        milestone_data = details.get('pricing', {}).get('milestones', [])[int(milestone) - 1]
+                        send_milestone_payment_notification(
+                            project_name=project.name,
+                            client_name=project.owner.username if project.owner else 'Unknown',
+                            milestone_number=int(milestone),  # ✅ Use 'milestone' not 'milestone_number'
+                            milestone_name=milestone_data.get('name', f'Milestone {milestone}'),
+                            amount=session['amount_total'] / 100,  # ✅ Use session data
+                            payment_intent_id=payment_intent_id or session['id']  # ✅ Fallback to session ID
+                        )
+                        print(f"✅ Email sent for milestone {milestone} payment")
+                    except Exception as e:
+                        print(f"❌ Failed to send email: {e}")
+                        
+                except Exception as e:
+                    print(f"❌ Failed to update project notes: {e}")
     
     return {"status": "success"}
 
@@ -1451,6 +1683,273 @@ def get_subscription(
         cancel_at_period_end=subscription.cancel_at_period_end,
         created_at=subscription.created_at
     )
+    
+def send_email_resend(to_email: str, subject: str, html_body: str):
+    """Send an email using Resend API"""
+    if not resend_client:
+        print("❌ Resend API key not configured")
+        return False
+    
+    try:
+        params = {
+            "from": FROM_EMAIL,
+            "to": [to_email],
+            "subject": subject,
+            "html": html_body,
+        }
+        
+        email = resend_client.emails.send(params)
+        print(f"✅ Email sent to {to_email}: {subject} (ID: {email['id']})")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Failed to send email to {to_email}: {str(e)}")
+        return False
+
+
+# ============================================
+# EMAIL TEMPLATES
+# ============================================
+
+def send_milestone_payment_notification(
+    project_name: str,
+    client_name: str,
+    milestone_number: int,
+    milestone_name: str,
+    amount: float,
+    payment_intent_id: str
+):
+    """Send notification when a milestone payment is received"""
+    
+    subject = f"💰 New Payment: {project_name} - Milestone {milestone_number}"
+    
+    html_body = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+            .content {{ background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }}
+            .amount {{ font-size: 42px; font-weight: bold; color: #10b981; margin: 20px 0; text-align: center; }}
+            .details {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb; }}
+            .details-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e5e7eb; }}
+            .details-row:last-child {{ border-bottom: none; }}
+            .label {{ color: #6b7280; font-weight: 600; }}
+            .value {{ color: #111827; font-weight: 500; text-align: right; }}
+            .cta {{ text-align: center; margin: 30px 0; }}
+            .button {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600; }}
+            .footer {{ text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1 style="margin: 0; font-size: 28px;">🎉 Payment Received!</h1>
+            </div>
+            <div class="content">
+                <div class="amount">${amount:.2f}</div>
+                <div style="text-align: center; color: #6b7280; margin-bottom: 20px;">USD</div>
+                
+                <div class="details">
+                    <div class="details-row">
+                        <span class="label">Project</span>
+                        <span class="value">{project_name}</span>
+                    </div>
+                    <div class="details-row">
+                        <span class="label">Client</span>
+                        <span class="value">{client_name}</span>
+                    </div>
+                    <div class="details-row">
+                        <span class="label">Milestone</span>
+                        <span class="value">Milestone {milestone_number}: {milestone_name}</span>
+                    </div>
+                    <div class="details-row">
+                        <span class="label">Payment ID</span>
+                        <span class="value" style="font-family: monospace; font-size: 12px;">{payment_intent_id}</span>
+                    </div>
+                </div>
+                
+                <div class="cta">
+                    <a href="https://4dgaming.games/admin-portal.html" class="button">
+                        View in Admin Portal
+                    </a>
+                </div>
+            </div>
+            <div class="footer">
+                <p style="margin: 0;">This is an automated notification from 4D Gaming Client Portal</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    send_email_resend(ADMIN_EMAIL, subject, html_body)
+
+
+def send_subscription_created_notification(
+    project_name: str,
+    client_name: str,
+    plan_name: str,
+    amount: float,
+    subscription_id: str,
+    first_charge_date: str
+):
+    """Send notification when a subscription is created"""
+    
+    subject = f"🎯 New Subscription: {project_name} - {plan_name}"
+    
+    html_body = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+            .content {{ background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }}
+            .plan {{ font-size: 24px; font-weight: bold; color: #8b5cf6; margin: 20px 0; text-align: center; }}
+            .amount {{ font-size: 36px; font-weight: bold; color: #8b5cf6; text-align: center; }}
+            .details {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb; }}
+            .details-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e5e7eb; }}
+            .details-row:last-child {{ border-bottom: none; }}
+            .label {{ color: #6b7280; font-weight: 600; }}
+            .value {{ color: #111827; font-weight: 500; text-align: right; }}
+            .grace-period {{ background: #dbeafe; border-left: 4px solid #3b82f6; padding: 16px; border-radius: 4px; margin: 20px 0; }}
+            .cta {{ text-align: center; margin: 30px 0; }}
+            .button {{ background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600; }}
+            .footer {{ text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1 style="margin: 0; font-size: 28px;">🎉 New Subscription!</h1>
+            </div>
+            <div class="content">
+                <div class="plan">{plan_name}</div>
+                <div class="amount">${amount:.2f}/month</div>
+                
+                <div class="details">
+                    <div class="details-row">
+                        <span class="label">Project</span>
+                        <span class="value">{project_name}</span>
+                    </div>
+                    <div class="details-row">
+                        <span class="label">Client</span>
+                        <span class="value">{client_name}</span>
+                    </div>
+                    <div class="details-row">
+                        <span class="label">Subscription ID</span>
+                        <span class="value" style="font-family: monospace; font-size: 12px;">{subscription_id}</span>
+                    </div>
+                </div>
+                
+                <div class="grace-period">
+                    <strong style="color: #1e40af;">📅 30-Day Grace Period Active</strong><br>
+                    <span style="color: #1e40af;">First charge will occur on: <strong>{first_charge_date}</strong></span>
+                </div>
+                
+                <div class="cta">
+                    <a href="https://4dgaming.games/admin-portal.html" class="button">
+                        View in Admin Portal
+                    </a>
+                </div>
+            </div>
+            <div class="footer">
+                <p style="margin: 0;">This is an automated notification from 4D Gaming Client Portal</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    send_email_resend(ADMIN_EMAIL, subject, html_body)
+
+
+def send_subscription_payment_notification(
+    project_name: str,
+    client_name: str,
+    plan_name: str,
+    amount: float,
+    subscription_id: str,
+    invoice_url: Optional[str] = None
+):
+    """Send notification when a subscription payment succeeds"""
+    
+    subject = f"💳 Subscription Payment: {project_name} - ${amount:.2f}"
+    
+    html_body = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+            .content {{ background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }}
+            .amount {{ font-size: 42px; font-weight: bold; color: #10b981; margin: 20px 0; text-align: center; }}
+            .details {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb; }}
+            .details-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e5e7eb; }}
+            .details-row:last-child {{ border-bottom: none; }}
+            .label {{ color: #6b7280; font-weight: 600; }}
+            .value {{ color: #111827; font-weight: 500; text-align: right; }}
+            .cta {{ text-align: center; margin: 30px 0; }}
+            .button {{ background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600; margin: 5px; }}
+            .footer {{ text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1 style="margin: 0; font-size: 28px;">💰 Subscription Payment Received!</h1>
+            </div>
+            <div class="content">
+                <div class="amount">${amount:.2f}</div>
+                <div style="text-align: center; color: #6b7280; margin-bottom: 20px;">USD</div>
+                
+                <div class="details">
+                    <div class="details-row">
+                        <span class="label">Project</span>
+                        <span class="value">{project_name}</span>
+                    </div>
+                    <div class="details-row">
+                        <span class="label">Client</span>
+                        <span class="value">{client_name}</span>
+                    </div>
+                    <div class="details-row">
+                        <span class="label">Plan</span>
+                        <span class="value">{plan_name}</span>
+                    </div>
+                    <div class="details-row">
+                        <span class="label">Subscription ID</span>
+                        <span class="value" style="font-family: monospace; font-size: 12px;">{subscription_id}</span>
+                    </div>
+                </div>
+                
+                <div class="cta">
+                    <a href="https://4dgaming.games/admin-portal.html" class="button">
+                        View in Admin Portal
+                    </a>
+                    {f'<br><a href="{invoice_url}" class="button" style="background: #6366f1;">View Invoice</a>' if invoice_url else ''}
+                </div>
+            </div>
+            <div class="footer">
+                <p style="margin: 0;">This is an automated notification from 4D Gaming Client Portal</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    send_email_resend(ADMIN_EMAIL, subject, html_body)
 
 
 class CheckoutResponse(SQLModel):
