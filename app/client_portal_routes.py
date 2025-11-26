@@ -52,7 +52,7 @@ B2_BUCKET_NAME = os.getenv("B2_BUCKET_NAME", "4dgaming-client-files")
 # Add Resend configuration after other configs (around line 40)
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "noreply@4dgaming.games")
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@4dgaming.games")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "4dgamingllc@gmail.com")
 FROM_EMAIL = os.getenv("NOTIFICATION_FROM_EMAIL", "onboarding@resend.dev")  # Use your verified domain
 
 # Initialize Resend client
@@ -66,7 +66,7 @@ SUBSCRIPTION_PLANS = {
     'maintenance_basic': {
         'name': 'Basic Maintenance',
         'price': 497,
-        'stripe_price_id': os.getenv('STRIPE_PRICE_BASIC', 'price_1SXKrx5J07OtCZ90xbFWK1b1'),
+        'stripe_price_id': os.getenv('STRIPE_PRICE_BASIC', 'price_1SXG9PGIMdCB2CY0XUmFPNuy'),
         'description': 'Essential support & hosting',
         'features': [
             'Server hosting & monitoring (99.9% uptime)',
