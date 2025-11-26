@@ -402,7 +402,9 @@ async def get_admin_transactions(
                             type='milestone_payment',
                             project_id=project.id,
                             project_name=project.name,
-                            client_name=project.owner.username if hasattr(project, 'owner') and project.owner else (db.get(PortalUser, project.owner_id).username if project.owner_id else 'Unknown'),
+                            # Get user separately
+                            user = db.get(PortalUser, project.owner_id) if project.owner_id else None,
+                            client_name = user.name if user else 'Unknown',
                             amount=payment.get('amount', 0),
                             currency='usd',
                             status='completed',
@@ -1259,20 +1261,27 @@ async def stripe_webhook(
                     
                     # ✅ SEND EMAIL NOTIFICATION (MOVED HERE - AFTER db.commit())
                     try:
+                        # Get milestone details
                         milestone_data = details.get('pricing', {}).get('milestones', [])[int(milestone) - 1]
+                        
+                        # Get user separately (BEFORE function call)
+                        user = db.get(PortalUser, project.owner_id) if project.owner_id else None
+                        client_name = user.name if user else 'Unknown'
+                        
+                        # Now call the function
                         send_milestone_payment_notification(
                             project_name=project.name,
-                            client_name=project.owner.username if hasattr(project, 'owner') and project.owner else (db.get(PortalUser, project.owner_id).username if project.owner_id else 'Unknown'),
-                            milestone_number=int(milestone),  # ✅ Use 'milestone' not 'milestone_number'
+                            client_name=client_name,  # ✅ Just pass the variable
+                            milestone_number=int(milestone),
                             milestone_name=milestone_data.get('name', f'Milestone {milestone}'),
-                            amount=session['amount_total'] / 100,  # ✅ Use session data
-                            payment_intent_id=payment_intent_id or session['id']  # ✅ Fallback to session ID
+                            amount=session['amount_total'] / 100,
+                            payment_intent_id=payment_intent_id or session['id']
                         )
                         print(f"✅ Email sent for milestone {milestone} payment")
                     except Exception as e:
                         print(f"❌ Failed to send email: {e}")
                         
-                except Exception as e:
+                except Exception as e:  # ← ADD THIS! (outer except block)
                     print(f"❌ Failed to update project notes: {e}")
     
     return {"status": "success"}
