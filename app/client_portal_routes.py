@@ -427,7 +427,7 @@ async def get_admin_transactions(
         
         # Get client name
         user = db.get(PortalUser, sub.user_id)
-        client_name = user.username if user else 'Unknown'
+        client_name = user.name if user else 'Unknown'
         
         # Subscription created event
         transactions.append(TransactionOut(
@@ -1088,7 +1088,7 @@ def handle_subscription_webhook(event_type: str, event_data: dict, db: Session):
                     
                     send_subscription_created_notification(
                         project_name=project.name if project else f"Subscription {subscription.id}",
-                        client_name=user.username if user else 'Unknown',
+                        client_name=user.name if user else 'Unknown',
                         plan_name=subscription.plan_name,
                         amount=subscription.amount,
                         subscription_id=subscription.stripe_subscription_id,
@@ -1128,7 +1128,7 @@ def handle_subscription_webhook(event_type: str, event_data: dict, db: Session):
                         
                         send_subscription_payment_notification(
                             project_name=project.name if project else f"Subscription {subscription.id}",
-                            client_name=user.username if user else 'Unknown',
+                            client_name=user.name if user else 'Unknown',
                             plan_name=subscription.plan_name,
                             amount=subscription.amount,
                             subscription_id=subscription.stripe_subscription_id,
