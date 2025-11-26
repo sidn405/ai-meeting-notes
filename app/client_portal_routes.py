@@ -18,7 +18,7 @@ from fastapi import (
     Query,
     status,
 )
-from resend import Resend
+import resend
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from sqlmodel import SQLModel, Field, Session, select
@@ -56,7 +56,8 @@ ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@4dgaming.games")
 FROM_EMAIL = os.getenv("NOTIFICATION_FROM_EMAIL", "onboarding@resend.dev")  # Use your verified domain
 
 # Initialize Resend client
-resend_client = Resend(api_key=RESEND_API_KEY) if RESEND_API_KEY else None
+if RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY
 
 FRONTEND_URL = "https://4dgaming.games"
 
@@ -1684,9 +1685,26 @@ def get_subscription(
         created_at=subscription.created_at
     )
     
+import os
+import resend  # ✅ Correct import
+from typing import Optional
+
+# Resend configuration
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "4sbsid99@gmail.com")
+FROM_EMAIL = os.getenv("NOTIFICATION_FROM_EMAIL", "onboarding@resend.dev")
+
+# Set Resend API key
+if RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY  # ✅ Correct way to set API key
+
+# ============================================
+# EMAIL SENDING FUNCTION
+# ============================================
+
 def send_email_resend(to_email: str, subject: str, html_body: str):
     """Send an email using Resend API"""
-    if not resend_client:
+    if not RESEND_API_KEY:
         print("❌ Resend API key not configured")
         return False
     
@@ -1698,8 +1716,8 @@ def send_email_resend(to_email: str, subject: str, html_body: str):
             "html": html_body,
         }
         
-        email = resend_client.emails.send(params)
-        print(f"✅ Email sent to {to_email}: {subject} (ID: {email['id']})")
+        email = resend.Emails.send(params)  # ✅ Correct API call
+        print(f"✅ Email sent to {to_email}: {subject}")
         return True
         
     except Exception as e:
@@ -1728,59 +1746,37 @@ def send_milestone_payment_notification(
     <html>
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            body {{ font-family: Arial, sans-serif; margin: 0; padding: 20px; }}
+            .container {{ max-width: 600px; margin: 0 auto; }}
             .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
             .content {{ background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }}
             .amount {{ font-size: 42px; font-weight: bold; color: #10b981; margin: 20px 0; text-align: center; }}
-            .details {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb; }}
-            .details-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e5e7eb; }}
-            .details-row:last-child {{ border-bottom: none; }}
-            .label {{ color: #6b7280; font-weight: 600; }}
-            .value {{ color: #111827; font-weight: 500; text-align: right; }}
-            .cta {{ text-align: center; margin: 30px 0; }}
-            .button {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600; }}
-            .footer {{ text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }}
+            .details {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+            .details-row {{ padding: 10px 0; border-bottom: 1px solid #e5e7eb; }}
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <h1 style="margin: 0; font-size: 28px;">🎉 Payment Received!</h1>
+                <h1 style="margin: 0;">🎉 Payment Received!</h1>
             </div>
             <div class="content">
                 <div class="amount">${amount:.2f}</div>
-                <div style="text-align: center; color: #6b7280; margin-bottom: 20px;">USD</div>
-                
                 <div class="details">
-                    <div class="details-row">
-                        <span class="label">Project</span>
-                        <span class="value">{project_name}</span>
-                    </div>
-                    <div class="details-row">
-                        <span class="label">Client</span>
-                        <span class="value">{client_name}</span>
-                    </div>
-                    <div class="details-row">
-                        <span class="label">Milestone</span>
-                        <span class="value">Milestone {milestone_number}: {milestone_name}</span>
-                    </div>
-                    <div class="details-row">
-                        <span class="label">Payment ID</span>
-                        <span class="value" style="font-family: monospace; font-size: 12px;">{payment_intent_id}</span>
-                    </div>
+                    <div class="details-row"><strong>Project:</strong> {project_name}</div>
+                    <div class="details-row"><strong>Client:</strong> {client_name}</div>
+                    <div class="details-row"><strong>Milestone:</strong> {milestone_number} - {milestone_name}</div>
+                    <div class="details-row"><strong>Payment ID:</strong> {payment_intent_id}</div>
                 </div>
-                
-                <div class="cta">
-                    <a href="https://4dgaming.games/admin-portal.html" class="button">
+                <div style="text-align: center; margin-top: 20px;">
+                    <a href="https://4dgaming.games/admin-portal.html" 
+                       style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                              color: white; padding: 14px 32px; text-decoration: none; 
+                              border-radius: 6px; display: inline-block;">
                         View in Admin Portal
                     </a>
                 </div>
-            </div>
-            <div class="footer">
-                <p style="margin: 0;">This is an automated notification from 4D Gaming Client Portal</p>
             </div>
         </div>
     </body>
@@ -1807,62 +1803,41 @@ def send_subscription_created_notification(
     <html>
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            body {{ font-family: Arial, sans-serif; margin: 0; padding: 20px; }}
+            .container {{ max-width: 600px; margin: 0 auto; }}
             .header {{ background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
             .content {{ background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }}
-            .plan {{ font-size: 24px; font-weight: bold; color: #8b5cf6; margin: 20px 0; text-align: center; }}
-            .amount {{ font-size: 36px; font-weight: bold; color: #8b5cf6; text-align: center; }}
-            .details {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb; }}
-            .details-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e5e7eb; }}
-            .details-row:last-child {{ border-bottom: none; }}
-            .label {{ color: #6b7280; font-weight: 600; }}
-            .value {{ color: #111827; font-weight: 500; text-align: right; }}
-            .grace-period {{ background: #dbeafe; border-left: 4px solid #3b82f6; padding: 16px; border-radius: 4px; margin: 20px 0; }}
-            .cta {{ text-align: center; margin: 30px 0; }}
-            .button {{ background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600; }}
-            .footer {{ text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }}
+            .amount {{ font-size: 36px; font-weight: bold; color: #8b5cf6; margin: 20px 0; text-align: center; }}
+            .details {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+            .grace {{ background: #dbeafe; padding: 15px; border-radius: 4px; margin: 20px 0; }}
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <h1 style="margin: 0; font-size: 28px;">🎉 New Subscription!</h1>
+                <h1 style="margin: 0;">🎉 New Subscription!</h1>
             </div>
             <div class="content">
-                <div class="plan">{plan_name}</div>
+                <div style="font-size: 24px; font-weight: bold; text-align: center; color: #8b5cf6;">{plan_name}</div>
                 <div class="amount">${amount:.2f}/month</div>
-                
                 <div class="details">
-                    <div class="details-row">
-                        <span class="label">Project</span>
-                        <span class="value">{project_name}</span>
-                    </div>
-                    <div class="details-row">
-                        <span class="label">Client</span>
-                        <span class="value">{client_name}</span>
-                    </div>
-                    <div class="details-row">
-                        <span class="label">Subscription ID</span>
-                        <span class="value" style="font-family: monospace; font-size: 12px;">{subscription_id}</span>
-                    </div>
+                    <div><strong>Project:</strong> {project_name}</div>
+                    <div><strong>Client:</strong> {client_name}</div>
+                    <div><strong>Subscription ID:</strong> {subscription_id}</div>
                 </div>
-                
-                <div class="grace-period">
-                    <strong style="color: #1e40af;">📅 30-Day Grace Period Active</strong><br>
-                    <span style="color: #1e40af;">First charge will occur on: <strong>{first_charge_date}</strong></span>
+                <div class="grace">
+                    <strong>📅 30-Day Grace Period Active</strong><br>
+                    First charge: <strong>{first_charge_date}</strong>
                 </div>
-                
-                <div class="cta">
-                    <a href="https://4dgaming.games/admin-portal.html" class="button">
+                <div style="text-align: center;">
+                    <a href="https://4dgaming.games/admin-portal.html" 
+                       style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); 
+                              color: white; padding: 14px 32px; text-decoration: none; 
+                              border-radius: 6px; display: inline-block;">
                         View in Admin Portal
                     </a>
                 </div>
-            </div>
-            <div class="footer">
-                <p style="margin: 0;">This is an automated notification from 4D Gaming Client Portal</p>
             </div>
         </div>
     </body>
@@ -1889,60 +1864,36 @@ def send_subscription_payment_notification(
     <html>
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            body {{ font-family: Arial, sans-serif; margin: 0; padding: 20px; }}
+            .container {{ max-width: 600px; margin: 0 auto; }}
             .header {{ background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
             .content {{ background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }}
             .amount {{ font-size: 42px; font-weight: bold; color: #10b981; margin: 20px 0; text-align: center; }}
-            .details {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb; }}
-            .details-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e5e7eb; }}
-            .details-row:last-child {{ border-bottom: none; }}
-            .label {{ color: #6b7280; font-weight: 600; }}
-            .value {{ color: #111827; font-weight: 500; text-align: right; }}
-            .cta {{ text-align: center; margin: 30px 0; }}
-            .button {{ background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600; margin: 5px; }}
-            .footer {{ text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }}
+            .details {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }}
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <h1 style="margin: 0; font-size: 28px;">💰 Subscription Payment Received!</h1>
+                <h1 style="margin: 0;">💰 Subscription Payment!</h1>
             </div>
             <div class="content">
                 <div class="amount">${amount:.2f}</div>
-                <div style="text-align: center; color: #6b7280; margin-bottom: 20px;">USD</div>
-                
                 <div class="details">
-                    <div class="details-row">
-                        <span class="label">Project</span>
-                        <span class="value">{project_name}</span>
-                    </div>
-                    <div class="details-row">
-                        <span class="label">Client</span>
-                        <span class="value">{client_name}</span>
-                    </div>
-                    <div class="details-row">
-                        <span class="label">Plan</span>
-                        <span class="value">{plan_name}</span>
-                    </div>
-                    <div class="details-row">
-                        <span class="label">Subscription ID</span>
-                        <span class="value" style="font-family: monospace; font-size: 12px;">{subscription_id}</span>
-                    </div>
+                    <div><strong>Project:</strong> {project_name}</div>
+                    <div><strong>Client:</strong> {client_name}</div>
+                    <div><strong>Plan:</strong> {plan_name}</div>
+                    <div><strong>Subscription:</strong> {subscription_id}</div>
                 </div>
-                
-                <div class="cta">
-                    <a href="https://4dgaming.games/admin-portal.html" class="button">
+                <div style="text-align: center;">
+                    <a href="https://4dgaming.games/admin-portal.html" 
+                       style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); 
+                              color: white; padding: 14px 32px; text-decoration: none; 
+                              border-radius: 6px; display: inline-block;">
                         View in Admin Portal
                     </a>
-                    {f'<br><a href="{invoice_url}" class="button" style="background: #6366f1;">View Invoice</a>' if invoice_url else ''}
                 </div>
-            </div>
-            <div class="footer">
-                <p style="margin: 0;">This is an automated notification from 4D Gaming Client Portal</p>
             </div>
         </div>
     </body>
