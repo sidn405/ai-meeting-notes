@@ -361,7 +361,7 @@ def register_user(
 # ADMIN NOTIFICATION ENDPOINTS
 # ============================================
 
-@router.get("/api/admin/transactions", response_model=List[TransactionOut])
+@router.get("/admin/transactions", response_model=List[TransactionOut])
 async def get_admin_transactions(
     limit: int = 50,
     unread_only: bool = False,
@@ -469,7 +469,7 @@ async def get_admin_transactions(
     return transactions[:limit]
 
 
-@router.get("/api/admin/transactions/unread-count")
+@router.get("/admin/transactions/unread-count")
 async def get_unread_transaction_count(
     current_user: PortalUser = Depends(get_current_user),
     db: Session = Depends(get_session)
@@ -511,7 +511,7 @@ async def get_unread_transaction_count(
     return {"count": total_count}
 
 
-@router.post("/api/admin/transactions/{transaction_id}/mark-read")
+@router.post("/admin/transactions/{transaction_id}/mark-read")
 async def mark_transaction_read(
     transaction_id: int,
     current_user: PortalUser = Depends(get_current_user),
