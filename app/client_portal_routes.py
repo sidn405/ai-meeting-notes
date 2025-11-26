@@ -18,7 +18,7 @@ from fastapi import (
     Query,
     status,
 )
-import resend
+from resend import Resend
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from sqlmodel import SQLModel, Field, Session, select
@@ -56,7 +56,7 @@ ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@4dgaming.games")
 FROM_EMAIL = os.getenv("NOTIFICATION_FROM_EMAIL", "onboarding@resend.dev")  # Use your verified domain
 
 # Initialize Resend client
-resend_client = resend(api_key=RESEND_API_KEY) if RESEND_API_KEY else None
+resend_client = Resend(api_key=RESEND_API_KEY) if RESEND_API_KEY else None
 
 FRONTEND_URL = "https://4dgaming.games"
 
