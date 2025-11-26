@@ -1171,32 +1171,40 @@ def handle_subscription_webhook(event_type: str, event_data: dict, db: Session):
             ).first()
             
             if subscription:
+                # ✅ Use .get() with safety checks
                 subscription.status = stripe_sub.get('status')
-                subscription.current_period_start = datetime.fromtimestamp(stripe_sub['current_period_start'])
-                subscription.current_period_end = datetime.fromtimestamp(stripe_sub['current_period_end'])
+                
+                # Only update if the fields exist
+                if stripe_sub.get('current_period_start'):
+                    subscription.current_period_start = datetime.fromtimestamp(stripe_sub['current_period_start'])
+                
+                if stripe_sub.get('current_period_end'):
+                    subscription.current_period_end = datetime.fromtimestamp(stripe_sub['current_period_end'])
+                
                 subscription.cancel_at_period_end = stripe_sub.get('cancel_at_period_end', False)
                 subscription.updated_at = datetime.utcnow()
+                
                 db.add(subscription)
                 db.commit()
                 print(f"✅ Subscription updated: {subscription_id}")
-    
-    elif event_type == 'customer.subscription.deleted':
-        stripe_sub = event_data['object']
-        subscription_id = stripe_sub.get('id')
         
-        if subscription_id:
-            subscription = db.exec(
-                select(Subscription)
-                .where(Subscription.stripe_subscription_id == subscription_id)
-            ).first()
+        elif event_type == 'customer.subscription.deleted':
+            stripe_sub = event_data['object']
+            subscription_id = stripe_sub.get('id')
             
-            if subscription:
-                subscription.status = 'cancelled'
-                subscription.cancelled_at = datetime.utcnow()
-                subscription.updated_at = datetime.utcnow()
-                db.add(subscription)
-                db.commit()
-                print(f"🚫 Subscription cancelled: {subscription_id}")
+            if subscription_id:
+                subscription = db.exec(
+                    select(Subscription)
+                    .where(Subscription.stripe_subscription_id == subscription_id)
+                ).first()
+                
+                if subscription:
+                    subscription.status = 'cancelled'
+                    subscription.cancelled_at = datetime.utcnow()
+                    subscription.updated_at = datetime.utcnow()
+                    db.add(subscription)
+                    db.commit()
+                    print(f"🚫 Subscription cancelled: {subscription_id}")
 
 
 @router.post("/webhooks/stripe")
