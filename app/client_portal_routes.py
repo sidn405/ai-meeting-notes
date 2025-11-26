@@ -242,7 +242,7 @@ class SubscriptionOut(BaseModel):
     next_billing_date: Optional[datetime] = None
     cancel_at_period_end: bool
     created_at: datetime
-
+    project_id: Optional[int] = None
 
 class SubscriptionCancelRequest(BaseModel):
     subscription_id: Optional[str] = None
@@ -1331,7 +1331,8 @@ def list_subscriptions(
             current_period_end=sub.current_period_end,
             next_billing_date=sub.current_period_end,
             cancel_at_period_end=sub.cancel_at_period_end,
-            created_at=sub.created_at
+            created_at=sub.created_at,
+            project_id=sub.project_id
         )
         for sub in subscriptions
     ]
