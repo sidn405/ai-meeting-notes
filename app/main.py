@@ -17,6 +17,7 @@ from sqlmodel import select, Session
 from typing import List, Dict
 from hashlib import sha256
 from .portal_db import init_db, PortalUser
+from fastapi.staticfiles import StaticFiles
 
 from app.models import Meeting
 import warnings
@@ -47,6 +48,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add after line 50
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Add CSP middleware
 class CSPMiddleware(BaseHTTPMiddleware):
@@ -190,7 +194,7 @@ async def startup_event():
         print("Continuing with startup anyway...")
     print("✅ Startup complete\n")
 
-from .routers import meetings, health, auth, license
+from .routers import meetings, health, auth, license, documents
 from app.routers.storage_b2 import router as storage_router
 from app.routers import iap
 from app.app_uploads import router as uploads_router
@@ -208,6 +212,7 @@ app.include_router(auth.router)
 app.include_router(meetings.router)
 app.include_router(admin.router)
 app.include_router(portal_router)
+app.include_router(documents.router)
 
 @app.get("/healthz")
 def healthz():

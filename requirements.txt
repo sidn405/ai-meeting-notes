@@ -34,3 +34,4 @@ flask-cors==4.0.0
 gunicorn==21.2.0
 resend
 reportlab
+requests

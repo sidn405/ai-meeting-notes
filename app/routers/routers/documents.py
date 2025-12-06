@@ -11,15 +11,60 @@ from typing import List, Optional
 from datetime import datetime
 import os
 from pathlib import Path
-
+from starlette.requests import Request
 # Import your PDF generator
-from ..utils.lawbot_pdf_generator import create_proposal_pdf, create_invoice_pdf
-# Import your auth dependencies
-from ..dependencies import get_current_admin_user
+from app.utils.lawbot_proposal_generator import create_proposal_pdf, create_invoice_pdf
+
+
+# Import your existing auth
+from app.security import COOKIE_NAME
+from app.portal_db import PortalUser, get_session
+from sqlmodel import Session, select
 
 router = APIRouter(prefix="/api/admin", tags=["documents"])
 
+
+# ============================================================================
+# Auth using your existing session system
+# ============================================================================
+
+async def get_current_admin_user(request: Request, db: Session = Depends(get_session)):
+    """
+    Check if user is authenticated and is admin
+    Uses your existing cookie-based auth system
+    """
+    # Get user ID from cookie
+    user_id = request.cookies.get(COOKIE_NAME)
+    
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
+    
+    # Get user from database
+    user = db.exec(select(PortalUser).where(PortalUser.id == int(user_id))).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+    
+    # Check if user is admin
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    
+    return user
+
+
+# ============================================================================
 # Pydantic models for request validation
+# ============================================================================
+
 class ProposalRequest(BaseModel):
     proposal_number: str
     firm_name: str
@@ -51,13 +96,18 @@ class InvoiceRequest(BaseModel):
     project_id: Optional[int] = None
 
 
+# ============================================================================
+# API Endpoints
+# ============================================================================
+
 @router.post("/generate-proposal")
 async def generate_proposal(
     request: ProposalRequest,
-    current_user = Depends(get_current_admin_user)
+    current_user: PortalUser = Depends(get_current_admin_user)
 ):
     """
     Generate a professional proposal PDF for LawBot 360
+    Requires admin authentication
     """
     try:
         # Create directory for proposals if it doesn't exist
@@ -95,10 +145,15 @@ async def generate_proposal(
         if request.project_id:
             # TODO: Add database logic to attach PDF to project
             # Example:
-            # await db.execute(
-            #     "INSERT INTO project_files (project_id, file_path, file_type) VALUES (?, ?, ?)",
-            #     (request.project_id, str(filepath), "proposal")
+            # from app.models import ProjectFile
+            # project_file = ProjectFile(
+            #     project_id=request.project_id,
+            #     file_path=str(filepath),
+            #     file_type="proposal",
+            #     uploaded_by=current_user.id
             # )
+            # db.add(project_file)
+            # db.commit()
             pass
         
         # Return file URL
@@ -109,7 +164,8 @@ async def generate_proposal(
             "message": "Proposal generated successfully",
             "pdf_url": pdf_url,
             "filename": filename,
-            "proposal_number": request.proposal_number
+            "proposal_number": request.proposal_number,
+            "generated_by": current_user.email
         }
         
     except Exception as e:
@@ -122,10 +178,11 @@ async def generate_proposal(
 @router.post("/generate-invoice")
 async def generate_invoice(
     request: InvoiceRequest,
-    current_user = Depends(get_current_admin_user)
+    current_user: PortalUser = Depends(get_current_admin_user)
 ):
     """
     Generate a professional invoice PDF for LawBot 360
+    Requires admin authentication
     """
     try:
         # Create directory for invoices if it doesn't exist
@@ -157,11 +214,6 @@ async def generate_invoice(
         # If project_id provided, attach to project
         if request.project_id:
             # TODO: Add database logic to attach PDF to project
-            # Example:
-            # await db.execute(
-            #     "INSERT INTO project_files (project_id, file_path, file_type) VALUES (?, ?, ?)",
-            #     (request.project_id, str(filepath), "invoice")
-            # )
             pass
         
         # Return file URL
@@ -173,7 +225,8 @@ async def generate_invoice(
             "pdf_url": pdf_url,
             "filename": filename,
             "invoice_number": request.invoice_number,
-            "amount": request.amount
+            "amount": request.amount,
+            "generated_by": current_user.email
         }
         
     except Exception as e:
@@ -185,16 +238,17 @@ async def generate_invoice(
 
 @router.get("/projects")
 async def get_projects(
-    current_user = Depends(get_current_admin_user)
+    current_user: PortalUser = Depends(get_current_admin_user)
 ):
     """
     Get all projects for dropdown selection
-    This is a placeholder - implement with your actual database
+    TODO: Replace with actual database query
     """
-    # TODO: Replace with actual database query
+    # TODO: Query your actual projects table
     # Example:
-    # projects = await db.fetch_all("SELECT id, project_name, client_name, contact_name, contact_email FROM projects")
-    # return projects
+    # from app.models import Project
+    # projects = db.exec(select(Project)).all()
+    # return [{"id": p.id, "project_name": p.name, ...} for p in projects]
     
     # Placeholder return
     return [
@@ -208,15 +262,15 @@ async def get_projects(
     ]
 
 
-# Helper endpoint to download generated PDFs
 @router.get("/download/{file_type}/{filename}")
 async def download_pdf(
     file_type: str,
     filename: str,
-    current_user = Depends(get_current_admin_user)
+    current_user: PortalUser = Depends(get_current_admin_user)
 ):
     """
     Download a generated PDF (proposal or invoice)
+    Requires admin authentication
     """
     if file_type not in ["proposals", "invoices"]:
         raise HTTPException(status_code=400, detail="Invalid file type")
