@@ -49,7 +49,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Add after line 50
+# Auto-create static directories (for Railway)
+from pathlib import Path
+Path("static").mkdir(exist_ok=True)
+Path("static/proposals").mkdir(exist_ok=True)
+Path("static/invoices").mkdir(exist_ok=True)
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Add CSP middleware
