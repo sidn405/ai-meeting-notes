@@ -236,9 +236,9 @@ def create_proposal_pdf(output_path, proposal_data):
     # Maintenance Options
     maintenance_tier = proposal_data.get('maintenance_tier', 'Standard')
     maintenance_prices = {
-        'Basic': 99,
-        'Standard': 199,
-        'Premium': 399
+        'Basic': 497,
+        'Professional': 997,
+        'Enterprise': 1997
     }
     
     story.append(Paragraph("ONGOING MAINTENANCE (OPTIONAL)", heading_style))
