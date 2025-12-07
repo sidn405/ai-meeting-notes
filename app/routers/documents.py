@@ -1,10 +1,10 @@
 # backend/app/routers/documents.py
 """
 API routes for generating proposals and invoices for LawBot 360
-Add this to your FastAPI backend
+Fixed authentication with proper JWT handling
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Cookie
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
@@ -12,9 +12,12 @@ from datetime import datetime
 import os
 from pathlib import Path
 from starlette.requests import Request
+
 # Import your PDF generator
 from app.utils.lawbot_proposal_generator import create_proposal_pdf, create_invoice_pdf
 
+# JWT handling
+from jose import jwt, JWTError
 
 # Import your existing auth
 from app.security import COOKIE_NAME
@@ -25,25 +28,68 @@ router = APIRouter(prefix="/api/admin", tags=["documents"])
 
 
 # ============================================================================
-# Auth using your existing session system
+# Auth using your existing session system - FIXED VERSION
 # ============================================================================
 
-async def get_current_admin_user(request: Request, db: Session = Depends(get_session)):
+async def get_current_admin_user(
+    request: Request,
+    session_token: Optional[str] = Cookie(None, alias=COOKIE_NAME),
+    db: Session = Depends(get_session)
+):
     """
     Check if user is authenticated and is admin
-    Uses your existing cookie-based auth system
+    Uses your existing cookie-based JWT auth system
     """
-    # Get user ID from cookie
-    user_id = request.cookies.get(COOKIE_NAME)
+    # Get token from cookie first
+    token = session_token
     
-    if not user_id:
+    # If no cookie, try Authorization header
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated"
+            detail="Not authenticated - no token found"
+        )
+    
+    try:
+        # Get JWT secret from environment
+        secret = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this")
+        
+        # Decode JWT token to get user_id
+        payload = jwt.decode(token, secret, algorithms=["HS256"])
+        user_id_str = payload.get("sub")
+        
+        if not user_id_str:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token - no user ID"
+            )
+        
+        # Convert user_id from string to int
+        user_id = int(user_id_str)
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired"
+        )
+    except jwt.JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid token: {str(e)}"
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user ID format in token"
         )
     
     # Get user from database
-    user = db.exec(select(PortalUser).where(PortalUser.id == int(user_id))).first()
+    user = db.exec(select(PortalUser).where(PortalUser.id == user_id)).first()
     
     if not user:
         raise HTTPException(
@@ -72,6 +118,7 @@ class ProposalRequest(BaseModel):
     contact_email: EmailStr
     contact_phone: Optional[str] = None
     practice_areas: List[str]
+    addons: List[dict] = []
     current_intake_method: Optional[str] = None
     pain_points: List[str] = []
     monthly_inquiries: Optional[str] = None
@@ -106,7 +153,7 @@ async def generate_proposal(
     current_user: PortalUser = Depends(get_current_admin_user)
 ):
     """
-    Generate a professional proposal PDF for LawBot 360
+    Generate a professional proposal PDF
     Requires admin authentication
     """
     try:
@@ -117,7 +164,7 @@ async def generate_proposal(
         # Generate filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         firm_slug = request.firm_name.replace(" ", "_").replace("&", "and")[:30]
-        filename = f"LawBot360_Proposal_{firm_slug}_{timestamp}.pdf"
+        filename = f"Proposal_{firm_slug}_{timestamp}.pdf"
         filepath = proposals_dir / filename
         
         # Prepare data for PDF generator
@@ -128,6 +175,7 @@ async def generate_proposal(
             'contact_email': request.contact_email,
             'contact_phone': request.contact_phone,
             'practice_areas': request.practice_areas,
+            'addons': request.addons,
             'current_intake_method': request.current_intake_method,
             'pain_points': request.pain_points,
             'monthly_inquiries': request.monthly_inquiries,
@@ -138,22 +186,12 @@ async def generate_proposal(
             'maintenance_tier': request.maintenance_tier,
         }
         
-        # Generate PDF
+        # Generate PDF using the fixed generator
         create_proposal_pdf(str(filepath), proposal_data)
         
         # If project_id provided, attach to project
         if request.project_id:
             # TODO: Add database logic to attach PDF to project
-            # Example:
-            # from app.models import ProjectFile
-            # project_file = ProjectFile(
-            #     project_id=request.project_id,
-            #     file_path=str(filepath),
-            #     file_type="proposal",
-            #     uploaded_by=current_user.id
-            # )
-            # db.add(project_file)
-            # db.commit()
             pass
         
         # Return file URL
@@ -169,6 +207,9 @@ async def generate_proposal(
         }
         
     except Exception as e:
+        import traceback
+        print(f"Error generating proposal: {e}")
+        print(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate proposal: {str(e)}"
@@ -181,7 +222,7 @@ async def generate_invoice(
     current_user: PortalUser = Depends(get_current_admin_user)
 ):
     """
-    Generate a professional invoice PDF for LawBot 360
+    Generate a professional invoice PDF
     Requires admin authentication
     """
     try:
@@ -192,7 +233,7 @@ async def generate_invoice(
         # Generate filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         firm_slug = request.firm_name.replace(" ", "_").replace("&", "and")[:30]
-        filename = f"LawBot360_Invoice_{request.invoice_number}_{firm_slug}_{timestamp}.pdf"
+        filename = f"Invoice_{request.invoice_number}_{firm_slug}_{timestamp}.pdf"
         filepath = invoices_dir / filename
         
         # Prepare data for PDF generator
@@ -230,10 +271,27 @@ async def generate_invoice(
         }
         
     except Exception as e:
+        import traceback
+        print(f"Error generating invoice: {e}")
+        print(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate invoice: {str(e)}"
         )
+
+
+@router.get("/test-auth")
+async def test_auth(current_user: PortalUser = Depends(get_current_admin_user)):
+    """
+    Test endpoint to verify authentication is working
+    """
+    return {
+        "success": True,
+        "authenticated": True,
+        "user_id": current_user.id,
+        "email": current_user.email,
+        "is_admin": current_user.is_admin
+    }
 
 
 @router.get("/projects")
@@ -254,10 +312,10 @@ async def get_projects(
     return [
         {
             "id": 1,
-            "project_name": "LawBot 360 - Smith & Associates",
-            "client_name": "Smith & Associates Law Firm",
-            "contact_name": "John Smith",
-            "contact_email": "john@smithlaw.com"
+            "project_name": "Sample Project",
+            "client_name": "Test Client",
+            "contact_name": "John Doe",
+            "contact_email": "john@example.com"
         }
     ]
 
