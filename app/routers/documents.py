@@ -1,7 +1,7 @@
 # backend/app/routers/documents.py
 """
 API routes for generating proposals and invoices for LawBot 360
-Simplified version without authentication (since admin portal already requires auth)
+Returns PDF files directly as downloads
 """
 
 from fastapi import APIRouter, HTTPException, status
@@ -10,6 +10,8 @@ from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import datetime
 from pathlib import Path
+import tempfile
+import os
 
 # Import your PDF generator
 from app.utils.lawbot_proposal_generator import create_proposal_pdf, create_invoice_pdf
@@ -56,17 +58,16 @@ class InvoiceRequest(BaseModel):
 
 
 # ============================================================================
-# API Endpoints (No Auth Required - Admin Portal Already Authenticated)
+# API Endpoints - Direct File Downloads
 # ============================================================================
 
 @router.post("/generate-proposal")
 async def generate_proposal(request: ProposalRequest):
     """
-    Generate a professional proposal PDF
-    No auth required since admin portal is already authenticated
+    Generate a professional proposal PDF and return it directly as a download
     """
     try:
-        # Create directory for proposals if it doesn't exist
+        # Create directory for proposals if it doesn't exist (for archival)
         proposals_dir = Path("static/proposals")
         proposals_dir.mkdir(parents=True, exist_ok=True)
         
@@ -95,19 +96,18 @@ async def generate_proposal(request: ProposalRequest):
             'maintenance_tier': request.maintenance_tier,
         }
         
-        # Generate PDF using the fixed generator
+        # Generate PDF
         create_proposal_pdf(str(filepath), proposal_data)
         
-        # Return file URL
-        pdf_url = f"/static/proposals/{filename}"
-        
-        return {
-            "success": True,
-            "message": "Proposal generated successfully",
-            "pdf_url": pdf_url,
-            "filename": filename,
-            "proposal_number": request.proposal_number
-        }
+        # Return the PDF file directly as a download
+        return FileResponse(
+            path=str(filepath),
+            filename=filename,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
         
     except Exception as e:
         import traceback
@@ -122,11 +122,10 @@ async def generate_proposal(request: ProposalRequest):
 @router.post("/generate-invoice")
 async def generate_invoice(request: InvoiceRequest):
     """
-    Generate a professional invoice PDF
-    No auth required since admin portal is already authenticated
+    Generate a professional invoice PDF and return it directly as a download
     """
     try:
-        # Create directory for invoices if it doesn't exist
+        # Create directory for invoices if it doesn't exist (for archival)
         invoices_dir = Path("static/invoices")
         invoices_dir.mkdir(parents=True, exist_ok=True)
         
@@ -154,17 +153,15 @@ async def generate_invoice(request: InvoiceRequest):
         # Generate PDF
         create_invoice_pdf(str(filepath), invoice_data)
         
-        # Return file URL
-        pdf_url = f"/static/invoices/{filename}"
-        
-        return {
-            "success": True,
-            "message": "Invoice generated successfully",
-            "pdf_url": pdf_url,
-            "filename": filename,
-            "invoice_number": request.invoice_number,
-            "amount": request.amount
-        }
+        # Return the PDF file directly as a download
+        return FileResponse(
+            path=str(filepath),
+            filename=filename,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
         
     except Exception as e:
         import traceback
@@ -194,7 +191,7 @@ async def get_project_documents(project_id: int):
                     "filename": file.name,
                     "created_at": datetime.fromtimestamp(file.stat().st_mtime).isoformat(),
                     "size": file.stat().st_size,
-                    "url": f"/static/proposals/{file.name}"
+                    "download_url": f"/api/admin/download/proposals/{file.name}"
                 })
         
         # Check invoices directory
@@ -207,7 +204,7 @@ async def get_project_documents(project_id: int):
                     "filename": file.name,
                     "created_at": datetime.fromtimestamp(file.stat().st_mtime).isoformat(),
                     "size": file.stat().st_size,
-                    "url": f"/static/invoices/{file.name}"
+                    "download_url": f"/api/admin/download/invoices/{file.name}"
                 })
         
         # Sort by creation date, newest first
@@ -256,7 +253,7 @@ async def delete_document(file_type: str, filename: str):
 @router.get("/download/{file_type}/{filename}")
 async def download_pdf(file_type: str, filename: str):
     """
-    Download a generated PDF (proposal or invoice)
+    Download a generated PDF (proposal or invoice) directly
     """
     if file_type not in ["proposals", "invoices"]:
         raise HTTPException(status_code=400, detail="Invalid file type")
@@ -269,7 +266,10 @@ async def download_pdf(file_type: str, filename: str):
     return FileResponse(
         path=str(filepath),
         filename=filename,
-        media_type="application/pdf"
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
     )
 
 
@@ -280,13 +280,6 @@ async def get_projects():
     Returns empty list for now - implement when needed
     """
     # TODO: Query your actual projects table
-    # Example:
-    # from app.models import Project
-    # from app.portal_db import get_session
-    # db = next(get_session())
-    # projects = db.exec(select(Project)).all()
-    # return [{"id": p.id, "project_name": p.name, ...} for p in projects]
-    
     return []
 
 
@@ -299,9 +292,9 @@ async def health_check():
         "status": "healthy",
         "service": "documents",
         "endpoints": [
-            "/api/admin/generate-proposal",
-            "/api/admin/generate-invoice",
-            "/api/admin/project-documents/{project_id}",
-            "/api/admin/download/{file_type}/{filename}"
+            "/api/admin/generate-proposal (POST) - Direct download",
+            "/api/admin/generate-invoice (POST) - Direct download",
+            "/api/admin/project-documents/{project_id} (GET)",
+            "/api/admin/download/{file_type}/{filename} (GET) - Direct download"
         ]
     }
