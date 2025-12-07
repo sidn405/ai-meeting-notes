@@ -15,6 +15,7 @@ import os
 
 # Import your PDF generator
 from app.utils.lawbot_proposal_generator import create_proposal_pdf, create_invoice_pdf
+from app.utils.lawbot_receipt_generator import create_receipt_pdf
 
 router = APIRouter(prefix="/api/admin", tags=["documents"])
 
@@ -54,6 +55,23 @@ class InvoiceRequest(BaseModel):
     amount: float
     total_project_cost: float
     payment_link: Optional[str] = None
+    project_id: Optional[int] = None
+
+
+class ReceiptRequest(BaseModel):
+    receipt_number: str
+    firm_name: str
+    contact_name: Optional[str] = None
+    contact_email: Optional[EmailStr] = None
+    payment_date: str  # YYYY-MM-DD format
+    payment_method: str  # e.g., "Credit Card (Stripe)", "Wire Transfer", "Check"
+    service_type: Optional[str] = None
+    addons: List[dict] = []
+    milestone: str
+    amount: float
+    total_project_cost: float
+    transaction_id: Optional[str] = None
+    notes: Optional[str] = None
     project_id: Optional[int] = None
 
 
@@ -178,6 +196,69 @@ async def generate_invoice(request: InvoiceRequest):
         )
 
 
+@router.post("/generate-receipt")
+async def generate_receipt(request: ReceiptRequest):
+    """
+    Generate a professional receipt PDF and return it directly as a download
+    For payments already received (not invoices for future payment)
+    """
+    try:
+        # Debug log the incoming request
+        print(f"[RECEIPT] Generating receipt for: {request.firm_name}")
+        print(f"[RECEIPT] Receipt number: {request.receipt_number}")
+        print(f"[RECEIPT] Amount: ${request.amount}")
+        print(f"[RECEIPT] Payment method: {request.payment_method}")
+        
+        # Create directory for receipts if it doesn't exist (for archival)
+        receipts_dir = Path("static/receipts")
+        receipts_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        firm_slug = request.firm_name.replace(" ", "_").replace("&", "and")[:30]
+        filename = f"Receipt_{request.receipt_number}_{firm_slug}_{timestamp}.pdf"
+        filepath = receipts_dir / filename
+        
+        # Prepare data for PDF generator
+        receipt_data = {
+            'receipt_number': request.receipt_number,
+            'firm_name': request.firm_name,
+            'contact_name': request.contact_name,
+            'contact_email': request.contact_email,
+            'payment_date': request.payment_date,
+            'payment_method': request.payment_method,
+            'service_type': request.service_type,
+            'addons': request.addons,
+            'milestone': request.milestone,
+            'amount': request.amount,
+            'total_project_cost': request.total_project_cost,
+            'transaction_id': request.transaction_id,
+            'notes': request.notes,
+        }
+        
+        # Generate PDF
+        create_receipt_pdf(str(filepath), receipt_data)
+        
+        # Return the PDF file directly as a download
+        return FileResponse(
+            path=str(filepath),
+            filename=filename,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+        
+    except Exception as e:
+        import traceback
+        print(f"Error generating receipt: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate receipt: {str(e)}"
+        )
+
+
 @router.get("/project-documents/{project_id}")
 async def get_project_documents(project_id: int):
     """
@@ -212,6 +293,19 @@ async def get_project_documents(project_id: int):
                     "download_url": f"/api/admin/download/invoices/{file.name}"
                 })
         
+        # Check receipts directory
+        receipts_dir = Path("static/receipts")
+        if receipts_dir.exists():
+            for file in receipts_dir.glob("*.pdf"):
+                documents.append({
+                    "id": str(file.name),
+                    "type": "receipt",
+                    "filename": file.name,
+                    "created_at": datetime.fromtimestamp(file.stat().st_mtime).isoformat(),
+                    "size": file.stat().st_size,
+                    "download_url": f"/api/admin/download/receipts/{file.name}"
+                })
+        
         # Sort by creation date, newest first
         documents.sort(key=lambda x: x["created_at"], reverse=True)
         
@@ -232,9 +326,9 @@ async def get_project_documents(project_id: int):
 @router.delete("/documents/{file_type}/{filename}")
 async def delete_document(file_type: str, filename: str):
     """
-    Delete a document (proposal or invoice)
+    Delete a document (proposal, invoice, or receipt)
     """
-    if file_type not in ["proposals", "invoices"]:
+    if file_type not in ["proposals", "invoices", "receipts"]:
         raise HTTPException(status_code=400, detail="Invalid file type")
     
     filepath = Path(f"static/{file_type}/{filename}")
@@ -258,9 +352,9 @@ async def delete_document(file_type: str, filename: str):
 @router.get("/download/{file_type}/{filename}")
 async def download_pdf(file_type: str, filename: str):
     """
-    Download a generated PDF (proposal or invoice) directly
+    Download a generated PDF (proposal, invoice, or receipt) directly
     """
-    if file_type not in ["proposals", "invoices"]:
+    if file_type not in ["proposals", "invoices", "receipts"]:
         raise HTTPException(status_code=400, detail="Invalid file type")
     
     filepath = Path(f"static/{file_type}/{filename}")
@@ -299,6 +393,7 @@ async def health_check():
         "endpoints": [
             "/api/admin/generate-proposal (POST) - Direct download",
             "/api/admin/generate-invoice (POST) - Direct download",
+            "/api/admin/generate-receipt (POST) - Direct download",
             "/api/admin/project-documents/{project_id} (GET)",
             "/api/admin/download/{file_type}/{filename} (GET) - Direct download"
         ]
