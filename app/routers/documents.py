@@ -22,9 +22,13 @@ from jose import jwt, JWTError
 # Import your existing auth
 from app.security import COOKIE_NAME
 from app.portal_db import PortalUser, get_session
+from app.config import get_settings
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/api/admin", tags=["documents"])
+
+# Get settings to access JWT secret
+settings = get_settings()
 
 
 # ============================================================================
@@ -60,133 +64,16 @@ async def get_current_admin_user(
         )
     
     try:
-        # Get JWT secret from environment
-        secret = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this")
+        # Use the SAME secret as your auth system
+        secret = settings.jwt_secret
+        algorithm = settings.jwt_alg
         
-        # Decode JWT token to get user_id
-        payload = jwt.decode(token, secret, algorithms=["HS256"])
-        user_id_str = payload.get("sub")
-        
-        if not user_id_str:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token - no user ID"
-            )
-        
-        # Convert user_id from string to int
-        user_id = int(user_id_str)
-        
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired"
-        )
-    except jwt.JWTError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}"
-        )
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user ID format in token"
-        )
-    
-    # Get user from database
-    user = db.exec(select(PortalUser).where(PortalUser.id == user_id)).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-    
-    # Check if user is admin
-    if not user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
-        )
-    
-    return user
-
-
-# ============================================================================
-# Pydantic models for request validation
-# ============================================================================
-
-class ProposalRequest(BaseModel):
-    proposal_number: str
-    firm_name: str
-    contact_name: str
-    contact_email: EmailStr
-    contact_phone: Optional[str] = None
-    practice_areas: List[str]
-    addons: List[dict] = []
-    current_intake_method: Optional[str] = None
-    pain_points: List[str] = []
-    monthly_inquiries: Optional[str] = None
-    integration_needs: List[str] = []
-    custom_features: List[str] = []
-    total_price: float
-    timeline_weeks: int = 6
-    maintenance_tier: str = "Standard"
-    project_id: Optional[int] = None
-
-
-class InvoiceRequest(BaseModel):
-    invoice_number: str
-    firm_name: str
-    contact_name: Optional[str] = None
-    contact_email: Optional[EmailStr] = None
-    project_name: str
-    milestone: str
-    amount: float
-    total_project_cost: float
-    payment_link: Optional[str] = None
-    project_id: Optional[int] = None
-
-
-# ============================================================================
-# API Endpoints
-# ============================================================================
-
-async def get_current_admin_user(
-    request: Request,
-    db: Session = Depends(get_session)
-):
-    """
-    Check if user is authenticated and is admin
-    Uses your existing cookie-based JWT auth system
-    """
-    # Try to get token from cookie first
-    token = request.cookies.get(COOKIE_NAME)
-    
-    # If no cookie, try Authorization header
-    if not token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    # Debug logging
-    print(f"[AUTH DEBUG] Cookie name: {COOKIE_NAME}")
-    print(f"[AUTH DEBUG] Available cookies: {list(request.cookies.keys())}")
-    print(f"[AUTH DEBUG] Token found: {bool(token)}")
-    
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated - no token found"
-        )
-    
-    try:
-        # Get JWT secret from environment
-        secret = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this")
-        print(f"[AUTH DEBUG] JWT secret configured: {bool(secret)}")
+        print(f"[AUTH DEBUG] Using jwt_secret from settings")
+        print(f"[AUTH DEBUG] Algorithm: {algorithm}")
         print(f"[AUTH DEBUG] Token preview: {token[:20]}...")
         
         # Decode JWT token to get user_id
-        payload = jwt.decode(token, secret, algorithms=["HS256"])
+        payload = jwt.decode(token, secret, algorithms=[algorithm])
         print(f"[AUTH DEBUG] JWT decoded successfully")
         print(f"[AUTH DEBUG] Payload: {payload}")
         
