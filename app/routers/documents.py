@@ -320,6 +320,92 @@ async def get_projects(
     ]
 
 
+@router.get("/project-documents/{project_id}")
+async def get_project_documents(
+    project_id: int,
+    current_user: PortalUser = Depends(get_current_admin_user)
+):
+    """
+    Get all documents (proposals, invoices) for a specific project
+    """
+    try:
+        documents = []
+        
+        # Check proposals directory
+        proposals_dir = Path("static/proposals")
+        if proposals_dir.exists():
+            for file in proposals_dir.glob("*.pdf"):
+                # You can add logic to filter by project_id if stored in filename or database
+                documents.append({
+                    "id": str(file.name),
+                    "type": "proposal",
+                    "filename": file.name,
+                    "created_at": datetime.fromtimestamp(file.stat().st_mtime).isoformat(),
+                    "size": file.stat().st_size,
+                    "url": f"/static/proposals/{file.name}"
+                })
+        
+        # Check invoices directory
+        invoices_dir = Path("static/invoices")
+        if invoices_dir.exists():
+            for file in invoices_dir.glob("*.pdf"):
+                documents.append({
+                    "id": str(file.name),
+                    "type": "invoice",
+                    "filename": file.name,
+                    "created_at": datetime.fromtimestamp(file.stat().st_mtime).isoformat(),
+                    "size": file.stat().st_size,
+                    "url": f"/static/invoices/{file.name}"
+                })
+        
+        # Sort by creation date, newest first
+        documents.sort(key=lambda x: x["created_at"], reverse=True)
+        
+        return {
+            "success": True,
+            "project_id": project_id,
+            "documents": documents
+        }
+        
+    except Exception as e:
+        print(f"Error fetching project documents: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch documents: {str(e)}"
+        )
+
+
+@router.delete("/documents/{file_type}/{filename}")
+async def delete_document(
+    file_type: str,
+    filename: str,
+    current_user: PortalUser = Depends(get_current_admin_user)
+):
+    """
+    Delete a document (proposal or invoice)
+    Requires admin authentication
+    """
+    if file_type not in ["proposals", "invoices"]:
+        raise HTTPException(status_code=400, detail="Invalid file type")
+    
+    filepath = Path(f"static/{file_type}/{filename}")
+    
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    try:
+        filepath.unlink()  # Delete the file
+        return {
+            "success": True,
+            "message": f"Document {filename} deleted successfully"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete document: {str(e)}"
+        )
+
+
 @router.get("/download/{file_type}/{filename}")
 async def download_pdf(
     file_type: str,
