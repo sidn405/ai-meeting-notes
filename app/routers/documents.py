@@ -33,21 +33,25 @@ router = APIRouter(prefix="/api/admin", tags=["documents"])
 
 async def get_current_admin_user(
     request: Request,
-    session_token: Optional[str] = Cookie(None, alias=COOKIE_NAME),
     db: Session = Depends(get_session)
 ):
     """
     Check if user is authenticated and is admin
     Uses your existing cookie-based JWT auth system
     """
-    # Get token from cookie first
-    token = session_token
+    # Try to get token from cookie first
+    token = request.cookies.get(COOKIE_NAME)
     
     # If no cookie, try Authorization header
     if not token:
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
+    
+    # Debug logging
+    print(f"[AUTH DEBUG] Cookie name: {COOKIE_NAME}")
+    print(f"[AUTH DEBUG] Available cookies: {list(request.cookies.keys())}")
+    print(f"[AUTH DEBUG] Token found: {bool(token)}")
     
     if not token:
         raise HTTPException(
