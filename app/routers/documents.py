@@ -16,8 +16,9 @@ from starlette.requests import Request
 # Import your PDF generator
 from app.utils.lawbot_proposal_generator import create_proposal_pdf, create_invoice_pdf
 
-# JWT handling
-from jose import jwt, JWTError
+# JWT handling - use PyJWT, not python-jose
+import jwt
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 
 # Import your existing auth
 from app.security import COOKIE_NAME
@@ -70,7 +71,16 @@ async def get_current_admin_user(
         
         print(f"[AUTH DEBUG] Using jwt_secret from settings")
         print(f"[AUTH DEBUG] Algorithm: {algorithm}")
+        print(f"[AUTH DEBUG] Secret length: {len(secret) if secret else 0}")
+        print(f"[AUTH DEBUG] Secret preview: {secret[:10] if secret else 'None'}...")
         print(f"[AUTH DEBUG] Token preview: {token[:20]}...")
+        
+        # Try to decode and see what header the token has
+        try:
+            unverified_header = jwt.get_unverified_header(token)
+            print(f"[AUTH DEBUG] Token header: {unverified_header}")
+        except Exception as e:
+            print(f"[AUTH DEBUG] Could not read token header: {e}")
         
         # Decode JWT token to get user_id
         payload = jwt.decode(token, secret, algorithms=[algorithm])
@@ -90,13 +100,13 @@ async def get_current_admin_user(
         user_id = int(user_id_str)
         print(f"[AUTH DEBUG] User ID as int: {user_id}")
         
-    except jwt.ExpiredSignatureError as e:
+    except ExpiredSignatureError as e:
         print(f"[AUTH DEBUG] Token expired: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired"
         )
-    except jwt.JWTError as e:
+    except InvalidTokenError as e:
         print(f"[AUTH DEBUG] JWT error: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
