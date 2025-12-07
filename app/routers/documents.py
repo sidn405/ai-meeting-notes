@@ -16,12 +16,11 @@ from starlette.requests import Request
 # Import your PDF generator
 from app.utils.lawbot_proposal_generator import create_proposal_pdf, create_invoice_pdf
 
-# JWT handling - use PyJWT, not python-jose
 import jwt
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 
 # Import your existing auth
-from app.security import COOKIE_NAME
+from app.security import COOKIE_NAME, require_auth
 from app.portal_db import PortalUser, get_session
 from app.config import get_settings
 from sqlmodel import Session, select
@@ -33,90 +32,36 @@ settings = get_settings()
 
 
 # ============================================================================
-# Auth using your existing session system - FIXED VERSION
+# Auth using your existing require_auth function
 # ============================================================================
 
 async def get_current_admin_user(
-    request: Request,
+    auth_data: dict = Depends(require_auth),
     db: Session = Depends(get_session)
 ):
     """
     Check if user is authenticated and is admin
-    Uses your existing cookie-based JWT auth system
+    Uses your existing require_auth dependency
     """
-    # Try to get token from cookie first
-    token = request.cookies.get(COOKIE_NAME)
+    # Get user ID from auth data
+    user_id_str = auth_data.get("sub")
     
-    # If no cookie, try Authorization header
-    if not token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
+    print(f"[AUTH DEBUG] Auth successful via {auth_data.get('auth')}")
+    print(f"[AUTH DEBUG] User ID: {user_id_str}")
     
-    # Debug logging
-    print(f"[AUTH DEBUG] Cookie name: {COOKIE_NAME}")
-    print(f"[AUTH DEBUG] Available cookies: {list(request.cookies.keys())}")
-    print(f"[AUTH DEBUG] Token found: {bool(token)}")
-    
-    if not token:
+    if not user_id_str or user_id_str in ["api_key_user", "dev-user", "unknown"]:
+        # For API key or dev auth, we need a real user
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated - no token found"
+            detail="Valid user authentication required"
         )
     
     try:
-        # Use the SAME secret as your auth system
-        secret = settings.jwt_secret
-        algorithm = settings.jwt_alg
-        
-        print(f"[AUTH DEBUG] Using jwt_secret from settings")
-        print(f"[AUTH DEBUG] Algorithm: {algorithm}")
-        print(f"[AUTH DEBUG] Secret length: {len(secret) if secret else 0}")
-        print(f"[AUTH DEBUG] Secret preview: {secret[:10] if secret else 'None'}...")
-        print(f"[AUTH DEBUG] Token preview: {token[:20]}...")
-        
-        # Try to decode and see what header the token has
-        try:
-            unverified_header = jwt.get_unverified_header(token)
-            print(f"[AUTH DEBUG] Token header: {unverified_header}")
-        except Exception as e:
-            print(f"[AUTH DEBUG] Could not read token header: {e}")
-        
-        # Decode JWT token to get user_id
-        payload = jwt.decode(token, secret, algorithms=[algorithm])
-        print(f"[AUTH DEBUG] JWT decoded successfully")
-        print(f"[AUTH DEBUG] Payload: {payload}")
-        
-        user_id_str = payload.get("sub")
-        print(f"[AUTH DEBUG] User ID from token: {user_id_str}")
-        
-        if not user_id_str:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token - no user ID"
-            )
-        
-        # Convert user_id from string to int
         user_id = int(user_id_str)
-        print(f"[AUTH DEBUG] User ID as int: {user_id}")
-        
-    except ExpiredSignatureError as e:
-        print(f"[AUTH DEBUG] Token expired: {e}")
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired"
-        )
-    except InvalidTokenError as e:
-        print(f"[AUTH DEBUG] JWT error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}"
-        )
-    except ValueError as e:
-        print(f"[AUTH DEBUG] ValueError: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user ID format in token"
+            detail="Invalid user ID format"
         )
     
     # Get user from database
@@ -135,6 +80,7 @@ async def get_current_admin_user(
             detail="Admin access required"
         )
     
+    print(f"[AUTH DEBUG] Admin user verified: {user.email}")
     return user
 
 
