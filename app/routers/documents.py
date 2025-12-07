@@ -125,6 +125,11 @@ async def generate_invoice(request: InvoiceRequest):
     Generate a professional invoice PDF and return it directly as a download
     """
     try:
+        # Debug log the incoming request
+        print(f"[INVOICE] Generating invoice for: {request.firm_name}")
+        print(f"[INVOICE] Invoice number: {request.invoice_number}")
+        print(f"[INVOICE] Amount: ${request.amount}")
+        
         # Create directory for invoices if it doesn't exist (for archival)
         invoices_dir = Path("static/invoices")
         invoices_dir.mkdir(parents=True, exist_ok=True)
