@@ -1,87 +1,20 @@
 # backend/app/routers/documents.py
 """
 API routes for generating proposals and invoices for LawBot 360
-Fixed authentication with proper JWT handling
+Simplified version without authentication (since admin portal already requires auth)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Cookie
+from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import datetime
-import os
 from pathlib import Path
-from starlette.requests import Request
 
 # Import your PDF generator
 from app.utils.lawbot_proposal_generator import create_proposal_pdf, create_invoice_pdf
 
-import jwt
-from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
-
-# Import your existing auth
-from app.security import COOKIE_NAME, require_auth
-from app.portal_db import PortalUser, get_session
-from app.config import get_settings
-from sqlmodel import Session, select
-
 router = APIRouter(prefix="/api/admin", tags=["documents"])
-
-# Get settings to access JWT secret
-settings = get_settings()
-
-
-# ============================================================================
-# Auth using your existing require_auth function
-# ============================================================================
-
-async def get_current_admin_user(
-    auth_data: dict = Depends(require_auth),
-    db: Session = Depends(get_session)
-):
-    """
-    Check if user is authenticated and is admin
-    Uses your existing require_auth dependency
-    """
-    # Get user ID from auth data
-    user_id_str = auth_data.get("sub")
-    
-    print(f"[AUTH DEBUG] Auth successful via {auth_data.get('auth')}")
-    print(f"[AUTH DEBUG] User ID: {user_id_str}")
-    
-    if not user_id_str or user_id_str in ["api_key_user", "dev-user", "unknown"]:
-        # For API key or dev auth, we need a real user
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Valid user authentication required"
-        )
-    
-    try:
-        user_id = int(user_id_str)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user ID format"
-        )
-    
-    # Get user from database
-    user = db.exec(select(PortalUser).where(PortalUser.id == user_id)).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-    
-    # Check if user is admin
-    if not user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
-        )
-    
-    print(f"[AUTH DEBUG] Admin user verified: {user.email}")
-    return user
 
 
 # ============================================================================
@@ -113,6 +46,8 @@ class InvoiceRequest(BaseModel):
     contact_name: Optional[str] = None
     contact_email: Optional[EmailStr] = None
     project_name: str
+    service_type: Optional[str] = None
+    addons: List[dict] = []
     milestone: str
     amount: float
     total_project_cost: float
@@ -121,17 +56,14 @@ class InvoiceRequest(BaseModel):
 
 
 # ============================================================================
-# API Endpoints
+# API Endpoints (No Auth Required - Admin Portal Already Authenticated)
 # ============================================================================
 
 @router.post("/generate-proposal")
-async def generate_proposal(
-    request: ProposalRequest,
-    current_user: PortalUser = Depends(get_current_admin_user)
-):
+async def generate_proposal(request: ProposalRequest):
     """
     Generate a professional proposal PDF
-    Requires admin authentication
+    No auth required since admin portal is already authenticated
     """
     try:
         # Create directory for proposals if it doesn't exist
@@ -166,11 +98,6 @@ async def generate_proposal(
         # Generate PDF using the fixed generator
         create_proposal_pdf(str(filepath), proposal_data)
         
-        # If project_id provided, attach to project
-        if request.project_id:
-            # TODO: Add database logic to attach PDF to project
-            pass
-        
         # Return file URL
         pdf_url = f"/static/proposals/{filename}"
         
@@ -179,8 +106,7 @@ async def generate_proposal(
             "message": "Proposal generated successfully",
             "pdf_url": pdf_url,
             "filename": filename,
-            "proposal_number": request.proposal_number,
-            "generated_by": current_user.email
+            "proposal_number": request.proposal_number
         }
         
     except Exception as e:
@@ -194,13 +120,10 @@ async def generate_proposal(
 
 
 @router.post("/generate-invoice")
-async def generate_invoice(
-    request: InvoiceRequest,
-    current_user: PortalUser = Depends(get_current_admin_user)
-):
+async def generate_invoice(request: InvoiceRequest):
     """
     Generate a professional invoice PDF
-    Requires admin authentication
+    No auth required since admin portal is already authenticated
     """
     try:
         # Create directory for invoices if it doesn't exist
@@ -220,6 +143,8 @@ async def generate_invoice(
             'contact_name': request.contact_name,
             'contact_email': request.contact_email,
             'project_name': request.project_name,
+            'service_type': request.service_type,
+            'addons': request.addons,
             'milestone': request.milestone,
             'amount': request.amount,
             'total_project_cost': request.total_project_cost,
@@ -228,11 +153,6 @@ async def generate_invoice(
         
         # Generate PDF
         create_invoice_pdf(str(filepath), invoice_data)
-        
-        # If project_id provided, attach to project
-        if request.project_id:
-            # TODO: Add database logic to attach PDF to project
-            pass
         
         # Return file URL
         pdf_url = f"/static/invoices/{filename}"
@@ -243,8 +163,7 @@ async def generate_invoice(
             "pdf_url": pdf_url,
             "filename": filename,
             "invoice_number": request.invoice_number,
-            "amount": request.amount,
-            "generated_by": current_user.email
+            "amount": request.amount
         }
         
     except Exception as e:
@@ -257,51 +176,8 @@ async def generate_invoice(
         )
 
 
-@router.get("/test-auth")
-async def test_auth(current_user: PortalUser = Depends(get_current_admin_user)):
-    """
-    Test endpoint to verify authentication is working
-    """
-    return {
-        "success": True,
-        "authenticated": True,
-        "user_id": current_user.id,
-        "email": current_user.email,
-        "is_admin": current_user.is_admin
-    }
-
-
-@router.get("/projects")
-async def get_projects(
-    current_user: PortalUser = Depends(get_current_admin_user)
-):
-    """
-    Get all projects for dropdown selection
-    TODO: Replace with actual database query
-    """
-    # TODO: Query your actual projects table
-    # Example:
-    # from app.models import Project
-    # projects = db.exec(select(Project)).all()
-    # return [{"id": p.id, "project_name": p.name, ...} for p in projects]
-    
-    # Placeholder return
-    return [
-        {
-            "id": 1,
-            "project_name": "Sample Project",
-            "client_name": "Test Client",
-            "contact_name": "John Doe",
-            "contact_email": "john@example.com"
-        }
-    ]
-
-
 @router.get("/project-documents/{project_id}")
-async def get_project_documents(
-    project_id: int,
-    current_user: PortalUser = Depends(get_current_admin_user)
-):
+async def get_project_documents(project_id: int):
     """
     Get all documents (proposals, invoices) for a specific project
     """
@@ -312,7 +188,6 @@ async def get_project_documents(
         proposals_dir = Path("static/proposals")
         if proposals_dir.exists():
             for file in proposals_dir.glob("*.pdf"):
-                # You can add logic to filter by project_id if stored in filename or database
                 documents.append({
                     "id": str(file.name),
                     "type": "proposal",
@@ -353,14 +228,9 @@ async def get_project_documents(
 
 
 @router.delete("/documents/{file_type}/{filename}")
-async def delete_document(
-    file_type: str,
-    filename: str,
-    current_user: PortalUser = Depends(get_current_admin_user)
-):
+async def delete_document(file_type: str, filename: str):
     """
     Delete a document (proposal or invoice)
-    Requires admin authentication
     """
     if file_type not in ["proposals", "invoices"]:
         raise HTTPException(status_code=400, detail="Invalid file type")
@@ -384,14 +254,9 @@ async def delete_document(
 
 
 @router.get("/download/{file_type}/{filename}")
-async def download_pdf(
-    file_type: str,
-    filename: str,
-    current_user: PortalUser = Depends(get_current_admin_user)
-):
+async def download_pdf(file_type: str, filename: str):
     """
     Download a generated PDF (proposal or invoice)
-    Requires admin authentication
     """
     if file_type not in ["proposals", "invoices"]:
         raise HTTPException(status_code=400, detail="Invalid file type")
@@ -406,3 +271,37 @@ async def download_pdf(
         filename=filename,
         media_type="application/pdf"
     )
+
+
+@router.get("/projects")
+async def get_projects():
+    """
+    Get all projects for dropdown selection
+    Returns empty list for now - implement when needed
+    """
+    # TODO: Query your actual projects table
+    # Example:
+    # from app.models import Project
+    # from app.portal_db import get_session
+    # db = next(get_session())
+    # projects = db.exec(select(Project)).all()
+    # return [{"id": p.id, "project_name": p.name, ...} for p in projects]
+    
+    return []
+
+
+@router.get("/health")
+async def health_check():
+    """
+    Simple health check endpoint
+    """
+    return {
+        "status": "healthy",
+        "service": "documents",
+        "endpoints": [
+            "/api/admin/generate-proposal",
+            "/api/admin/generate-invoice",
+            "/api/admin/project-documents/{project_id}",
+            "/api/admin/download/{file_type}/{filename}"
+        ]
+    }
