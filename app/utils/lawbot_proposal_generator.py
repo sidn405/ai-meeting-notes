@@ -335,8 +335,6 @@ def create_proposal_pdf(filepath, data):
         ['', ''],
         ['_' * 40, '_' * 40],
         ['', ''],
-        [f"Name: {data.get('contact_name', '_' * 30)}", 'Name: Sidney Johnson'],
-        [f"Company: {data.get('firm_name', '_' * 30)}", 'Company: 4D Gaming'],
         ['', ''],
         ['Date: _____________________', 'Date: _____________________'],
     ]
