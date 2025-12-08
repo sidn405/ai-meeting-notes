@@ -561,7 +561,7 @@ async def submit_integration_info(request: IntegrationInfoRequest):
         
         # Send email via Resend
         params = {
-            "from": "Integration Form <4dgaming.games>",  # Update with your verified domain
+            "from": "Integration Form <noreply@4dgaming.games>",  # Update with your verified domain
             "to": ["legaltech@4dgaming.games"],  # Your email
             "subject": f"🎯 New Integration Request - {request.companyName}",
             "html": email_body,
