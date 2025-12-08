@@ -440,47 +440,155 @@ async def health_check():
 @router.post("/submit-integration-info")
 async def submit_integration_info(request: IntegrationInfoRequest):
     """
-    Save client system integration information
-    Stores data in JSON file for now - can be moved to database later
+    Send client system integration information via email using Resend
     """
     try:
+        import resend
+        import os
         import json
         
-        # Create directory for integration info if it doesn't exist
-        integration_dir = Path("static/integration-info")
-        integration_dir.mkdir(parents=True, exist_ok=True)
+        # Get Resend API key from environment
+        resend.api_key = os.getenv("RESEND_API_KEY")
         
-        # Generate filename based on company name and timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_company_name = "".join(c for c in request.companyName if c.isalnum() or c in (' ', '-', '_')).replace(' ', '_')
-        filename = f"{safe_company_name}_{timestamp}.json"
-        filepath = integration_dir / filename
+        if not resend.api_key:
+            raise HTTPException(
+                status_code=500,
+                detail="Resend API key not configured"
+            )
         
-        # Convert request to dict and save
-        data = request.dict()
+        # Format systems list
+        systems_list = ', '.join(request.systems) if request.systems else 'None specified'
         
-        with open(filepath, 'w') as f:
-            json.dump(data, f, indent=2)
+        # Format features list
+        features_list = ', '.join(request.features) if request.features else 'None specified'
         
-        print(f"Integration info saved: {filepath}")
+        # Format compliance list
+        compliance_list = ', '.join(request.compliance) if request.compliance else 'None'
+        
+        # Create email body with all details
+        email_body = f"""
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 5px; }}
+        .section {{ margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px; }}
+        .section h3 {{ color: #667eea; margin-top: 0; }}
+        .field {{ margin: 10px 0; }}
+        .field strong {{ color: #555; }}
+        .footer {{ margin-top: 30px; padding-top: 20px; border-top: 2px solid #e5e7eb; font-size: 12px; color: #6b7280; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>🎯 New Client Integration Request</h2>
+        <p>Submitted: {datetime.now().strftime("%B %d, %Y at %I:%M %p")}</p>
+    </div>
+    
+    <div class="section">
+        <h3>📋 Client Information</h3>
+        <div class="field"><strong>Company:</strong> {request.companyName}</div>
+        <div class="field"><strong>Contact Person:</strong> {request.contactPerson}</div>
+        <div class="field"><strong>Email:</strong> <a href="mailto:{request.email}">{request.email}</a></div>
+        <div class="field"><strong>Phone:</strong> {request.phone or 'Not provided'}</div>
+    </div>
+    
+    <div class="section">
+        <h3>💻 Current Systems & Tools</h3>
+        <div class="field"><strong>Systems:</strong> {systems_list}</div>
+        <div class="field"><strong>Details:</strong> {request.systemDetails or 'Not provided'}</div>
+    </div>
+    
+    <div class="section">
+        <h3>🌐 Website & Hosting</h3>
+        <div class="field"><strong>Website URL:</strong> <a href="{request.websiteUrl}" target="_blank">{request.websiteUrl}</a></div>
+        <div class="field"><strong>Platform:</strong> {request.websitePlatform or 'Not specified'}</div>
+        <div class="field"><strong>Hosting Provider:</strong> {request.hostingProvider or 'Not specified'}</div>
+        <div class="field"><strong>Admin Access:</strong> {request.adminAccess or 'Not specified'}</div>
+    </div>
+    
+    <div class="section">
+        <h3>🔌 API & Integration Requirements</h3>
+        <div class="field"><strong>Systems needing API integration:</strong> {request.apiSystems or 'Not specified'}</div>
+        <div class="field"><strong>API Keys Available:</strong> {request.apiAvailability or 'Not specified'}</div>
+        <div class="field"><strong>CRM System:</strong> {request.crmSystem or 'None'}</div>
+        <div class="field"><strong>CRM API Docs:</strong> {request.crmApiDocs or 'Not provided'}</div>
+    </div>
+    
+    <div class="section">
+        <h3>🎯 Business Requirements</h3>
+        <div class="field"><strong>Features Needed:</strong> {features_list}</div>
+        <div class="field"><strong>Additional Features:</strong> {request.additionalFeatures or 'None specified'}</div>
+    </div>
+    
+    <div class="section">
+        <h3>📚 Content & Data</h3>
+        <div class="field"><strong>Existing Content:</strong> {request.existingContent or 'Not specified'}</div>
+        <div class="field"><strong>Content Location:</strong> {request.contentLocation or 'Not specified'}</div>
+        <div class="field"><strong>Customer Database:</strong> {request.customerDatabase or 'Not specified'}</div>
+    </div>
+    
+    <div class="section">
+        <h3>🔒 Security & Compliance</h3>
+        <div class="field"><strong>Compliance Requirements:</strong> {compliance_list}</div>
+        <div class="field"><strong>Privacy Requirements:</strong> {request.privacyRequirements or 'None specified'}</div>
+    </div>
+    
+    <div class="section">
+        <h3>⚙️ Technical Contact & Timeline</h3>
+        <div class="field"><strong>Technical Contact:</strong> {request.technicalContactName or 'Not provided'}</div>
+        <div class="field"><strong>Technical Email:</strong> {request.technicalContactEmail or 'Not provided'}</div>
+        <div class="field"><strong>Preferred Timeline:</strong> {request.timeline or 'Not specified'}</div>
+    </div>
+    
+    <div class="section">
+        <h3>📝 Additional Information</h3>
+        <div class="field">{request.additionalInfo or 'None provided'}</div>
+    </div>
+    
+    <div class="footer">
+        <p>This integration request was submitted via the 4D Gaming client integration form.</p>
+        <p>Complete data in JSON format attached below for your records.</p>
+    </div>
+    
+    <details style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+        <summary style="cursor: pointer; font-weight: bold; color: #667eea;">Click to view JSON data</summary>
+        <pre style="background: #1e293b; color: #e5e7eb; padding: 15px; border-radius: 5px; overflow-x: auto; margin-top: 10px;">{json.dumps(request.dict(), indent=2)}</pre>
+    </details>
+</body>
+</html>
+"""
+        
+        # Send email via Resend
+        params = {
+            "from": "Integration Form <onboarding@resend.dev>",  # Update with your verified domain
+            "to": ["legaltech@4dgaming.games"],  # Your email
+            "subject": f"🎯 New Integration Request - {request.companyName}",
+            "html": email_body,
+        }
+        
+        email_response = resend.Emails.send(params)
+        
+        print(f"Integration email sent successfully!")
+        print(f"Email ID: {email_response.get('id')}")
         print(f"Company: {request.companyName}")
         print(f"Contact: {request.contactPerson} ({request.email})")
-        print(f"Systems: {', '.join(request.systems) if request.systems else 'None specified'}")
-        print(f"Features needed: {', '.join(request.features) if request.features else 'None specified'}")
+        print(f"Systems: {systems_list}")
+        print(f"Features needed: {features_list}")
         
         return {
             "success": True,
-            "message": "Integration information saved successfully",
-            "filename": filename,
+            "message": "Integration information sent successfully",
+            "email_id": email_response.get('id'),
             "company": request.companyName,
             "contact": request.contactPerson
         }
         
     except Exception as e:
         import traceback
-        print(f"Error saving integration info: {e}")
+        print(f"Error sending integration info email: {e}")
         print(traceback.format_exc())
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to save integration information: {str(e)}"
+            detail=f"Failed to send integration information: {str(e)}"
         )
