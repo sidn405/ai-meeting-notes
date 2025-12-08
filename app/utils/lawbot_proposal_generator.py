@@ -68,7 +68,7 @@ def create_proposal_pdf(filepath, data):
     )
     
     # Header
-    story.append(Paragraph("PROJECT PROPOSAL", title_style))
+    story.append(Paragraph("4D GAMING", title_style))
     story.append(Paragraph(
         f"Proposal #{data['proposal_number']}<br/>Date: {datetime.now().strftime('%B %d, %Y')}",
         proposal_header_style
@@ -317,7 +317,44 @@ def create_proposal_pdf(filepath, data):
     for step in next_steps:
         story.append(Paragraph(step, styles['Normal']))
     
-    story.append(Spacer(1, 0.4*inch))
+    story.append(Spacer(1, 0.5*inch))
+    
+    # Agreement / Signature Section
+    story.append(Paragraph("AGREEMENT", heading_style))
+    
+    agreement_text = """By signing below, both parties agree to the terms outlined in this proposal. 
+    This agreement confirms the project scope, timeline, pricing, and payment schedule as detailed above. 
+    Work will commence upon receipt of the initial deposit payment."""
+    
+    story.append(Paragraph(agreement_text, styles['Normal']))
+    story.append(Spacer(1, 0.3*inch))
+    
+    # Signature table
+    signature_data = [
+        ['CLIENT SIGNATURE:', '4D GAMING SIGNATURE:'],
+        ['', ''],
+        ['_' * 40, '_' * 40],
+        ['', ''],
+        [f"Name: {data.get('contact_name', '_' * 30)}", 'Name: Sidney Johnson'],
+        [f"Company: {data.get('firm_name', '_' * 30)}", 'Company: 4D Gaming'],
+        ['', ''],
+        ['Date: _____________________', 'Date: _____________________'],
+    ]
+    
+    signature_table = Table(signature_data, colWidths=[3.25*inch, 3.25*inch])
+    signature_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('FONTNAME', (0, 2), (-1, 2), 'Helvetica'),
+        ('FONTSIZE', (0, 2), (-1, -1), 9),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 2), (-1, 2), 0),
+        ('BOTTOMPADDING', (0, 2), (-1, 2), 8),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1f2937')),
+    ]))
+    story.append(signature_table)
+    
+    story.append(Spacer(1, 0.5*inch))
     
     # Footer
     footer_style = ParagraphStyle(
