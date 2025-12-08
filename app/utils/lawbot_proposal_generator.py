@@ -149,13 +149,26 @@ def create_proposal_pdf(filepath, data):
     ))
     story.append(Spacer(1, 0.1*inch))
     
-    # Timeline phases (example)
-    phases_data = [
-        ['Phase', 'Duration', 'Deliverables'],
-        ['Planning & Discovery', '1 week', 'Project plan, technical specs'],
-        ['Development', f'{timeline_weeks - 2} weeks', 'Fully functional system'],
-        ['Testing & Deployment', '1 week', 'Production-ready solution'],
-    ]
+    # Use custom timeline phases if provided, otherwise use defaults
+    custom_phases = data.get('timeline_phases', [])
+    
+    if custom_phases and len(custom_phases) > 0:
+        # Use custom phases from form
+        phases_data = [['Phase', 'Duration', 'Deliverables']]
+        for phase in custom_phases:
+            phases_data.append([
+                phase.get('name', ''),
+                phase.get('duration', ''),
+                phase.get('deliverables', '')
+            ])
+    else:
+        # Use default phases
+        phases_data = [
+            ['Phase', 'Duration', 'Deliverables'],
+            ['Planning & Discovery', '1 week', 'Project plan, technical specs'],
+            ['Development', f'{timeline_weeks - 2} weeks', 'Fully functional system'],
+            ['Testing & Deployment', '1 week', 'Production-ready solution'],
+        ]
     
     phases_table = Table(phases_data, colWidths=[2*inch, 1.5*inch, 3*inch])
     phases_table.setStyle(TableStyle([
