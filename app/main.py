@@ -54,6 +54,7 @@ from pathlib import Path
 Path("static").mkdir(exist_ok=True)
 Path("static/proposals").mkdir(exist_ok=True)
 Path("static/receipts").mkdir(exist_ok=True)
+Path("static/integration-info").mkdir(exist_ok=True)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

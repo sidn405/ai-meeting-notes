@@ -76,6 +76,36 @@ class ReceiptRequest(BaseModel):
     project_id: Optional[int] = None
 
 
+class IntegrationInfoRequest(BaseModel):
+    """Client system integration information"""
+    companyName: str
+    contactPerson: str
+    email: EmailStr
+    phone: Optional[str] = None
+    systems: List[str] = []
+    systemDetails: Optional[str] = None
+    websiteUrl: str
+    websitePlatform: Optional[str] = None
+    hostingProvider: Optional[str] = None
+    adminAccess: Optional[str] = None
+    apiSystems: Optional[str] = None
+    apiAvailability: Optional[str] = None
+    crmSystem: Optional[str] = None
+    crmApiDocs: Optional[str] = None
+    features: List[str] = []
+    additionalFeatures: Optional[str] = None
+    existingContent: Optional[str] = None
+    contentLocation: Optional[str] = None
+    customerDatabase: Optional[str] = None
+    compliance: List[str] = []
+    privacyRequirements: Optional[str] = None
+    technicalContactName: Optional[str] = None
+    technicalContactEmail: Optional[str] = None
+    timeline: Optional[str] = None
+    additionalInfo: Optional[str] = None
+    submittedAt: Optional[str] = None
+
+
 # ============================================================================
 # API Endpoints - Direct File Downloads
 # ============================================================================
@@ -400,7 +430,57 @@ async def health_check():
             "/api/admin/generate-proposal (POST) - Direct download",
             "/api/admin/generate-invoice (POST) - Direct download",
             "/api/admin/generate-receipt (POST) - Direct download",
+            "/api/admin/submit-integration-info (POST) - Save client integration data",
             "/api/admin/project-documents/{project_id} (GET)",
             "/api/admin/download/{file_type}/{filename} (GET) - Direct download"
         ]
     }
+
+
+@router.post("/submit-integration-info")
+async def submit_integration_info(request: IntegrationInfoRequest):
+    """
+    Save client system integration information
+    Stores data in JSON file for now - can be moved to database later
+    """
+    try:
+        import json
+        
+        # Create directory for integration info if it doesn't exist
+        integration_dir = Path("static/integration-info")
+        integration_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate filename based on company name and timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_company_name = "".join(c for c in request.companyName if c.isalnum() or c in (' ', '-', '_')).replace(' ', '_')
+        filename = f"{safe_company_name}_{timestamp}.json"
+        filepath = integration_dir / filename
+        
+        # Convert request to dict and save
+        data = request.dict()
+        
+        with open(filepath, 'w') as f:
+            json.dump(data, f, indent=2)
+        
+        print(f"Integration info saved: {filepath}")
+        print(f"Company: {request.companyName}")
+        print(f"Contact: {request.contactPerson} ({request.email})")
+        print(f"Systems: {', '.join(request.systems) if request.systems else 'None specified'}")
+        print(f"Features needed: {', '.join(request.features) if request.features else 'None specified'}")
+        
+        return {
+            "success": True,
+            "message": "Integration information saved successfully",
+            "filename": filename,
+            "company": request.companyName,
+            "contact": request.contactPerson
+        }
+        
+    except Exception as e:
+        import traceback
+        print(f"Error saving integration info: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save integration information: {str(e)}"
+        )
