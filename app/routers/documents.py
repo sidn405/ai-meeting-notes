@@ -39,6 +39,7 @@ class ProposalRequest(BaseModel):
     custom_features: List[str] = []
     total_price: float
     timeline_weeks: int = 6
+    timeline_phases: List[dict] = []
     maintenance_tier: str = "Standard"
     project_id: Optional[int] = None
 
@@ -111,8 +112,13 @@ async def generate_proposal(request: ProposalRequest):
             'custom_features': request.custom_features,
             'total_price': request.total_price,
             'timeline_weeks': request.timeline_weeks,
+            'timeline_phases': request.timeline_phases,
             'maintenance_tier': request.maintenance_tier,
         }
+        
+        # Debug logging
+        print(f"Timeline phases received: {request.timeline_phases}")
+        print(f"Number of custom phases: {len(request.timeline_phases)}")
         
         # Generate PDF
         create_proposal_pdf(str(filepath), proposal_data)

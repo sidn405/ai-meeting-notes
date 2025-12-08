@@ -152,6 +152,11 @@ def create_proposal_pdf(filepath, data):
     # Use custom timeline phases if provided, otherwise use defaults
     custom_phases = data.get('timeline_phases', [])
     
+    # Debug logging
+    print(f"PDF Generator - Received {len(custom_phases)} custom timeline phases")
+    if custom_phases:
+        print(f"Custom phases: {custom_phases}")
+    
     if custom_phases and len(custom_phases) > 0:
         # Use custom phases from form
         phases_data = [['Phase', 'Duration', 'Deliverables']]
