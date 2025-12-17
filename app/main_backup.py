@@ -1,23 +1,31 @@
 from fastapi import FastAPI, Request, HTTPException
 from .security import COOKIE_NAME
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 from app.db import init_db, DATA_DIR, get_session
 from fastapi.responses import JSONResponse
 import stripe
+from pydantic import BaseModel
 import os
+from openai import OpenAI
 from fastapi.responses import HTMLResponse
 from .services.branding import render_meeting_notes_email_html
 from pathlib import Path
 from dotenv import load_dotenv
 from sqlmodel import select, Session
-from .portal_db import init_db
-from .client_portal_routes import router as client_portal_router
+from typing import List, Dict
+from hashlib import sha256
+from .portal_db import init_db, PortalUser
+from fastapi.staticfiles import StaticFiles
+
 from app.models import Meeting
 import warnings
 warnings.filterwarnings("ignore", message="Field .* has conflict with protected namespace 'model_'")
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
+
 
 from .portal_db import engine, SQLModel
 SQLModel.metadata.create_all(engine)
@@ -41,7 +49,125 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Auto-create static directories (for Railway)
+from pathlib import Path
+Path("static").mkdir(exist_ok=True)
+Path("static/proposals").mkdir(exist_ok=True)
+Path("static/receipts").mkdir(exist_ok=True)
+Path("static/integration-info").mkdir(exist_ok=True)
 
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Add CSP middleware
+class CSPMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        
+        # Stricter CSP - allows scripts from your domain
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self' https://m.stripe.network https://4dgaming.games; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self' https://api.openai.com; "
+            "frame-src https://m.stripe.network;"
+        )
+        
+        response.headers["Content-Security-Policy"] = csp
+        return response
+
+app.add_middleware(CSPMiddleware)
+
+# Initialize OpenAI client
+openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+# Pydantic models
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatbotRequest(BaseModel):
+    message: str
+    history: List[ChatMessage] = []
+
+class ChatbotResponse(BaseModel):
+    response: str
+    success: bool
+
+# System prompt
+CHATBOT_SYSTEM_PROMPT = """You are the 4D Gaming AI assistant, helping clients with questions about services, pricing, and the development process.
+
+COMPANY INFO:
+- Company: 4D Gaming
+- Experience: 10+ years
+- Published Apps: 8+ on Google Play & Amazon
+- Projects: 100+ completed
+- Client Satisfaction: 98%
+
+SERVICES:
+1. AI Chatbot Development - $1,500 (3-4 weeks)
+2. Mobile App Development - $3,500 (6-8 weeks)
+3. Game Development & Reskinning - $2,000 (4-6 weeks)
+4. Web3 & Blockchain - $4,000 (5-7 weeks)
+5. Web Scraping & Lead Generation - $600 (3-7 days)
+6. Trading Bot Development - $7,500 (5-6 weeks)
+
+PAYMENT: 3-milestone system (30% / 50% / 20%)
+WEBSITE: https://4dgaming.games
+CLIENT PORTAL: https://4dgaming.games/client-login.html
+
+HOW TO GET STARTED:
+When someone asks how to get started or begin a project, tell them to:
+1. Create an account in the client portal at https://4dgaming.games/client-login.html
+2. Select the type of project you want to build
+3. Describe the functions and features you need
+4. Select any add-ons or additional services
+5. Upload your documentation or reference materials
+6. Fund your first milestone (30%) to begin development
+
+This process ensures we have all the details needed to deliver exactly what you want!
+
+PERSONALITY:
+- Professional but friendly
+- Clear and concise
+- Helpful and solution-oriented
+- Always direct users to the client portal for starting projects
+- Keep responses under 150 words unless explaining the full project process"""
+
+# Chatbot endpoints
+@app.post("/api/chatbot", response_model=ChatbotResponse)
+async def chatbot(request: ChatbotRequest):
+    """Chatbot endpoint for 4D Gaming website"""
+    try:
+        if not request.message:
+            raise HTTPException(status_code=400, detail="Message is required")
+        
+        messages = [{"role": "system", "content": CHATBOT_SYSTEM_PROMPT}]
+        
+        for msg in request.history[-10:]:
+            messages.append({"role": msg.role, "content": msg.content})
+        
+        messages.append({"role": "user", "content": request.message})
+        
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=500,
+            temperature=0.7
+        )
+        
+        bot_response = response.choices[0].message.content
+        
+        return ChatbotResponse(response=bot_response, success=True)
+        
+    except Exception as e:
+        print(f"Chatbot error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chatbot/health")
+async def chatbot_health():
+    """Health check for chatbot"""
+    return {"status": "healthy", "service": "4D Gaming Chatbot"}
 
 init_db()
 
@@ -74,12 +200,13 @@ async def startup_event():
         print("Continuing with startup anyway...")
     print("✅ Startup complete\n")
 
-from .routers import meetings, health, auth, license
+from .routers import meetings, health, auth, license, documents
 from app.routers.storage_b2 import router as storage_router
 from app.routers import iap
 from app.app_uploads import router as uploads_router
 from app.meeting_api import router as meeting_router
 from app.routers import admin
+from app.client_portal_routes import router as portal_router
 # Include license router
 app.include_router(license.router)
 app.include_router(storage_router)
@@ -90,7 +217,8 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(meetings.router)
 app.include_router(admin.router)
-app.include_router(client_portal_router)
+app.include_router(portal_router)
+app.include_router(documents.router)
 
 @app.get("/healthz")
 def healthz():
@@ -99,6 +227,7 @@ def healthz():
 @app.get("/")
 async def root():
     return {"message": "4D Gaming Stripe Backend", "status": "active"}
+
 
 # ==================== 4D GAMING STRIPE ENDPOINTS ====================
 
