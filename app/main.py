@@ -260,19 +260,10 @@ async def clipnote_health():
 # Privacy Policy Endpoint
 # ====================
 
-@clipnote_router.get("/privacy", response_class=HTMLResponse)
-async def clipnote_privacy_policy():
-    """
-    Serve the ClipNote privacy policy HTML page
-    Route: https://4dgaming.games/clipnote/privacy
-    """
-    privacy_html_path = Path("static/clipnote/privacy_policy.html")
-    
-    # If file doesn't exist, return inline HTML
-    
-    
-    # Serve from static file
-    return FileResponse(privacy_html_path)
+# In your main.py
+@app.get("/clipnote/privacy")
+async def clipnote_privacy():
+    return FileResponse("static/clipnote/privacy.html")
 
 # ====================
 # Data Deletion Endpoints
