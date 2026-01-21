@@ -1,12 +1,12 @@
-from fastapi import FastAPI, Request, HTTPException, APIRouter
+from fastapi import FastAPI, Request, HTTPException
 from .security import COOKIE_NAME
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from app.db import init_db, DATA_DIR, get_session
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse
 import stripe
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 import os
 from openai import OpenAI
 from fastapi.responses import HTMLResponse
@@ -14,11 +14,11 @@ from .services.branding import render_meeting_notes_email_html
 from pathlib import Path
 from dotenv import load_dotenv
 from sqlmodel import select, Session
-from typing import List, Dict, Optional
+from typing import List, Dict
 from hashlib import sha256
 from .portal_db import init_db, PortalUser
 from fastapi.staticfiles import StaticFiles
-from datetime import datetime
+
 from app.models import Meeting
 import warnings
 warnings.filterwarnings("ignore", message="Field .* has conflict with protected namespace 'model_'")
@@ -36,8 +36,6 @@ os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]
 
 app = FastAPI(title="Clipnote")
 
-clipnote_router = APIRouter(prefix="/clipnote", tags=["ClipNote"])
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -45,7 +43,6 @@ app.add_middleware(
         "https://ai-meeting-notes-production-81d7.up.railway.app",
         "http://localhost:8080",
         "http://localhost:3000",
-        "*"  # Allow mobile app requests (or use specific mobile
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -96,21 +93,6 @@ class ChatbotRequest(BaseModel):
 class ChatbotResponse(BaseModel):
     response: str
     success: bool
-    
-class DataDeletionRequest(BaseModel):
-    """Model for data deletion requests from ClipNote app"""
-    email: EmailStr
-    user_id: Optional[str] = None
-    device_id: Optional[str] = None
-    reason: Optional[str] = None
-    
-class ContactFormRequest(BaseModel):
-    """Model for contact form submissions"""
-    name: str
-    email: EmailStr
-    subject: str
-    message: str
-    request_type: Optional[str] = "general"  # general, deletion, access
 
 # System prompt
 CHATBOT_SYSTEM_PROMPT = """You are the 4D Gaming AI assistant, helping clients with questions about services, pricing, and the development process.
@@ -237,7 +219,6 @@ app.include_router(meetings.router)
 app.include_router(admin.router)
 app.include_router(portal_router)
 app.include_router(documents.router)
-app.include_router(clipnote_router)
 
 @app.get("/healthz")
 def healthz():
@@ -246,175 +227,7 @@ def healthz():
 @app.get("/")
 async def root():
     return {"message": "4D Gaming Stripe Backend", "status": "active"}
-  
-@clipnote_router.get("/health")
-async def clipnote_health():
-    """Health check for ClipNote endpoints"""
-    return {
-        "status": "healthy",
-        "service": "ClipNote API",
-        "timestamp": datetime.now().isoformat()
-    }
-  
-# ====================
-# Privacy Policy Endpoint
-# ====================
 
-# In your main.py
-@app.get("/clipnote/privacy")
-async def clipnote_privacy():
-    return FileResponse("static/clipnote/privacy.html")
-
-# ====================
-# Data Deletion Endpoints
-# ====================
-
-@clipnote_router.post("/delete-data")
-async def request_data_deletion(request: DataDeletionRequest):
-    """
-    Handle data deletion requests from ClipNote mobile app
-    
-    This endpoint:
-    1. Logs the deletion request
-    2. Queues the deletion (if you have a queue system)
-    3. Sends confirmation email to user
-    4. Returns success response to app
-    
-    In production, you should:
-    - Store deletion requests in database
-    - Implement actual data deletion logic
-    - Send confirmation emails
-    - Comply with GDPR/CCPA requirements (30-day processing)
-    """
-    try:
-        # Log the deletion request
-        print(f"📝 Data Deletion Request Received:")
-        print(f"   Email: {request.email}")
-        print(f"   User ID: {request.user_id}")
-        print(f"   Device ID: {request.device_id}")
-        print(f"   Reason: {request.reason}")
-        print(f"   Timestamp: {datetime.now().isoformat()}")
-        
-        # TODO: Add your data deletion logic here
-        # Example:
-        # 1. Store request in database with status "pending"
-        # 2. Queue deletion job
-        # 3. Send confirmation email
-        # 4. Mark all user data for deletion
-        # 5. Actually delete after 30 days (GDPR compliance)
-        
-        """
-        Example database logic:
-        
-        deletion_request = DeletionRequest(
-            email=request.email,
-            user_id=request.user_id,
-            device_id=request.device_id,
-            reason=request.reason,
-            status="pending",
-            requested_at=datetime.now(),
-            scheduled_deletion=datetime.now() + timedelta(days=30)
-        )
-        session.add(deletion_request)
-        session.commit()
-        
-        # Queue deletion job
-        delete_user_data.delay(user_id=request.user_id, email=request.email)
-        
-        # Send confirmation email
-        send_deletion_confirmation_email(request.email)
-        """
-        
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "message": "Data deletion request received successfully",
-                "details": {
-                    "email": request.email,
-                    "processing_time": "30 days",
-                    "status": "pending",
-                    "ticket_id": f"DEL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                }
-            }
-        )
-        
-    except Exception as e:
-        print(f"❌ Error processing deletion request: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to process deletion request: {str(e)}"
-        )
-
-# ====================
-# Contact Form Endpoint
-# ====================
-
-@clipnote_router.post("/contact")
-async def submit_contact_form(request: ContactFormRequest):
-    """
-    Handle contact form submissions from ClipNote app
-    
-    Used for:
-    - Data deletion requests
-    - Data access requests
-    - General inquiries
-    - Support questions
-    """
-    try:
-        # Log the contact request
-        print(f"📧 Contact Form Submission:")
-        print(f"   Name: {request.name}")
-        print(f"   Email: {request.email}")
-        print(f"   Subject: {request.subject}")
-        print(f"   Type: {request.request_type}")
-        print(f"   Message: {request.message[:100]}...")
-        print(f"   Timestamp: {datetime.now().isoformat()}")
-        
-        # TODO: Add your contact form logic here
-        # Example:
-        # 1. Store in database
-        # 2. Send email notification to admin
-        # 3. Send confirmation email to user
-        # 4. Create support ticket
-        
-        """
-        Example logic:
-        
-        contact_request = ContactRequest(
-            name=request.name,
-            email=request.email,
-            subject=request.subject,
-            message=request.message,
-            request_type=request.request_type,
-            status="new",
-            created_at=datetime.now()
-        )
-        session.add(contact_request)
-        session.commit()
-        
-        # Send confirmation email
-        send_contact_confirmation_email(request.email, request.name)
-        
-        # Notify admin
-        notify_admin_new_contact(contact_request)
-        """
-        
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "message": "Your message has been received. We'll respond within 30 days.",
-                "ticket_id": f"CONTACT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            }
-        )
-        
-    except Exception as e:
-        print(f"❌ Error processing contact form: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to process contact form: {str(e)}"
-        )
 
 # ==================== 4D GAMING STRIPE ENDPOINTS ====================
 
