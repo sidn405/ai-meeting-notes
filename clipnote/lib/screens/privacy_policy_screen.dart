@@ -1,6 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:url_launcher/url_launcher.dart';
 
-// Privacy Policy Screen
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+const String API_BASE_URL = 'https://4dgaming.games';
+const String PRIVACY_POLICY_URL = '$API_BASE_URL/clipnote/privacy';
+
+// ============================================================================
+// Privacy Policy Screen - Main Widget
+// ============================================================================
+
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
 
@@ -28,7 +41,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           children: [
             _buildSection(
-              'Last Updated: October 22, 2025',
+              'Last Updated: January 21, 2026',
               null,
               const TextStyle(
                 fontSize: 14,
@@ -62,17 +75,17 @@ class PrivacyPolicyScreen extends StatelessWidget {
             
             _buildSection(
               'Camera Permission',
-              '•Our app requests camera permission to record video during meetings (optional).\n'
-              '•You can use ClipNote without granting camera access. Core audio recording and \n'
-              '•transcription features work independently of camera permissions.',
+              'Our app requests camera permission to record video during meetings (optional).\n\n'
+              'You can use ClipNote without granting camera access. Core audio recording and '
+              'transcription features work independently of camera permissions.',
             ),
             
             _buildSection(
               'Data Storage & Retention',
-              'All Tiers:\n'
+              'Free Tier:\n'
               '• Stored locally on your device\n'
               '• You control deletion\n\n'
-              'Cloud (Professional & Business):\n'
+              'Paid Tiers (Professional & Business):\n'
               '• Stored on secure cloud servers\n'
               '• Automatic deletion after 90 days\n'
               '• Unlimited storage during 90-day period',
@@ -125,7 +138,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
               'Continued use after changes means acceptance.',
             ),
             
-            // Contact Us Button
+            // Action Buttons Card
             Container(
               margin: const EdgeInsets.only(top: 10),
               padding: const EdgeInsets.all(20),
@@ -143,13 +156,13 @@ class PrivacyPolicyScreen extends StatelessWidget {
               child: Column(
                 children: [
                   const Icon(
-                    Icons.contact_support,
+                    Icons.verified_user,
                     size: 48,
                     color: Color(0xFF667eea),
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'Questions or Concerns?',
+                    'Your Privacy Matters',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -157,34 +170,64 @@ class PrivacyPolicyScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Contact us for data deletion requests, questions, or concerns.',
+                    'View full policy online or contact us for data deletion requests.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey.shade700,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ContactFormScreen(),
+                  const SizedBox(height: 20),
+                  
+                  // View Online Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _launchPrivacyPolicy(context),
+                      icon: const Icon(Icons.open_in_browser),
+                      label: const Text('View Full Policy Online'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF667eea),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 16,
                         ),
-                      );
-                    },
-                    icon: const Icon(Icons.send),
-                    label: const Text('Contact Us'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF667eea),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Contact Us Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ContactFormScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.send),
+                      label: const Text('Contact Us / Delete Data'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF667eea),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        side: const BorderSide(
+                          color: Color(0xFF667eea),
+                          width: 2,
+                        ),
                       ),
                     ),
                   ),
@@ -199,18 +242,18 @@ class PrivacyPolicyScreen extends StatelessWidget {
     );
   }
 
-  static Widget _buildSection(String title, [String? content, TextStyle? style]) {
+  Widget _buildSection(String title, String? content, [TextStyle? customStyle]) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -229,11 +272,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               content,
-              style: style ?? TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade700,
-                height: 1.5,
-              ),
+              style: customStyle ??
+                  TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade700,
+                    height: 1.5,
+                  ),
             ),
           ],
         ],
@@ -241,48 +285,42 @@ class PrivacyPolicyScreen extends StatelessWidget {
     );
   }
 
-  static Widget _buildHighlightCard({
-    required IconData icon,
-    required String title,
-    required String description,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF667eea).withOpacity(0.1),
-        border: Border.all(color: const Color(0xFF667eea), width: 2),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 40, color: const Color(0xFF667eea)),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF667eea),
+  Future<void> _launchPrivacyPolicy(BuildContext context) async {
+    final Uri url = Uri.parse(PRIVACY_POLICY_URL);
+    
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(
+          url,
+          mode: LaunchMode.externalApplication,
+        );
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not open privacy policy in browser'),
+              backgroundColor: Colors.red,
             ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
           ),
-          const SizedBox(height: 8),
-          Text(
-            description,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade700,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
+        );
+      }
+    }
   }
 }
 
-// Contact Form Screen
+// ============================================================================
+// Contact Form Screen with Data Deletion
+// ============================================================================
+
 class ContactFormScreen extends StatefulWidget {
   const ContactFormScreen({super.key});
 
@@ -297,8 +335,8 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
   final _subjectController = TextEditingController();
   final _messageController = TextEditingController();
   
-  String _requestType = 'General Inquiry';
   bool _isSubmitting = false;
+  String _requestType = 'general';
 
   @override
   void dispose() {
@@ -310,41 +348,84 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
   }
 
   Future<void> _submitForm() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
     setState(() => _isSubmitting = true);
 
     try {
-      // TODO: Send to your backend/email service
-      // Example: await ApiService.I.sendContactForm(...)
-      
-      await Future.delayed(const Duration(seconds: 2)); // Simulate API call
+      final response = await http.post(
+        Uri.parse('$API_BASE_URL/clipnote/contact'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'name': _nameController.text.trim(),
+          'email': _emailController.text.trim(),
+          'subject': _subjectController.text.trim(),
+          'message': _messageController.text.trim(),
+          'request_type': _requestType,
+        }),
+      );
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Message sent successfully! We\'ll respond within 30 days.'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 3),
-        ),
-      );
-
-      Navigator.pop(context);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        // Show success dialog
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 32),
+                SizedBox(width: 12),
+                Text('Submitted Successfully'),
+              ],
+            ),
+            content: Text(
+              data['message'] ?? 'We\'ll respond within 30 days.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Close dialog
+                  Navigator.of(context).pop(); // Go back to previous screen
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        
+        // Clear form
+        _nameController.clear();
+        _emailController.clear();
+        _subjectController.clear();
+        _messageController.clear();
+        
+      } else {
+        _showErrorSnackBar('Failed to submit. Please try again.');
+      }
     } catch (e) {
-      if (!mounted) return;
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to send message: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        _showErrorSnackBar('Network error. Please check your connection.');
+      }
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   @override
@@ -370,253 +451,253 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            // Header Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
               ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Color(0xFF667eea)),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'We typically respond within 30 days',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
+                  const Icon(
+                    Icons.contact_support,
+                    size: 64,
+                    color: Color(0xFF667eea),
                   ),
-                  const SizedBox(height: 20),
-                  
-                  Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Request Type Dropdown
-                        const Text(
-                          'Request Type',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<String>(
-                          value: _requestType,
-                          decoration: InputDecoration(
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'General Inquiry',
-                              child: Text('General Inquiry'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Data Deletion Request',
-                              child: Text('Data Deletion Request'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Data Access Request',
-                              child: Text('Data Access Request'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Technical Support',
-                              child: Text('Technical Support'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Privacy Concern',
-                              child: Text('Privacy Concern'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            setState(() => _requestType = value!);
-                          },
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Name Field
-                        const Text(
-                          'Name',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          controller: _nameController,
-                          decoration: InputDecoration(
-                            hintText: 'Your name',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return 'Please enter your name';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Email Field
-                        const Text(
-                          'Email',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: InputDecoration(
-                            hintText: 'your@email.com',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return 'Please enter your email';
-                            }
-                            if (!value.contains('@')) {
-                              return 'Please enter a valid email';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Subject Field
-                        const Text(
-                          'Subject',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          controller: _subjectController,
-                          decoration: InputDecoration(
-                            hintText: 'Brief description',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return 'Please enter a subject';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Message Field
-                        const Text(
-                          'Message',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          controller: _messageController,
-                          maxLines: 6,
-                          decoration: InputDecoration(
-                            hintText: 'Please provide details about your request...',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            contentPadding: const EdgeInsets.all(16),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return 'Please enter your message';
-                            }
-                            if (value.trim().length < 10) {
-                              return 'Message must be at least 10 characters';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Submit Button
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _isSubmitting ? null : _submitForm,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF667eea),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              disabledBackgroundColor: Colors.grey,
-                            ),
-                            child: _isSubmitting
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Text(
-                                    'Send Message',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                      ],
+                  const SizedBox(height: 16),
+                  const Text(
+                    'How can we help?',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'We\'ll respond to your request within 30 days.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
                     ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Form Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Request Type Selector
+                    const Text(
+                      'Request Type',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: _requestType,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'general',
+                          child: Text('General Inquiry'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'deletion',
+                          child: Text('🗑️ Data Deletion Request'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'access',
+                          child: Text('📋 Data Access Request'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() => _requestType = value!);
+                      },
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Name Field
+                    const Text(
+                      'Name',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: InputDecoration(
+                        hintText: 'Your name',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Please enter your name';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Email Field
+                    const Text(
+                      'Email',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        hintText: 'your@email.com',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Please enter your email';
+                        }
+                        if (!value.contains('@')) {
+                          return 'Please enter a valid email';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Subject Field
+                    const Text(
+                      'Subject',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _subjectController,
+                      decoration: InputDecoration(
+                        hintText: 'Brief description',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Please enter a subject';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Message Field
+                    const Text(
+                      'Message',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _messageController,
+                      maxLines: 6,
+                      decoration: InputDecoration(
+                        hintText: 'Please provide details about your request...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        contentPadding: const EdgeInsets.all(16),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Please enter your message';
+                        }
+                        if (value.trim().length < 10) {
+                          return 'Message must be at least 10 characters';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Submit Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _isSubmitting ? null : _submitForm,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF667eea),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          disabledBackgroundColor: Colors.grey,
+                        ),
+                        child: _isSubmitting
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'Send Message',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -645,10 +726,10 @@ class _ContactFormScreenState extends State<ContactFormScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _tipItem('Data deletion: We\'ll delete your account and cloud data within 30 days'),
-                  _tipItem('Data access: Request a copy of all your stored data'),
-                  _tipItem('Cloud data automatically deletes after 90 days'),
-                  _tipItem('Local data: Uninstall the app to remove device storage'),
+                  _tipItem('Data deletion: We\'ll delete your data within 30 days'),
+                  _tipItem('Data access: Request a copy of your stored data'),
+                  _tipItem('Cloud data auto-deletes after 90 days'),
+                  _tipItem('Local data: Uninstall app to remove device storage'),
                 ],
               ),
             ),

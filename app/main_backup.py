@@ -239,58 +239,6 @@ async def get_stripe_config():
         raise HTTPException(status_code=500, detail="Stripe key not configured")
     return {"publishableKey": publishable_key}
 
-@app.post("/create-checkout-session")
-async def create_checkout_session(request: Request):
-    """Create Stripe checkout session for 4D Gaming services"""
-    try:
-        data = await request.json()
-        service = data.get("service")
-        
-        if service not in SERVICE_PRICES:
-            raise HTTPException(status_code=400, detail="Invalid service")
-        
-        service_data = SERVICE_PRICES[service]
-        origin = request.headers.get("origin", "https://4dgaming.games")
-        
-        session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=[{
-                "price_data": {
-                    "currency": "usd",
-                    "product_data": {
-                        "name": service_data["name"],
-                        "description": f"Professional {service_data['name']} service by 4D Gaming",
-                        "metadata": {
-                            "business": "4D Gaming",
-                            "category": service
-                        }
-                    },
-                    "unit_amount": service_data["price"],
-                },
-                "quantity": 1,
-            }],
-            mode="payment",
-            payment_intent_data={
-                "statement_descriptor": "4D GAMING",
-                "statement_descriptor_suffix": "DEV",
-            },
-            success_url=f"{origin}/success.html?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{origin}/#services",
-            metadata={
-                "business": "4D Gaming",
-                "service_type": service
-            }
-        )
-        
-        return {"id": session.id}
-        
-    except stripe.error.StripeError as e:
-        print(f"Stripe error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.get("/checkout-session")
 async def get_checkout_session_details(sessionId: str):
     """Retrieve checkout session details for success page"""
@@ -321,10 +269,93 @@ async def stripe_webhook_handler(request: Request):
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         print(f"💰 4D Gaming payment successful! Session: {session['id']}")
-        # TODO: Send confirmation email to customer
-        # TODO: Send notification to you
+        # Extract customer info
+        customer_email = session.get("customer_details", {}).get("email")
+        customer_phone = session.get("customer_details", {}).get("phone")
+        amount = session.get("amount_total", 0) / 100
+        metadata = session.get("metadata", {})
+
+        # Notify bot
+        bot_webhook_url = os.getenv("BOT_WEBHOOK_URL")
+        if bot_webhook_url:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{bot_webhook_url}/webhook/payment-confirmed",
+                    json={
+                        "project_id": metadata.get("project_id") or session['id'], 
+                        "user_email": customer_email,
+                        "phone_number": customer_phone,
+                        "amount": amount
+                    },
+                    timeout=10.0
+                )
+                print(f"✅ Bot notified: {response.status_code}")
     
     return {"received": True}
+  
+@app.post("/create-checkout-session")
+async def create_checkout_session(request: Request):
+    """Create Stripe checkout session for 4D Gaming services"""
+    try:
+        data = await request.json()
+        service = data.get("service")
+        
+        # Extract user information from request
+        user_email = data.get("email")
+        project_id = data.get("project_id") 
+        firm_name = data.get("firm_name")
+        phone_number = data.get("phone")
+        
+        if service not in SERVICE_PRICES:
+            raise HTTPException(status_code=400, detail="Invalid service")
+        
+        service_data = SERVICE_PRICES[service]
+        origin = request.headers.get("origin", "https://4dgaming.games")
+        
+        # Create Stripe checkout session
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {
+                        "name": service_data["name"],
+                        "description": f"Professional {service_data['name']} service by 4D Gaming",
+                        "metadata": {
+                            "business": "4D Gaming",
+                            "category": service
+                        }
+                    },
+                    "unit_amount": service_data["price"],
+                },
+                "quantity": 1,
+            }],
+            mode="payment",
+            payment_intent_data={
+                "statement_descriptor": "4D GAMING",
+                "statement_descriptor_suffix": "DEV",
+            },
+            success_url=f"{origin}/success.html?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{origin}/#services",
+            customer_email=user_email,  # ← Goes HERE
+            metadata={                   # ← Update THIS
+                "business": "4D Gaming",
+                "service_type": service,
+                "project_id": project_id,
+                "firm_name": firm_name,
+                "phone_number": phone_number
+            }
+        )
+        
+        return {"id": session.id}
+        
+    except stripe.error.StripeError as e:
+        print(f"Stripe error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
   
 def verify_and_fix_meeting_paths():
     """

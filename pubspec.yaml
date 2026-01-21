@@ -15,6 +15,7 @@ dependencies:
   http: ^1.1.0
   dio: ^5.7.0
   file_picker: ^8.0.0
+  url_launcher: ^6.2.0
   
   # Audio Recording
   record: ^5.0.4
