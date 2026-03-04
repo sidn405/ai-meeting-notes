@@ -504,3 +504,54 @@ async def client_fund_escrow(
             "Funds are held securely and released to 4D Gaming as each milestone is completed and approved."
         ),
     }
+
+
+# ── Backward-compat: client portal HTML calls GET /api/escrow/project/{id} ───
+# This was the old route path. Alias it so the HTML doesn't need updating.
+@escrow_router.get("/project/{project_id}")
+async def compat_get_project_escrow(
+    project_id: int,
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """
+    Backward-compatible alias for the client portal escrow section.
+    Returns milestone list in the format expected by renderEscrowSection() in client-portal.html.
+    """
+    project = db.get(Project, project_id)
+    if not project or project.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    ep = db.exec(
+        select(EscrowProject).where(EscrowProject.project_id == project_id)
+    ).first()
+
+    if not ep:
+        return []   # HTML handles empty array gracefully
+
+    milestones = db.exec(
+        select(EscrowMilestone)
+        .where(EscrowMilestone.escrow_project_id == ep.id)
+        .order_by(EscrowMilestone.milestone_number)
+    ).all()
+
+    # Shape matches what renderMilestoneCard() in client-portal.html expects
+    return [
+        {
+            "id": m.id,
+            "project_id": m.project_id,
+            "milestone_number": m.milestone_number,
+            "milestone_name": m.milestone_name,
+            "milestone_percent": m.percent,
+            "amount_usd": m.amount,
+            "escrow_transaction_id": ep.escrow_transaction_id,
+            "escrow_item_id": m.escrow_item_id,
+            "funding_url": ep.funding_url,
+            "escrow_status": m.status,
+            "funded_at": ep.funded_at.isoformat() if ep.funded_at else None,
+            "delivered_at": m.delivered_at.isoformat() if m.delivered_at else None,
+            "completed_at": m.completed_at.isoformat() if m.completed_at else None,
+            "created_at": m.created_at.isoformat(),
+        }
+        for m in milestones
+    ]

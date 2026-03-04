@@ -125,7 +125,7 @@ When someone asks how to get started or begin a project, tell them to:
 3. Describe the functions and features you need
 4. Select any add-ons or additional services
 5. Upload your documentation or reference materials
-6. Fund your first milestone (30%) to begin development
+6. Fund total escrow balance.
 
 This process ensures we have all the details needed to deliver exactly what you want!
 
@@ -223,7 +223,7 @@ app.include_router(meetings.router)
 app.include_router(admin.router)
 app.include_router(portal_router)
 app.include_router(documents.router)
-app.include_router(escrow_router)
+app.include_router(escrow_router, prefix="/api/escrow")
 app.include_router(client_escrow_router, prefix="/api")  
 
 @app.get("/healthz")
