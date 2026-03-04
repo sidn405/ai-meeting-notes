@@ -94,8 +94,8 @@ def create_project_transaction(
         "description": f"4D Gaming – {project_name} (Project #{project_id})",
         "items": items,
         "parties": [
-            {"role": "buyer",  "customer": client_email, "agreed": False},
-            {"role": "seller", "customer": "me",         "agreed": True},
+            {"role": "buyer",  "customer": client_email, "agreed": False, "fee_payer": "50/50"},
+            {"role": "seller", "customer": "me",         "agreed": True,  "fee_payer": "50/50"},
         ],
     }
 
