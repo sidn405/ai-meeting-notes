@@ -82,7 +82,7 @@ def create_milestone_transaction(
                 "title": description,
                 "description": description,
                 "type": "general_merchandise",
-                "inspection_period": inspection_days,
+                "inspection_period": inspection_days * 86400,
                 "quantity": 1,
                 "schedule": [
                     {
