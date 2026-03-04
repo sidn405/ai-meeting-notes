@@ -13,7 +13,15 @@ import os
 import httpx
 from typing import Optional
 
-ESCROW_API_BASE = "https://api.escrow.com/2017-09-01"
+_SANDBOX = os.getenv("ESCROW_SANDBOX", "false").lower() == "true"
+ESCROW_API_BASE = (
+    "https://sandbox.api.escrow.com/2017-09-01"
+    if _SANDBOX else
+    "https://api.escrow.com/2017-09-01"
+)
+
+if _SANDBOX:
+    print("⚠️  Escrow running in SANDBOX mode — no real money will move")
 ESCROW_EMAIL   = os.getenv("ESCROW_EMAIL")     # your escrow.com account email
 ESCROW_API_KEY = os.getenv("ESCROW_API_KEY")   # from escrow.com dashboard
 
