@@ -446,10 +446,13 @@ async def client_get_escrow(
     }
 
 
-# ── Client: the Fund Escrow button in client-portal.html ─────────────────────
-# Called by: POST /api/projects/{id}/escrow/create
-# If escrow is already set up, returns the existing funding URL.
-# If not yet set up (admin hasn't run /admin/setup), returns 404 with clear message.
+# ── Client: Fund Escrow button — fully automated, no admin setup needed ────────
+# Flow:
+#   1. Client creates project (milestone amounts stored in project.notes)
+#   2. Client clicks "Fund Escrow" → this endpoint auto-creates the Escrow.com
+#      transaction on the fly using the project's own milestone data
+#   3. Client is redirected to Escrow.com to fund the full amount
+#   4. All milestones are items in that one transaction — released as work is delivered
 
 @client_escrow_router.post("/projects/{project_id}/escrow/create")
 async def client_fund_escrow(
@@ -458,33 +461,117 @@ async def client_fund_escrow(
     db: Session = Depends(get_session),
 ):
     """
-    Called when client clicks 'Fund Escrow' button.
-    Returns the Escrow.com funding URL for the full project amount.
-    Admin must have called /api/escrow/admin/setup first.
+    Called when client clicks 'Fund Escrow' / 'Release Escrow' button.
+
+    If an Escrow.com transaction already exists → return its funding URL.
+    If not → auto-create it now from the project's milestone data and return the URL.
+    No admin action required at any point.
     """
     project = db.get(Project, project_id)
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    # ── Already set up → just return the URL ─────────────────────────────────
     ep = db.exec(
         select(EscrowProject).where(EscrowProject.project_id == project_id)
     ).first()
 
-    if not ep:
-        raise HTTPException(
-            status_code=404,
-            detail="Escrow has not been set up for this project yet. Your project manager will send you the funding link when ready."
-        )
-
-    if ep.status == "completed":
+    if ep and ep.status == "completed":
         raise HTTPException(status_code=400, detail="All milestones have been completed.")
 
-    milestones = db.exec(
-        select(EscrowMilestone)
-        .where(EscrowMilestone.escrow_project_id == ep.id)
-        .order_by(EscrowMilestone.milestone_number)
-    ).all()
+    if ep:
+        milestones = db.exec(
+            select(EscrowMilestone)
+            .where(EscrowMilestone.escrow_project_id == ep.id)
+            .order_by(EscrowMilestone.milestone_number)
+        ).all()
+        return _escrow_response(ep, milestones)
 
+    # ── Not set up yet → auto-create from project.notes ──────────────────────
+    try:
+        notes_data = json.loads(project.notes) if project.notes else {}
+    except (json.JSONDecodeError, TypeError):
+        notes_data = {}
+
+    pricing = notes_data.get("pricing") or {}
+    ms_config = pricing.get("milestones", [])
+
+    if not ms_config:
+        raise HTTPException(
+            status_code=400,
+            detail="No milestones found for this project. Please contact support."
+        )
+
+    total_amount = sum(float(m.get("amount", 0)) for m in ms_config)
+    if total_amount <= 0:
+        raise HTTPException(status_code=400, detail="Invalid project amount.")
+
+    # Build milestone list for Escrow.com
+    milestones_payload = [
+        {
+            "number": i + 1,
+            "name": m.get("name", f"Milestone {i + 1}"),
+            "amount": float(m.get("amount", 0)),
+            "percent": float(m.get("percent", m.get("percentage", 0))),
+        }
+        for i, m in enumerate(ms_config)
+    ]
+
+    try:
+        tx = escrow.create_project_transaction(
+            project_id=project_id,
+            project_name=project.name,
+            client_email=current_user.email,
+            client_name=current_user.name or current_user.email,
+            milestones=milestones_payload,
+            inspection_days=5,
+        )
+    except escrow.EscrowAPIError as e:
+        raise HTTPException(status_code=502, detail=f"Escrow API error: {e.detail}")
+
+    funding_url = escrow.get_funding_url(tx)
+    item_ids    = escrow.get_item_ids(tx)
+
+    # Persist project-level escrow record
+    ep = EscrowProject(
+        project_id=project_id,
+        user_id=current_user.id,
+        escrow_transaction_id=str(tx["id"]),
+        total_amount=total_amount,
+        funding_url=funding_url,
+        status="created",
+        raw_status=tx.get("status"),
+    )
+    db.add(ep)
+    db.commit()
+    db.refresh(ep)
+
+    # Persist per-milestone records
+    ms_records = []
+    for m in milestones_payload:
+        pct = m["percent"]
+        # Normalize: store as 0.30 not 30
+        if pct > 1:
+            pct = pct / 100
+        rec = EscrowMilestone(
+            escrow_project_id=ep.id,
+            project_id=project_id,
+            milestone_number=m["number"],
+            milestone_name=m["name"],
+            amount=m["amount"],
+            percent=pct,
+            escrow_item_id=item_ids.get(m["number"]),
+            status="pending",
+        )
+        db.add(rec)
+        ms_records.append(rec)
+
+    db.commit()
+    return _escrow_response(ep, ms_records)
+
+
+def _escrow_response(ep: EscrowProject, milestones: list) -> dict:
+    """Shared response shape for the Fund Escrow button."""
     return {
         "escrow_transaction_id": ep.escrow_transaction_id,
         "total_amount": ep.total_amount,
@@ -500,8 +587,9 @@ async def client_fund_escrow(
             for m in milestones
         ],
         "message": (
-            "Please fund the full project amount on Escrow.com. "
-            "Funds are held securely and released to 4D Gaming as each milestone is completed and approved."
+            "Your full project balance is held securely by Escrow.com. "
+            "4D Gaming cannot access funds until you approve each delivered milestone. "
+            "Dispute resolution is available if needed."
         ),
     }
 
