@@ -24,10 +24,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from .portal_db import get_session, PortalUser, Project
-from .client_portal_routes import get_current_user, require_admin
-from .escrow_db import EscrowTransaction
-from . import escrow_service as escrow
+from app.portal_db import get_session, PortalUser, Project
+from app.client_portal_routes import get_current_user, require_admin
+from app.escrow_db import EscrowTransaction
+import app.escrow_service as escrow
 
 ESCROW_WEBHOOK_SECRET = os.getenv("ESCROW_WEBHOOK_SECRET", "")
 

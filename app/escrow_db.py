@@ -1,6 +1,6 @@
 # escrow_db.py
-# SQLModel table for tracking Escrow.com transactions per milestone.
-# Mirrors the pattern used in portal_db.py — drop this in your /app directory.
+# SQLModel table for Escrow.com milestone transactions.
+# Place in /app/app/ alongside portal_db.py
 
 from datetime import datetime
 from typing import Optional
@@ -12,34 +12,39 @@ class EscrowTransaction(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
 
-    # Link to project
+    # Links
     project_id: int = Field(index=True)
+    user_id: Optional[int] = Field(default=None, index=True)  # project owner
 
-    # Milestone this transaction covers (1, 2, 3…)
+    # Milestone info
     milestone_number: int
-
-    # Escrow.com transaction ID returned from their API
-    escrow_transaction_id: str = Field(index=True)
-
-    # Dollar amount held in escrow
-    amount: float
-
-    # Percentage of total project this milestone represents (e.g. 0.30 for 30%)
-    milestone_percent: float = Field(default=0.0)
-
-    # Human-readable name (e.g. "Discovery & Conversation Flows")
     milestone_name: str = Field(default="")
+    milestone_percent: float = Field(default=0.0)  # e.g. 0.30 for 30%
 
-    # Escrow.com transaction status
-    # Possible values: created, awaiting_payment, funded, in_progress,
-    #                  delivered, inspection, completed, cancelled, disputed
+    # Amounts
+    amount_usd: float = Field(default=0.0)
+
+    # Escrow.com identifiers
+    escrow_transaction_id: Optional[str] = Field(default=None, index=True)
+    escrow_item_id: Optional[str] = Field(default=None)  # item ID within the transaction
+
+    # Payment link sent to client
+    funding_url: Optional[str] = Field(default=None)
+
+    # Simplified internal status
+    # Values: created | awaiting_payment | funded | in_progress |
+    #         delivered | inspection | completed | cancelled | disputed
     escrow_status: str = Field(default="created")
 
-    # URL for the client to fund this transaction on Escrow.com
-    funding_url: Optional[str] = Field(default=None)
+    # Raw status string from Escrow.com API (for debugging)
+    escrow_raw_status: Optional[str] = Field(default=None)
+
+    # Optional admin notes
+    notes: Optional[str] = Field(default=None)
 
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = Field(default=None)
     funded_at: Optional[datetime] = Field(default=None)
     delivered_at: Optional[datetime] = Field(default=None)
     completed_at: Optional[datetime] = Field(default=None)
