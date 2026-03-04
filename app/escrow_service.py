@@ -15,7 +15,7 @@ from typing import Optional
 
 _SANDBOX = os.getenv("ESCROW_SANDBOX", "false").lower() == "true"
 ESCROW_API_BASE = (
-    "https://sandbox.api.escrow.com/2017-09-01"
+    "https://api.escrow-sandbox.com/2017-09-01"
     if _SANDBOX else
     "https://api.escrow.com/2017-09-01"
 )
