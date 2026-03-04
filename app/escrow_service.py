@@ -71,13 +71,13 @@ def create_project_transaction(
     items = []
     for m in milestones:
         items.append({
-            "title": f"Milestone {m['number']}: {m['name']}",
+            "title": f"{project_name} — Milestone {m['number']}: {m['name']}",
             "description": (
                 f"Project: {project_name}\n"
                 f"Milestone {m['number']}: {m['name']}\n"
                 f"Delivered by 4D Gaming (Project ID: {project_id})"
             ),
-            "type": "general_merchandise",
+            "type": "milestone",
             "inspection_period": inspection_seconds,
             "quantity": 1,
             "schedule": [
