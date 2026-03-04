@@ -1,17 +1,10 @@
-"""
-escrow_routes.py — Escrow.com milestone payment routes for 4D Gaming.
-
-Register in main.py:
-    from app.escrow_routes import escrow_router
-    app.include_router(escrow_router)
-
-ENV vars to add to Railway:
-    ESCROW_EMAIL=your@email.com
-    ESCROW_API_KEY=your_escrow_api_key
-    ESCROW_WEBHOOK_SECRET=optional_webhook_secret
-
-Stripe routes are NOT modified — both systems coexist.
-"""
+# escrow_routes.py
+# Escrow.com routes for 4D Gaming — single-transaction model.
+#
+# Register BOTH routers in main.py:
+#   from app.escrow_routes import escrow_router, client_escrow_router
+#   app.include_router(escrow_router, prefix="/api/escrow")   # admin + webhook
+#   app.include_router(client_escrow_router, prefix="/api")   # client button calls
 
 import json
 import hmac
@@ -26,27 +19,26 @@ from sqlmodel import Session, select
 
 from app.portal_db import get_session, PortalUser, Project
 from app.client_portal_routes import get_current_user, require_admin
-from app.escrow_db import EscrowTransaction
+from app.escrow_db import EscrowProject, EscrowMilestone
 import app.escrow_service as escrow
 
 ESCROW_WEBHOOK_SECRET = os.getenv("ESCROW_WEBHOOK_SECRET", "")
 
-escrow_router = APIRouter(prefix="/api/escrow", tags=["escrow-payments"])
+escrow_router        = APIRouter(tags=["escrow-admin"])
+client_escrow_router = APIRouter(tags=["escrow-client"])
 
 
-# ── Schemas ────────────────────────────────────────────────────────────────────
+# ── Schemas ───────────────────────────────────────────────────────────────────
 
-class EscrowTransactionOut(BaseModel):
+class MilestoneOut(BaseModel):
     id: int
     project_id: int
     milestone_number: int
     milestone_name: str
-    milestone_percent: float
-    amount_usd: float
-    escrow_transaction_id: Optional[str]
-    funding_url: Optional[str]
-    escrow_status: str
-    funded_at: Optional[datetime]
+    amount: float
+    percent: float
+    escrow_item_id: Optional[str]
+    status: str
     delivered_at: Optional[datetime]
     completed_at: Optional[datetime]
     created_at: datetime
@@ -55,35 +47,41 @@ class EscrowTransactionOut(BaseModel):
         from_attributes = True
 
 
-class SetupMilestonesRequest(BaseModel):
+class ProjectEscrowOut(BaseModel):
+    id: int
+    project_id: int
+    escrow_transaction_id: str
+    total_amount: float
+    funding_url: Optional[str]
+    status: str
+    created_at: datetime
+    funded_at: Optional[datetime]
+    milestones: List[MilestoneOut] = []
+
+    class Config:
+        from_attributes = True
+
+
+class AdminSetupRequest(BaseModel):
     project_id: int
     total_amount: float
-    schedule: Optional[List[float]] = None          # defaults to [0.30, 0.50, 0.20]
-    milestone_names: Optional[List[str]] = None     # optional custom names
+    schedule: Optional[List[float]] = None          # defaults [0.30, 0.50, 0.20]
+    milestone_names: Optional[List[str]] = None
     inspection_days: int = 5
 
 
-class CreateSingleMilestoneRequest(BaseModel):
-    project_id: int
-    milestone_number: int
-    milestone_name: str
-    amount_usd: float
-    inspection_days: int = 5
-    notes: Optional[str] = None
+# ── Admin: Set up full project escrow (creates single Escrow.com transaction) ─
 
-
-# ── Admin routes ───────────────────────────────────────────────────────────────
-
-@escrow_router.post("/admin/setup-milestones", response_model=List[EscrowTransactionOut])
-async def admin_setup_all_milestones(
-    data: SetupMilestonesRequest,
+@escrow_router.post("/admin/setup")
+async def admin_setup_project_escrow(
+    data: AdminSetupRequest,
     current_user: PortalUser = Depends(require_admin),
     db: Session = Depends(get_session),
 ):
     """
-    Admin: Create Escrow.com transactions for ALL milestones at once.
-    Default schedule: 30% / 50% / 20%. Pass `schedule` to override.
-    Each milestone gets its own transaction + funding URL.
+    Admin: Create ONE Escrow.com transaction covering the full project amount.
+    All milestones are items inside that single transaction.
+    Client funds everything at once via one payment link.
     """
     project = db.get(Project, data.project_id)
     if not project:
@@ -94,12 +92,12 @@ async def admin_setup_all_milestones(
         raise HTTPException(status_code=404, detail="Project owner not found")
 
     existing = db.exec(
-        select(EscrowTransaction).where(EscrowTransaction.project_id == data.project_id)
-    ).all()
+        select(EscrowProject).where(EscrowProject.project_id == data.project_id)
+    ).first()
     if existing:
         raise HTTPException(
             status_code=400,
-            detail=f"Escrow milestones already exist for this project ({len(existing)} found)."
+            detail=f"Escrow already set up for this project (txn: {existing.escrow_transaction_id})"
         )
 
     try:
@@ -111,214 +109,214 @@ async def admin_setup_all_milestones(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    created = []
-    for m in milestones:
-        try:
-            tx = escrow.create_milestone_transaction(
-                project_id=data.project_id,
-                project_name=project.name,
-                milestone_number=m["number"],
-                milestone_name=m["name"],
-                amount_usd=m["amount"],
-                client_email=owner.email,
-                client_name=owner.name,
-                inspection_days=data.inspection_days,
-            )
-            items = tx.get("items", [])
-            item_id = str(items[0].get("id", "")) if items else None
-            funding_url = escrow.get_funding_url(tx)
-
-            record = EscrowTransaction(
-                project_id=data.project_id,
-                user_id=project.owner_id,
-                milestone_number=m["number"],
-                milestone_name=m["name"],
-                milestone_percent=m["percent"],
-                amount_usd=m["amount"],
-                escrow_transaction_id=str(tx["id"]),
-                escrow_item_id=item_id,
-                funding_url=funding_url,
-                escrow_status="created",
-                escrow_raw_status=tx.get("status"),
-            )
-            db.add(record)
-            db.commit()
-            db.refresh(record)
-            created.append(record)
-
-        except escrow.EscrowAPIError as e:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Escrow API error on milestone {m['number']}: {e.detail}"
-            )
-
-    _sync_project_notes(project, milestones, data.total_amount, db)
-    return created
-
-
-@escrow_router.post("/admin/milestone", response_model=EscrowTransactionOut)
-async def admin_create_single_milestone(
-    data: CreateSingleMilestoneRequest,
-    current_user: PortalUser = Depends(require_admin),
-    db: Session = Depends(get_session),
-):
-    """Admin: Create a single milestone escrow transaction (for custom schedules)."""
-    project = db.get(Project, data.project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    owner = db.get(PortalUser, project.owner_id)
-    if not owner:
-        raise HTTPException(status_code=404, detail="Project owner not found")
-
-    dupe = db.exec(
-        select(EscrowTransaction).where(
-            EscrowTransaction.project_id == data.project_id,
-            EscrowTransaction.milestone_number == data.milestone_number,
-        )
-    ).first()
-    if dupe:
-        raise HTTPException(status_code=400, detail=f"Milestone {data.milestone_number} already exists")
-
     try:
-        tx = escrow.create_milestone_transaction(
+        tx = escrow.create_project_transaction(
             project_id=data.project_id,
             project_name=project.name,
-            milestone_number=data.milestone_number,
-            milestone_name=data.milestone_name,
-            amount_usd=data.amount_usd,
             client_email=owner.email,
-            client_name=owner.name,
+            client_name=owner.name or owner.email,
+            milestones=milestones,
             inspection_days=data.inspection_days,
-            notes=data.notes,
         )
     except escrow.EscrowAPIError as e:
         raise HTTPException(status_code=502, detail=f"Escrow API error: {e.detail}")
 
-    items = tx.get("items", [])
-    item_id = str(items[0].get("id", "")) if items else None
     funding_url = escrow.get_funding_url(tx)
+    item_ids = escrow.get_item_ids(tx)
 
-    record = EscrowTransaction(
+    # Save project-level record
+    ep = EscrowProject(
         project_id=data.project_id,
         user_id=project.owner_id,
-        milestone_number=data.milestone_number,
-        milestone_name=data.milestone_name,
-        milestone_percent=0.0,
-        amount_usd=data.amount_usd,
         escrow_transaction_id=str(tx["id"]),
-        escrow_item_id=item_id,
+        total_amount=data.total_amount,
         funding_url=funding_url,
-        escrow_status="created",
-        escrow_raw_status=tx.get("status"),
-        notes=data.notes,
+        status="created",
+        raw_status=tx.get("status"),
     )
-    db.add(record)
+    db.add(ep)
     db.commit()
-    db.refresh(record)
-    return record
+    db.refresh(ep)
+
+    # Save per-milestone records
+    ms_records = []
+    for m in milestones:
+        ms_rec = EscrowMilestone(
+            escrow_project_id=ep.id,
+            project_id=data.project_id,
+            milestone_number=m["number"],
+            milestone_name=m["name"],
+            amount=m["amount"],
+            percent=m["percent"],
+            escrow_item_id=item_ids.get(m["number"]),
+            status="pending",
+        )
+        db.add(ms_rec)
+        ms_records.append(ms_rec)
+
+    db.commit()
+
+    return {
+        "message": "Escrow transaction created. Send the funding_url to your client.",
+        "escrow_transaction_id": str(tx["id"]),
+        "total_amount": data.total_amount,
+        "funding_url": funding_url,
+        "milestones": [
+            {
+                "number": m["number"],
+                "name": m["name"],
+                "amount": m["amount"],
+                "percent": m["percent"],
+                "item_id": item_ids.get(m["number"]),
+            }
+            for m in milestones
+        ],
+    }
 
 
-@escrow_router.post("/admin/deliver/{db_id}", response_model=EscrowTransactionOut)
+# ── Admin: Mark a milestone as delivered ─────────────────────────────────────
+
+@escrow_router.post("/admin/deliver/{milestone_id}")
 async def admin_mark_delivered(
-    db_id: int,
+    milestone_id: int,
     current_user: PortalUser = Depends(require_admin),
     db: Session = Depends(get_session),
 ):
     """
-    Admin: Mark milestone as delivered on Escrow.com.
-    Call this when you finish building a milestone — starts the client's inspection period.
-    After inspection_days, if client doesn't dispute, funds auto-release.
+    Admin: Mark a milestone item as delivered on Escrow.com.
+    Starts the client's inspection period (default 5 days).
+    Call this when you've completed a milestone.
     """
-    record = db.get(EscrowTransaction, db_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Escrow transaction not found")
+    ms = db.get(EscrowMilestone, milestone_id)
+    if not ms:
+        raise HTTPException(status_code=404, detail="Milestone record not found")
 
-    if record.escrow_status not in ("funded", "in_progress", "created"):
+    ep = db.get(EscrowProject, ms.escrow_project_id)
+    if not ep:
+        raise HTTPException(status_code=404, detail="Escrow project not found")
+
+    if ms.status not in ("pending", "funded"):
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot mark delivered from status '{record.escrow_status}'"
+            detail=f"Cannot mark delivered from status '{ms.status}'"
         )
 
-    if not record.escrow_transaction_id or not record.escrow_item_id:
-        raise HTTPException(status_code=400, detail="Missing escrow transaction/item ID")
+    if not ms.escrow_item_id:
+        raise HTTPException(status_code=400, detail="No escrow_item_id on this milestone")
 
     try:
-        escrow.mark_milestone_delivered(record.escrow_transaction_id, record.escrow_item_id)
+        escrow.mark_item_delivered(ep.escrow_transaction_id, ms.escrow_item_id)
     except escrow.EscrowAPIError as e:
         raise HTTPException(status_code=502, detail=f"Escrow API error: {e.detail}")
 
-    record.escrow_status = "delivered"
-    record.delivered_at = datetime.utcnow()
-    record.updated_at = datetime.utcnow()
-    db.add(record)
+    ms.status = "delivered"
+    ms.delivered_at = datetime.utcnow()
+    ms.updated_at = datetime.utcnow()
+    db.add(ms)
     db.commit()
-    db.refresh(record)
-    return record
+    db.refresh(ms)
+
+    return {
+        "message": f"Milestone {ms.milestone_number} marked as delivered. Client inspection period has started.",
+        "milestone_id": milestone_id,
+        "milestone_number": ms.milestone_number,
+        "status": ms.status,
+    }
 
 
-@escrow_router.get("/admin/project/{project_id}", response_model=List[EscrowTransactionOut])
-async def admin_get_project_escrow(
+# ── Admin: Get project escrow status ─────────────────────────────────────────
+
+@escrow_router.get("/admin/project/{project_id}")
+async def admin_get_project(
     project_id: int,
     current_user: PortalUser = Depends(require_admin),
     db: Session = Depends(get_session),
 ):
-    """Admin: List all escrow milestones for a project."""
-    records = db.exec(
-        select(EscrowTransaction)
-        .where(EscrowTransaction.project_id == project_id)
-        .order_by(EscrowTransaction.milestone_number)
+    """Admin: Get full escrow status for a project including all milestones."""
+    ep = db.exec(
+        select(EscrowProject).where(EscrowProject.project_id == project_id)
+    ).first()
+    if not ep:
+        raise HTTPException(status_code=404, detail="No escrow set up for this project")
+
+    milestones = db.exec(
+        select(EscrowMilestone)
+        .where(EscrowMilestone.escrow_project_id == ep.id)
+        .order_by(EscrowMilestone.milestone_number)
     ).all()
-    return records
+
+    return {
+        "escrow_transaction_id": ep.escrow_transaction_id,
+        "total_amount": ep.total_amount,
+        "funding_url": ep.funding_url,
+        "status": ep.status,
+        "funded_at": ep.funded_at,
+        "milestones": [
+            {
+                "id": m.id,
+                "number": m.milestone_number,
+                "name": m.milestone_name,
+                "amount": m.amount,
+                "percent": m.percent,
+                "item_id": m.escrow_item_id,
+                "status": m.status,
+                "delivered_at": m.delivered_at,
+                "completed_at": m.completed_at,
+            }
+            for m in milestones
+        ],
+    }
 
 
-@escrow_router.post("/admin/sync/{db_id}", response_model=EscrowTransactionOut)
-async def admin_sync_status(
-    db_id: int,
+# ── Admin: Manual sync from Escrow.com API ───────────────────────────────────
+
+@escrow_router.post("/admin/sync/{project_id}")
+async def admin_sync(
+    project_id: int,
     current_user: PortalUser = Depends(require_admin),
     db: Session = Depends(get_session),
 ):
-    """Admin: Manually sync a transaction's status from Escrow.com API (if webhook missed it)."""
-    record = db.get(EscrowTransaction, db_id)
-    if not record or not record.escrow_transaction_id:
-        raise HTTPException(status_code=404, detail="Not found")
+    """Admin: Pull latest status from Escrow.com and update DB records."""
+    ep = db.exec(
+        select(EscrowProject).where(EscrowProject.project_id == project_id)
+    ).first()
+    if not ep:
+        raise HTTPException(status_code=404, detail="No escrow for this project")
 
     try:
-        tx = escrow.get_transaction(record.escrow_transaction_id)
-        raw = tx.get("status", "")
-        simplified = _map_status(raw)
-        _apply_status(record, simplified, raw)
-        db.add(record)
-        db.commit()
-        db.refresh(record)
+        tx = escrow.get_transaction(ep.escrow_transaction_id)
     except escrow.EscrowAPIError as e:
         raise HTTPException(status_code=502, detail=f"Escrow API error: {e.detail}")
 
-    return record
+    raw = tx.get("status", "")
+    ep.status = escrow.map_status(raw)
+    ep.raw_status = raw
+    ep.updated_at = datetime.utcnow()
+    if ep.status == "funded" and not ep.funded_at:
+        ep.funded_at = datetime.utcnow()
+    db.add(ep)
 
-
-# ── Client routes ──────────────────────────────────────────────────────────────
-
-@escrow_router.get("/project/{project_id}", response_model=List[EscrowTransactionOut])
-async def client_get_project_escrow(
-    project_id: int,
-    current_user: PortalUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-):
-    """Client: View escrow milestone status + funding URLs for their project."""
-    project = db.get(Project, project_id)
-    if not project or project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    records = db.exec(
-        select(EscrowTransaction)
-        .where(EscrowTransaction.project_id == project_id)
-        .order_by(EscrowTransaction.milestone_number)
+    # Sync per-item statuses
+    api_items = {str(item["id"]): item for item in tx.get("items", [])}
+    milestones = db.exec(
+        select(EscrowMilestone).where(EscrowMilestone.escrow_project_id == ep.id)
     ).all()
-    return records
+
+    for ms in milestones:
+        api_item = api_items.get(ms.escrow_item_id or "")
+        if api_item:
+            item_raw = api_item.get("status", {})
+            # Item status can be a dict or string depending on API version
+            item_status = item_raw if isinstance(item_raw, str) else item_raw.get("status", "")
+            ms.status = escrow.map_status(item_status)
+            ms.updated_at = datetime.utcnow()
+            db.add(ms)
+
+    db.commit()
+    return {"message": "Synced", "status": ep.status}
 
 
-# ── Webhook ────────────────────────────────────────────────────────────────────
+# ── Webhook ───────────────────────────────────────────────────────────────────
 
 @escrow_router.post("/webhook")
 async def escrow_webhook(
@@ -326,8 +324,9 @@ async def escrow_webhook(
     db: Session = Depends(get_session),
 ):
     """
-    Escrow.com webhook. Configure in your Escrow.com dashboard:
-    Webhook URL: https://4dgaming.games/api/escrow/webhook
+    Escrow.com webhook receiver.
+    Configure in Escrow.com dashboard → Settings → Webhooks:
+      URL: https://4dgaming.games/api/escrow/webhook
     """
     body = await request.body()
 
@@ -337,7 +336,7 @@ async def escrow_webhook(
             ESCROW_WEBHOOK_SECRET.encode(), body, hashlib.sha256
         ).hexdigest()
         if not hmac.compare_digest(sig, expected):
-            raise HTTPException(status_code=400, detail="Invalid webhook signature")
+            raise HTTPException(status_code=400, detail="Invalid signature")
 
     try:
         payload = json.loads(body)
@@ -345,205 +344,163 @@ async def escrow_webhook(
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     escrow_tx_id = str(payload.get("transaction_id") or payload.get("id", ""))
-    raw_status = payload.get("status", "")
+    raw_status   = payload.get("status", "")
+    item_id      = str(payload.get("item_id", ""))
 
     if not escrow_tx_id:
         return {"status": "ignored"}
 
-    record = db.exec(
-        select(EscrowTransaction)
-        .where(EscrowTransaction.escrow_transaction_id == escrow_tx_id)
+    ep = db.exec(
+        select(EscrowProject).where(EscrowProject.escrow_transaction_id == escrow_tx_id)
     ).first()
 
-    if not record:
-        print(f"⚠️ Escrow webhook: no record for {escrow_tx_id}")
-        return {"status": "ignored", "reason": "not found"}
+    if not ep:
+        print(f"⚠️ Escrow webhook: no project for txn {escrow_tx_id}")
+        return {"status": "ignored"}
 
-    simplified = _map_status(raw_status)
-    _apply_status(record, simplified, raw_status)
-    db.add(record)
+    simplified = escrow.map_status(raw_status)
+    now = datetime.utcnow()
+
+    # Update project-level status
+    ep.status = simplified
+    ep.raw_status = raw_status
+    ep.updated_at = now
+    if simplified == "funded" and not ep.funded_at:
+        ep.funded_at = now
+        # When funded, mark all milestones as funded too
+        milestones = db.exec(
+            select(EscrowMilestone).where(EscrowMilestone.escrow_project_id == ep.id)
+        ).all()
+        for ms in milestones:
+            if ms.status == "pending":
+                ms.status = "funded"
+                ms.updated_at = now
+                db.add(ms)
+
+    elif simplified == "completed" and not ep.completed_at:
+        ep.completed_at = now
+
+    db.add(ep)
+
+    # If a specific item was updated, update that milestone
+    if item_id:
+        ms = db.exec(
+            select(EscrowMilestone).where(EscrowMilestone.escrow_item_id == item_id)
+        ).first()
+        if ms:
+            ms.status = simplified
+            ms.updated_at = now
+            if simplified == "completed" and not ms.completed_at:
+                ms.completed_at = now
+            db.add(ms)
+
     db.commit()
-
-    print(f"✅ Escrow webhook: {escrow_tx_id} → {simplified}")
+    print(f"✅ Escrow webhook: txn={escrow_tx_id} item={item_id} → {simplified}")
     return {"status": "ok"}
 
 
-# ── Internal helpers ───────────────────────────────────────────────────────────
+# ── Client: view escrow status for their project ──────────────────────────────
 
-def _map_status(raw: str) -> str:
-    return {
-        "new": "created",
-        "in_progress": "in_progress",
-        "funded": "funded",
-        "shipped": "delivered",
-        "received": "inspection",
-        "completed": "completed",
-        "cancelled": "cancelled",
-        "disputed": "disputed",
-    }.get(raw.lower(), raw.lower())
-
-
-def _apply_status(record: EscrowTransaction, simplified: str, raw: str):
-    now = datetime.utcnow()
-    record.escrow_status = simplified
-    record.escrow_raw_status = raw
-    record.updated_at = now
-    if simplified == "funded" and not record.funded_at:
-        record.funded_at = now
-    elif simplified == "delivered" and not record.delivered_at:
-        record.delivered_at = now
-    elif simplified == "completed" and not record.completed_at:
-        record.completed_at = now
-    elif simplified == "cancelled" and not record.cancelled_at:
-        record.cancelled_at = now
-
-
-def _sync_project_notes(project: Project, milestones: list, total: float, db: Session):
-    """Write escrow milestone schedule into project.notes for portal display."""
-    try:
-        notes = json.loads(project.notes) if project.notes else {}
-    except (json.JSONDecodeError, TypeError):
-        notes = {}
-
-    notes["payment_method"] = "escrow"
-    notes["pricing"] = {
-        "total": total,
-        "milestones": [
-            {
-                "name": m["name"],
-                "amount": m["amount"],
-                "percent": m["percent"],
-                "weeksFromStart": m["number"],
-            }
-            for m in milestones
-        ],
-    }
-    project.notes = json.dumps(notes)
-    db.add(project)
-    db.commit()
-
-
-# ── Client-facing project route (matches client-portal.html call pattern) ──────
-# The client portal calls: POST /api/projects/{project_id}/escrow/create?milestone=N
-# This router is mounted at /api/escrow, so we need a separate router at /api
-
-client_escrow_router = APIRouter(tags=["escrow-client"])
-
-@client_escrow_router.post("/projects/{project_id}/escrow/create")
-async def client_create_escrow_milestone(
+@client_escrow_router.get("/projects/{project_id}/escrow/status")
+async def client_get_escrow(
     project_id: int,
-    milestone: Optional[int] = None,
     current_user: PortalUser = Depends(get_current_user),
     db: Session = Depends(get_session),
 ):
-    """
-    Client-facing endpoint — called by the Fund Escrow button in client-portal.html.
-    Creates an Escrow.com transaction for the specified (or next unpaid) milestone
-    and returns a checkout_url for the client to fund it on Escrow.com.
-    """
-    # Verify project belongs to this user
+    """Client: get escrow status + funding URL for their project."""
     project = db.get(Project, project_id)
     if not project or project.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Parse milestone info from project notes
-    try:
-        notes_data = json.loads(project.notes) if project.notes else {}
-    except (json.JSONDecodeError, TypeError):
-        notes_data = {}
+    ep = db.exec(
+        select(EscrowProject).where(EscrowProject.project_id == project_id)
+    ).first()
 
-    pricing = notes_data.get("pricing") or {}
-    milestones_config = pricing.get("milestones", [])
+    if not ep:
+        return {"status": "not_setup", "milestones": []}
 
-    if not milestones_config:
-        raise HTTPException(status_code=400, detail="No milestones configured for this project.")
-
-    # Find which milestone to fund
-    existing = db.exec(
-        select(EscrowTransaction).where(EscrowTransaction.project_id == project_id)
+    milestones = db.exec(
+        select(EscrowMilestone)
+        .where(EscrowMilestone.escrow_project_id == ep.id)
+        .order_by(EscrowMilestone.milestone_number)
     ).all()
 
-    paid_nums = {r.milestone_number for r in existing if r.escrow_status == "completed"}
-    active_nums = {r.milestone_number for r in existing if r.escrow_status not in ("completed", "cancelled")}
+    return {
+        "escrow_transaction_id": ep.escrow_transaction_id,
+        "total_amount": ep.total_amount,
+        "funding_url": ep.funding_url,
+        "status": ep.status,
+        "funded_at": ep.funded_at,
+        "milestones": [
+            {
+                "number": m.milestone_number,
+                "name": m.milestone_name,
+                "amount": m.amount,
+                "percent": m.percent,
+                "status": m.status,
+                "delivered_at": m.delivered_at,
+                "completed_at": m.completed_at,
+            }
+            for m in milestones
+        ],
+    }
 
-    if milestone is not None:
-        target_num = milestone
-    else:
-        # Next milestone not yet paid or in escrow
-        target_num = next(
-            (i + 1 for i, _ in enumerate(milestones_config)
-             if (i + 1) not in paid_nums and (i + 1) not in active_nums),
-            None
+
+# ── Client: the Fund Escrow button in client-portal.html ─────────────────────
+# Called by: POST /api/projects/{id}/escrow/create
+# If escrow is already set up, returns the existing funding URL.
+# If not yet set up (admin hasn't run /admin/setup), returns 404 with clear message.
+
+@client_escrow_router.post("/projects/{project_id}/escrow/create")
+async def client_fund_escrow(
+    project_id: int,
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """
+    Called when client clicks 'Fund Escrow' button.
+    Returns the Escrow.com funding URL for the full project amount.
+    Admin must have called /api/escrow/admin/setup first.
+    """
+    project = db.get(Project, project_id)
+    if not project or project.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    ep = db.exec(
+        select(EscrowProject).where(EscrowProject.project_id == project_id)
+    ).first()
+
+    if not ep:
+        raise HTTPException(
+            status_code=404,
+            detail="Escrow has not been set up for this project yet. Your project manager will send you the funding link when ready."
         )
-        if target_num is None:
-            raise HTTPException(status_code=400, detail="All milestones are already funded or completed.")
 
-    if target_num < 1 or target_num > len(milestones_config):
-        raise HTTPException(status_code=400, detail=f"Invalid milestone number {target_num}.")
+    if ep.status == "completed":
+        raise HTTPException(status_code=400, detail="All milestones have been completed.")
 
-    if target_num in paid_nums:
-        raise HTTPException(status_code=400, detail=f"Milestone {target_num} is already completed.")
-
-    # If an active (unfunded) transaction already exists, just return its URL
-    existing_txn = next((r for r in existing if r.milestone_number == target_num
-                         and r.escrow_status not in ("completed", "cancelled")), None)
-    if existing_txn and existing_txn.funding_url:
-        return {
-            "escrow_id": existing_txn.escrow_transaction_id,
-            "milestone": target_num,
-            "amount": existing_txn.amount_usd,
-            "status": existing_txn.escrow_status,
-            "checkout_url": existing_txn.funding_url,
-        }
-
-    ms = milestones_config[target_num - 1]
-    amount = ms.get("amount", 0)
-    ms_name = ms.get("name", f"Milestone {target_num}")
-
-    if amount <= 0:
-        raise HTTPException(status_code=400, detail="Invalid milestone amount.")
-
-    try:
-        tx = escrow.create_milestone_transaction(
-            project_id=project_id,
-            project_name=project.name,
-            milestone_number=target_num,
-            milestone_name=ms_name,
-            amount_usd=float(amount),
-            client_email=current_user.email,
-            client_name=current_user.name or current_user.email,
-        )
-    except escrow.EscrowAPIError as e:
-        raise HTTPException(status_code=502, detail=f"Escrow API error: {e.detail}")
-
-    items = tx.get("items", [])
-    item_id = str(items[0].get("id", "")) if items else None
-    funding_url = escrow.get_funding_url(tx)
-    pct = ms.get("percent", ms.get("percentage", 0))
-
-    record = EscrowTransaction(
-        project_id=project_id,
-        user_id=current_user.id,
-        milestone_number=target_num,
-        milestone_name=ms_name,
-        milestone_percent=float(pct) / 100 if pct > 1 else float(pct),
-        amount_usd=float(amount),
-        escrow_transaction_id=str(tx["id"]),
-        escrow_item_id=item_id,
-        funding_url=funding_url,
-        escrow_status="created",
-        escrow_raw_status=tx.get("status"),
-    )
-    db.add(record)
-    db.commit()
-    db.refresh(record)
+    milestones = db.exec(
+        select(EscrowMilestone)
+        .where(EscrowMilestone.escrow_project_id == ep.id)
+        .order_by(EscrowMilestone.milestone_number)
+    ).all()
 
     return {
-        "escrow_id": record.escrow_transaction_id,
-        "milestone": target_num,
-        "milestone_name": ms_name,
-        "amount": amount,
-        "status": "created",
-        "checkout_url": funding_url,
-        "message": f"Escrow transaction created for Milestone {target_num}. Redirecting to Escrow.com to fund ${amount:,.2f}.",
+        "escrow_transaction_id": ep.escrow_transaction_id,
+        "total_amount": ep.total_amount,
+        "status": ep.status,
+        "checkout_url": ep.funding_url,
+        "milestones": [
+            {
+                "number": m.milestone_number,
+                "name": m.milestone_name,
+                "amount": m.amount,
+                "status": m.status,
+            }
+            for m in milestones
+        ],
+        "message": (
+            "Please fund the full project amount on Escrow.com. "
+            "Funds are held securely and released to 4D Gaming as each milestone is completed and approved."
+        ),
     }
