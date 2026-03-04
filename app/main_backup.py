@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from .portal_db import engine, SQLModel
 SQLModel.metadata.create_all(engine)
 
+
 load_dotenv()  # ✅ This loads your .env file
 
 os.environ["PATH"] = r"C:\Tools\ffmpeg\bin;" + os.environ["PATH"]

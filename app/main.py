@@ -26,10 +26,11 @@ warnings.filterwarnings("ignore", message="Field .* has conflict with protected 
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from app.escrow_db import EscrowTransaction
+
 
 from .portal_db import engine, SQLModel
 SQLModel.metadata.create_all(engine)
-
 
 load_dotenv()  # ✅ This loads your .env file
 
@@ -208,6 +209,8 @@ from app.app_uploads import router as uploads_router
 from app.meeting_api import router as meeting_router
 from app.routers import admin
 from app.client_portal_routes import router as portal_router
+from app.escrow_routes import escrow_router
+
 # Include license router
 app.include_router(license.router)
 app.include_router(storage_router)
@@ -220,6 +223,7 @@ app.include_router(meetings.router)
 app.include_router(admin.router)
 app.include_router(portal_router)
 app.include_router(documents.router)
+app.include_router(escrow_router)
 
 @app.get("/healthz")
 def healthz():
