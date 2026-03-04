@@ -26,7 +26,7 @@ warnings.filterwarnings("ignore", message="Field .* has conflict with protected 
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from app.escrow_db import EscrowTransaction
+from app.escrow_db import EscrowProject, EscrowMilestone
 
 
 from .portal_db import engine, SQLModel

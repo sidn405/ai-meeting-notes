@@ -72,3 +72,8 @@ class EscrowMilestone(SQLModel, table=True):
     updated_at: Optional[datetime] = Field(default=None)
     delivered_at: Optional[datetime] = Field(default=None)
     completed_at: Optional[datetime] = Field(default=None)
+
+
+# Backward-compatibility alias — main.py imports EscrowTransaction at line 29.
+# Remove this once main.py is updated to import EscrowProject / EscrowMilestone.
+EscrowTransaction = EscrowProject
