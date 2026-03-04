@@ -421,3 +421,129 @@ def _sync_project_notes(project: Project, milestones: list, total: float, db: Se
     project.notes = json.dumps(notes)
     db.add(project)
     db.commit()
+
+
+# ── Client-facing project route (matches client-portal.html call pattern) ──────
+# The client portal calls: POST /api/projects/{project_id}/escrow/create?milestone=N
+# This router is mounted at /api/escrow, so we need a separate router at /api
+
+client_escrow_router = APIRouter(tags=["escrow-client"])
+
+@client_escrow_router.post("/projects/{project_id}/escrow/create")
+async def client_create_escrow_milestone(
+    project_id: int,
+    milestone: Optional[int] = None,
+    current_user: PortalUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """
+    Client-facing endpoint — called by the Fund Escrow button in client-portal.html.
+    Creates an Escrow.com transaction for the specified (or next unpaid) milestone
+    and returns a checkout_url for the client to fund it on Escrow.com.
+    """
+    # Verify project belongs to this user
+    project = db.get(Project, project_id)
+    if not project or project.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Parse milestone info from project notes
+    try:
+        notes_data = json.loads(project.notes) if project.notes else {}
+    except (json.JSONDecodeError, TypeError):
+        notes_data = {}
+
+    pricing = notes_data.get("pricing") or {}
+    milestones_config = pricing.get("milestones", [])
+
+    if not milestones_config:
+        raise HTTPException(status_code=400, detail="No milestones configured for this project.")
+
+    # Find which milestone to fund
+    existing = db.exec(
+        select(EscrowTransaction).where(EscrowTransaction.project_id == project_id)
+    ).all()
+
+    paid_nums = {r.milestone_number for r in existing if r.escrow_status == "completed"}
+    active_nums = {r.milestone_number for r in existing if r.escrow_status not in ("completed", "cancelled")}
+
+    if milestone is not None:
+        target_num = milestone
+    else:
+        # Next milestone not yet paid or in escrow
+        target_num = next(
+            (i + 1 for i, _ in enumerate(milestones_config)
+             if (i + 1) not in paid_nums and (i + 1) not in active_nums),
+            None
+        )
+        if target_num is None:
+            raise HTTPException(status_code=400, detail="All milestones are already funded or completed.")
+
+    if target_num < 1 or target_num > len(milestones_config):
+        raise HTTPException(status_code=400, detail=f"Invalid milestone number {target_num}.")
+
+    if target_num in paid_nums:
+        raise HTTPException(status_code=400, detail=f"Milestone {target_num} is already completed.")
+
+    # If an active (unfunded) transaction already exists, just return its URL
+    existing_txn = next((r for r in existing if r.milestone_number == target_num
+                         and r.escrow_status not in ("completed", "cancelled")), None)
+    if existing_txn and existing_txn.funding_url:
+        return {
+            "escrow_id": existing_txn.escrow_transaction_id,
+            "milestone": target_num,
+            "amount": existing_txn.amount_usd,
+            "status": existing_txn.escrow_status,
+            "checkout_url": existing_txn.funding_url,
+        }
+
+    ms = milestones_config[target_num - 1]
+    amount = ms.get("amount", 0)
+    ms_name = ms.get("name", f"Milestone {target_num}")
+
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Invalid milestone amount.")
+
+    try:
+        tx = escrow.create_milestone_transaction(
+            project_id=project_id,
+            project_name=project.name,
+            milestone_number=target_num,
+            milestone_name=ms_name,
+            amount_usd=float(amount),
+            client_email=current_user.email,
+            client_name=current_user.name or current_user.email,
+        )
+    except escrow.EscrowAPIError as e:
+        raise HTTPException(status_code=502, detail=f"Escrow API error: {e.detail}")
+
+    items = tx.get("items", [])
+    item_id = str(items[0].get("id", "")) if items else None
+    funding_url = escrow.get_funding_url(tx)
+    pct = ms.get("percent", ms.get("percentage", 0))
+
+    record = EscrowTransaction(
+        project_id=project_id,
+        user_id=current_user.id,
+        milestone_number=target_num,
+        milestone_name=ms_name,
+        milestone_percent=float(pct) / 100 if pct > 1 else float(pct),
+        amount_usd=float(amount),
+        escrow_transaction_id=str(tx["id"]),
+        escrow_item_id=item_id,
+        funding_url=funding_url,
+        escrow_status="created",
+        escrow_raw_status=tx.get("status"),
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return {
+        "escrow_id": record.escrow_transaction_id,
+        "milestone": target_num,
+        "milestone_name": ms_name,
+        "amount": amount,
+        "status": "created",
+        "checkout_url": funding_url,
+        "message": f"Escrow transaction created for Milestone {target_num}. Redirecting to Escrow.com to fund ${amount:,.2f}.",
+    }

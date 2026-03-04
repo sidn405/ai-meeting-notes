@@ -209,7 +209,7 @@ from app.app_uploads import router as uploads_router
 from app.meeting_api import router as meeting_router
 from app.routers import admin
 from app.client_portal_routes import router as portal_router
-from app.escrow_routes import escrow_router
+from app.escrow_routes import escrow_router, client_escrow_router
 
 # Include license router
 app.include_router(license.router)
@@ -224,6 +224,7 @@ app.include_router(admin.router)
 app.include_router(portal_router)
 app.include_router(documents.router)
 app.include_router(escrow_router)
+app.include_router(client_escrow_router, prefix="/api")  
 
 @app.get("/healthz")
 def healthz():
