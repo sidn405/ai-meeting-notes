@@ -197,10 +197,17 @@ def calculate_milestone_amounts(
 def get_funding_url(transaction_data: dict) -> Optional[str]:
     """Extract client funding URL from Escrow.com transaction response."""
     try:
-        return transaction_data["payment_methods"]["escrow"]["url"]
+        url = transaction_data["payment_methods"]["escrow"]["url"]
+        if url:
+            return url
     except (KeyError, TypeError):
-        tid = transaction_data.get("id")
-        return f"https://www.escrow.com/transactions/{tid}" if tid else None
+        pass
+    # Fallback: build URL using the correct domain for the current mode
+    tid = transaction_data.get("id")
+    if not tid:
+        return None
+    base = "https://sandbox.escrow.com" if _SANDBOX else "https://www.escrow.com"
+    return f"{base}/transactions/{tid}"
 
 
 def get_item_ids(transaction_data: dict) -> dict:
