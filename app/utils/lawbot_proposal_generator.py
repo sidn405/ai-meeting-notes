@@ -229,7 +229,7 @@ def create_proposal_pdf(filepath, data):
         mid = data['total_price'] * 0.50
         final = data['total_price'] * 0.20
         
-        schedule_text = f"""30% Deposit (upon contract signing)    ${deposit:,.2f}
+        schedule_text = f"""30% Fund Escrow (upon contract signing)    ${deposit:,.2f}
 50% Mid-Project (development complete)    ${mid:,.2f}
 20% Final (delivery & deployment)    ${final:,.2f}"""
     else:
@@ -238,7 +238,7 @@ def create_proposal_pdf(filepath, data):
         mid = data['total_price'] * 0.40
         final = data['total_price'] * 0.20
         
-        schedule_text = f"""40% Deposit (upon contract signing)    ${deposit:,.2f}
+        schedule_text = f"""40% Fund Escrow (upon contract signing)    ${deposit:,.2f}
 40% Mid-Project (development complete)    ${mid:,.2f}
 20% Final (delivery & deployment)    ${final:,.2f}"""
     
@@ -309,7 +309,7 @@ def create_proposal_pdf(filepath, data):
     next_steps = [
         "1. Review and approve this proposal",
         "2. Sign the agreement below",
-        "3. Submit 30% deposit payment" if is_lawbot else "3. Submit 40% deposit payment",
+        "3. Submit 30% fund escrow" if is_lawbot else "3. Submit 40% fund escrow",
         "4. Schedule project kickoff meeting",
         "5. Begin development"
     ]
@@ -324,7 +324,7 @@ def create_proposal_pdf(filepath, data):
     
     agreement_text = """By signing below, both parties agree to the terms outlined in this proposal. 
     This agreement confirms the project scope, timeline, pricing, and payment schedule as detailed above. 
-    Work will commence upon receipt of the initial deposit payment."""
+    Work will commence upon receipt of the initial escrow payment."""
     
     story.append(Paragraph(agreement_text, styles['Normal']))
     story.append(Spacer(1, 0.3*inch))
