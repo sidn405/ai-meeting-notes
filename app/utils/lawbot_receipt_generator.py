@@ -28,7 +28,7 @@ def create_receipt_pdf(filepath, data):
             - payment_method: str (e.g., "Credit Card", "Wire Transfer", "Check")
             - service_type: str (e.g., "LawBot 360", "AI Chatbot")
             - addons: list of dicts with 'label' and 'price'
-            - milestone: str (e.g., "Deposit Payment", "Final Payment")
+            - milestone: str (e.g., "Discovery & Custom Flow Design", "Testing, Training & Launch")
             - amount: float
             - total_project_cost: float
             - transaction_id: str (optional)
@@ -283,7 +283,7 @@ if __name__ == "__main__":
             {'label': 'Mobile Apps (iOS & Android)', 'price': 5000},
             {'label': 'Advanced Analytics Dashboard', 'price': 2000}
         ],
-        'milestone': 'Deposit Payment',
+        'milestone': 'Discovery & Custom Flow Design',
         'amount': 9600,
         'total_project_cost': 32000,
         'transaction_id': 'ch_3ABC123XYZ',
