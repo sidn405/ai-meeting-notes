@@ -1,7 +1,7 @@
 # escrow_fix_funding_url.py
-# Patches the stored funding_url for transaction 5581825 to use the correct
-# sandbox.escrow.com domain instead of www.escrow.com
-# empty
+# Patches the stored funding_url for transaction 5581825 to the correct
+# escrow-sandbox.com URL.
+#
 # Run: python escrow_fix_funding_url.py
 
 import os
@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, text
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 TRANSACTION_ID = "5581825"
-CORRECT_URL = f"https://sandbox.escrow.com/transactions/{TRANSACTION_ID}"
+CORRECT_URL = f"https://my.escrow-sandbox.com/myescrow/transaction.asp?tid={TRANSACTION_ID}"
 
 
 def main():
@@ -24,7 +24,6 @@ def main():
         engine = create_engine(DATABASE_URL, future=True)
 
         with engine.begin() as conn:
-            # Check it exists first
             row = conn.execute(text("""
                 SELECT id, escrow_transaction_id, funding_url
                 FROM escrow_projects

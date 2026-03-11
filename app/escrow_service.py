@@ -202,12 +202,12 @@ def get_funding_url(transaction_data: dict) -> Optional[str]:
             return url
     except (KeyError, TypeError):
         pass
-    # Fallback: build URL using the correct domain for the current mode
     tid = transaction_data.get("id")
     if not tid:
         return None
-    base = "https://sandbox.escrow.com" if _SANDBOX else "https://www.escrow.com"
-    return f"{base}/transactions/{tid}"
+    if _SANDBOX:
+        return f"https://my.escrow-sandbox.com/myescrow/transaction.asp?tid={tid}"
+    return f"https://www.escrow.com/transactions/{tid}"
 
 
 def get_item_ids(transaction_data: dict) -> dict:
