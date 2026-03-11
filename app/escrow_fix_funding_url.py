@@ -1,7 +1,7 @@
 # escrow_fix_funding_url.py
 # Patches the stored funding_url for transaction 5581825 to use the correct
 # sandbox.escrow.com domain instead of www.escrow.com
-#
+# empty
 # Run: python escrow_fix_funding_url.py
 
 import os
