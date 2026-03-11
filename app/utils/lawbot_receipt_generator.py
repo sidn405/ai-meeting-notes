@@ -212,10 +212,10 @@ def create_receipt_pdf(filepath, data):
         service = data.get('service_type', '')
         if 'LawBot 360' in service or 'lawbot' in service.lower():
             schedule = [30, 50, 20]
-            schedule_labels = ['30% Deposit', '50% Mid-Build', '20% Final Delivery']
+            schedule_labels = ['30% Discover & Custom Flow Design', '50% Bot-Build & System Integrations', '20% Testing, Training & Launch']
         else:
             schedule = [40, 40, 20]
-            schedule_labels = ['40% Deposit', '40% Mid-Project', '20% Final Payment']
+            schedule_labels = ['40% Discovery', '40% Build & Integration', '20% Launch']
         
         total_cost = data['total_project_cost']
         
