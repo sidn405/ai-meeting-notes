@@ -92,10 +92,11 @@ def create_project_transaction(
     payload = {
         "currency": "usd",
         "description": f"4D Gaming – {project_name} (Project #{project_id})",
+        "fee_payer": ESCROW_EMAIL,   # seller (4D Gaming) absorbs the full escrow fee
         "items": items,
         "parties": [
-            {"role": "buyer",  "customer": client_email, "agreed": False, "fee_payer": "seller"},
-            {"role": "seller", "customer": "me",         "agreed": True,  "fee_payer": "seller"},
+            {"role": "buyer",  "customer": client_email, "agreed": False},
+            {"role": "seller", "customer": "me",         "agreed": True},
         ],
     }
 
@@ -195,27 +196,13 @@ def calculate_milestone_amounts(
 
 
 def get_funding_url(transaction_data: dict) -> Optional[str]:
-    """
-    Extract the client-facing funding/checkout URL from the Escrow.com response.
-    Checks in priority order:
-      1. landing_page  — Escrow Pay hosted checkout (preferred)
-      2. payment_methods.escrow.url — fallback from standard transaction API
-      3. Constructed URL from transaction ID
-    """
-    # 1. Escrow Pay hosted checkout page (cleanest UX)
-    landing = transaction_data.get("landing_page")
-    if landing:
-        return landing
-
-    # 2. Standard payment_methods field
+    """Extract client funding URL from Escrow.com transaction response."""
     try:
         url = transaction_data["payment_methods"]["escrow"]["url"]
         if url:
             return url
     except (KeyError, TypeError):
         pass
-
-    # 3. Construct from transaction ID
     tid = transaction_data.get("id")
     if not tid:
         return None
