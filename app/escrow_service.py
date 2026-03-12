@@ -92,12 +92,12 @@ def create_project_transaction(
     payload = {
         "currency": "usd",
         "description": f"4D Gaming – {project_name} (Project #{project_id})",
-        "fee_payer": ESCROW_EMAIL,   # seller (4D Gaming) absorbs the full escrow fee
         "items": items,
         "parties": [
             {"role": "buyer",  "customer": client_email, "agreed": False},
-            {"role": "seller", "customer": "me",         "agreed": True},
+            {"role": "seller", "customer": "me",         "agreed": True, "initiator": True},
         ],
+        "fee_payer": "seller",
     }
 
     with httpx.Client(timeout=30) as client:
@@ -197,12 +197,18 @@ def calculate_milestone_amounts(
 
 def get_funding_url(transaction_data: dict) -> Optional[str]:
     """Extract client funding URL from Escrow.com transaction response."""
+    # 1. Escrow Pay hosted checkout (best UX)
+    landing = transaction_data.get("landing_page")
+    if landing:
+        return landing
+    # 2. Standard payment_methods field
     try:
         url = transaction_data["payment_methods"]["escrow"]["url"]
         if url:
             return url
     except (KeyError, TypeError):
         pass
+    # 3. Construct from transaction ID
     tid = transaction_data.get("id")
     if not tid:
         return None
