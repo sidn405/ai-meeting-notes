@@ -225,20 +225,20 @@ def create_proposal_pdf(filepath, data):
     
     if is_lawbot:
         # LawBot 360: 30/50/20
-        deposit = data['total_price'] * 0.30
+        first = data['total_price'] * 0.30
         mid = data['total_price'] * 0.50
         final = data['total_price'] * 0.20
         
-        schedule_text = f"""30% Fund Escrow (upon contract signing)    ${deposit:,.2f}
+        schedule_text = f"""30% Fund Escrow (upon contract signing)    ${first:,.2f}
 50% Mid-Project (development complete)    ${mid:,.2f}
 20% Final (delivery & deployment)    ${final:,.2f}"""
     else:
         # Other services: 40/40/20
-        deposit = data['total_price'] * 0.40
+        first = data['total_price'] * 0.40
         mid = data['total_price'] * 0.40
         final = data['total_price'] * 0.20
         
-        schedule_text = f"""40% Fund Escrow (upon contract signing)    ${deposit:,.2f}
+        schedule_text = f"""40% Fund Escrow (upon contract signing)    ${first:,.2f}
 40% Mid-Project (development complete)    ${mid:,.2f}
 20% Final (delivery & deployment)    ${final:,.2f}"""
     
