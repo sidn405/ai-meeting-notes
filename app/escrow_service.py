@@ -97,7 +97,7 @@ def create_project_transaction(
             {"role": "buyer",  "customer": client_email, "agreed": False},
             {"role": "seller", "customer": "me",         "agreed": True, "initiator": True},
         ],
-        #"fee_payer": "seller",
+        # "fee_payer": "seller",
     }
 
     with httpx.Client(timeout=30) as client:
