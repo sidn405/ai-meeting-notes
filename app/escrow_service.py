@@ -41,7 +41,12 @@ def _auth() -> tuple:
 
 def _handle(resp: httpx.Response) -> dict:
     if resp.status_code in (200, 201):
-        return resp.json()
+        data = resp.json()
+        # TEMP DEBUG
+        print(f"🔍 Escrow API response keys: {list(data.keys())}")
+        print(f"🔍 landing_page: {data.get('landing_page')}")
+        print(f"🔍 payment_methods: {data.get('payment_methods')}")
+        return data
     raise EscrowAPIError(resp.status_code, resp.text)
 
 
