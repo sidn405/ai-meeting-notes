@@ -197,6 +197,11 @@ def calculate_milestone_amounts(
 
 def get_funding_url(transaction_data: dict) -> Optional[str]:
     """Extract client funding URL from Escrow.com transaction response."""
+    # TEMP DEBUG - log full response to find correct URL field
+    print(f"🔍 Transaction response keys: {list(transaction_data.keys())}")
+    print(f"🔍 landing_page: {transaction_data.get('landing_page')}")
+    print(f"🔍 payment_methods: {transaction_data.get('payment_methods')}")
+    print(f"🔍 transaction id: {transaction_data.get('id')}")
     # 1. Escrow Pay hosted checkout (best UX)
     landing = transaction_data.get("landing_page")
     if landing:
