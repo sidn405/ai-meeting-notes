@@ -196,7 +196,7 @@ def create_proposal_pdf(filepath, data):
     title_s  = S("T",  fontSize=26, fontName="Helvetica-Bold",
                  textColor=colors.HexColor("#1e3a5f"), alignment=TA_CENTER, spaceAfter=4)
     sub_s    = S("Su", fontSize=10, textColor=colors.HexColor("#6b7280"),
-                 alignment=TA_CENTER, spaceAfter=16)
+                 alignment=TA_CENTER, spaceAfter=4)
     hdr_s    = S("HD", fontSize=11, fontName="Helvetica-Bold", textColor=colors.white)
     body_s   = S("Bo", fontSize=10, leading=15, alignment=TA_JUSTIFY,
                  textColor=colors.HexColor("#1f2937"))
