@@ -41,6 +41,11 @@ class Project(SQLModel, table=True):
     notes: Optional[str] = None
     status: str = Field(default="pending")  # pending | in-progress | completed
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    # Proposal / agreement fields
+    proposal_pdf_key: Optional[str] = Field(default=None)   # B2 key for the proposal PDF
+    proposal_pdf_url: Optional[str] = Field(default=None)   # Public URL
+    proposal_agreed: bool = Field(default=False)
+    proposal_agreed_at: Optional[datetime] = Field(default=None)
 
 class ProjectFile(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

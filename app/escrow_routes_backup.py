@@ -121,7 +121,7 @@ async def admin_setup_project_escrow(
     except escrow.EscrowAPIError as e:
         raise HTTPException(status_code=502, detail=f"Escrow API error: {e.detail}")
 
-    funding_url = escrow.get_funding_url(tx)
+    funding_url = escrow.get_funding_url(tx, buyer_email=owner.email)
     item_ids = escrow.get_item_ids(tx)
 
     # Save project-level record
@@ -396,45 +396,6 @@ async def escrow_webhook(
 
     db.commit()
     print(f"✅ Escrow webhook: txn={escrow_tx_id} item={item_id} → {simplified}")
-
-    # ── Receipts ──────────────────────────────────────────────────────────────
-    # Send per-milestone receipt when a specific item is completed
-    # Send final summary receipt when the whole transaction is completed
-    try:
-        from app.proposal_routes import send_milestone_receipt, send_final_receipt
-        from app.portal_db import Project as PortalProject, PortalUser
-
-        portal_project = db.get(PortalProject, ep.project_id)
-        owner = db.get(PortalUser, portal_project.owner_id) if portal_project else None
-
-        if portal_project and owner:
-            if item_id and simplified == "completed":
-                # Per-milestone receipt
-                ms_record = db.exec(
-                    select(EscrowMilestone).where(EscrowMilestone.escrow_item_id == item_id)
-                ).first()
-                if ms_record:
-                    send_milestone_receipt(
-                        project=portal_project,
-                        owner=owner,
-                        milestone_number=ms_record.milestone_number,
-                        milestone_name=ms_record.milestone_name,
-                        amount=ms_record.amount,
-                        escrow_transaction_id=escrow_tx_id,
-                        db=db,
-                    )
-
-            if simplified == "completed" and not item_id:
-                # Whole transaction completed — send final summary receipt
-                send_final_receipt(
-                    project=portal_project,
-                    owner=owner,
-                    escrow_transaction_id=escrow_tx_id,
-                    db=db,
-                )
-    except Exception as receipt_err:
-        print(f"⚠️  Receipt generation failed (non-critical): {receipt_err}")
-
     return {"status": "ok"}
 
 
@@ -568,7 +529,7 @@ async def client_fund_escrow(
     except escrow.EscrowAPIError as e:
         raise HTTPException(status_code=502, detail=f"Escrow API error: {e.detail}")
 
-    funding_url = escrow.get_funding_url(tx)
+    funding_url = escrow.get_funding_url(tx, buyer_email=current_user.email)
     item_ids    = escrow.get_item_ids(tx)
 
     # Persist project-level escrow record

@@ -891,6 +891,13 @@ def create_project(
     db.commit()
     db.refresh(project)
 
+    # Auto-generate proposal PDF in background (non-blocking — fails gracefully)
+    try:
+        from app.proposal_routes import generate_and_store_proposal
+        generate_and_store_proposal(project, current_user, db)
+    except Exception as e:
+        print(f"⚠️  Proposal generation failed for project {project.id}: {e}")
+
     return ProjectOut(
         id=project.id,
         name=project.name,

@@ -9,8 +9,19 @@ DATABASE_URL = os.getenv(
     "postgresql+psycopg2://user:pass@localhost/4dgaming_client_portal",
 )
 
-engine = create_engine(DATABASE_URL, echo=False)
-
+# Configure engine with connection pool settings to prevent stale connections
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True,  # Test connections before using them (prevents SSL SYSCALL errors)
+    pool_size=10,  # Number of connections to maintain in the pool
+    max_overflow=20,  # Additional connections if pool is exhausted
+    pool_recycle=3600,  # Recycle connections after 1 hour (prevents Railway timeout)
+    connect_args={
+        "connect_timeout": 10,
+        "options": "-c statement_timeout=30000"  # 30 second query timeout
+    }
+)
 
 # ---------- MODELS (client portal only) ----------
 
@@ -31,7 +42,6 @@ class Project(SQLModel, table=True):
     status: str = Field(default="pending")  # pending | in-progress | completed
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-
 class ProjectFile(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="project.id")
@@ -39,7 +49,6 @@ class ProjectFile(SQLModel, table=True):
     s3_key: str
     url: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
-
 
 class ProjectMessage(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -79,18 +88,7 @@ class Subscription(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
     meta_data: Optional[str] = None
-    
-# ---------- SESSION HELPERS ----------
 
-def get_session():
-    with Session(engine) as session:
-        yield session
-
-
-def init_db():
-    SQLModel.metadata.create_all(engine)
-    
-# Add Review model to portal_db.py
 class Review(SQLModel, table=True):
     """Client reviews for 4D Gaming services"""
     __tablename__ = "reviews"
@@ -102,7 +100,6 @@ class Review(SQLModel, table=True):
     is_approved: bool = Field(default=False)  # Admin must approve before showing publicly
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-# Add PasswordReset model to portal_db.py
 class PasswordReset(SQLModel, table=True):
     """Password reset tokens"""
     __tablename__ = "password_resets"
@@ -113,3 +110,12 @@ class PasswordReset(SQLModel, table=True):
     expires_at: datetime
     used: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+# ---------- SESSION HELPERS ----------
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+def init_db():
+    SQLModel.metadata.create_all(engine)
