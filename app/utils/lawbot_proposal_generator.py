@@ -574,7 +574,7 @@ def create_proposal_pdf(filepath, data):
 
     story += [sig_outer, Spacer(1, 0.35*inch)]
 
-    # ── FOOTER ───────────────────────────────────────────────────────────────
+    # ── FOOTER  ───────────────────────────────────────────────────────────────
     story.append(HRFlowable(width="100%", thickness=0.5,
                              color=colors.HexColor("#e5e7eb"), spaceAfter=5))
     story.append(Paragraph(
