@@ -285,7 +285,7 @@ def create_proposal_pdf(filepath, data):
         ]))
         story.append(KeepTogether([head, sub, deliv, Spacer(1, 0.15*inch)]))
 
-    # ── PAYMENT SCHEDULE ──────────────────────────────────────────────────────
+    # ── PAYMENT SCHEDULE  ──────────────────────────────────────────────────────
     story.append(bar("INVESTMENT & PAYMENT SCHEDULE"))
     story.append(Spacer(1, 0.1*inch))
 
