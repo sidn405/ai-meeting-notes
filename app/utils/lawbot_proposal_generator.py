@@ -225,7 +225,7 @@ def create_proposal_pdf(filepath, data):
 
     # ── HEADER ───────────────────────────────────────────────────────────────
     story += [
-        Spacer(1, 0.3*inch),
+        Spacer(1, 0.1*inch),
         Paragraph("4D GAMING", title_s),
         Paragraph("LawBot 360 — AI Client Intake System", sub_s),
         Paragraph(
@@ -507,32 +507,31 @@ def create_proposal_pdf(filepath, data):
     ))
     story.append(Spacer(1, 0.3*inch))
 
-    half = W / 2 - 0.1 * inch
+    half  = W / 2 - 0.2 * inch
+    gap   = 0.4 * inch
 
-    # ── Nested table: signature image sits in top cell, LINEBELOW = the line ──
     sig_img_cell = RLImage(SIGNATURE_PATH, width=1.7*inch, height=0.58*inch) \
         if os.path.exists(SIGNATURE_PATH) else Paragraph("", body_s)
 
-    right_sig = Table([
-        [sig_img_cell],          # image row — line drawn below this
+    # Each column is its own nested table so lines are fully independent
+    left_inner = Table([
+        [Paragraph("", body_s)],   # blank space for client to sign
     ], colWidths=[half])
-    right_sig.setStyle(TableStyle([
+    left_inner.setStyle(TableStyle([
+        ("TOPPADDING",    (0,0), (-1,-1), 32),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+        ("LINEBELOW",     (0,0), (-1,-1), 0.8, colors.black),
+    ]))
+
+    right_inner = Table([
+        [sig_img_cell],
+    ], colWidths=[half])
+    right_inner.setStyle(TableStyle([
         ("VALIGN",        (0,0), (-1,-1), "BOTTOM"),
         ("TOPPADDING",    (0,0), (-1,-1), 2),
         ("BOTTOMPADDING", (0,0), (-1,-1), 0),
         ("LEFTPADDING",   (0,0), (-1,-1), 4),
-        # THE signature line — right beneath the image
-        ("LINEBELOW",     (0,0), (-1,0),  0.8, colors.HexColor("#333333")),
-    ]))
-
-    left_sig = Table([
-        [Paragraph("", body_s)],   # empty cell same height — line drawn below
-    ], colWidths=[half])
-    left_sig.setStyle(TableStyle([
-        ("TOPPADDING",    (0,0), (-1,-1), 30),   # height to match image cell
-        ("BOTTOMPADDING", (0,0), (-1,-1), 0),
-        ("LEFTPADDING",   (0,0), (-1,-1), 4),
-        ("LINEBELOW",     (0,0), (-1,0),  0.8, colors.HexColor("#333333")),
+        ("LINEBELOW",     (0,0), (-1,-1), 0.8, colors.black),
     ]))
 
     sig_outer = Table([
@@ -540,34 +539,37 @@ def create_proposal_pdf(filepath, data):
         [Paragraph("<b>CLIENT SIGNATURE</b>",
                    S("SH1", fontSize=10, fontName="Helvetica-Bold",
                      textColor=colors.HexColor("#1e3a5f"))),
+         Paragraph("", body_s),
          Paragraph("<b>4D GAMING LLC — AUTHORIZED SIGNATURE</b>",
                    S("SH2", fontSize=10, fontName="Helvetica-Bold",
                      textColor=colors.HexColor("#1e3a5f")))],
         # Row 1: Entity names
         [Paragraph(data["firm_name"],
                    S("FN", fontSize=9, textColor=colors.HexColor("#6b7280"))),
+         Paragraph("", body_s),
          Paragraph("4D Gaming LLC",
                    S("CO", fontSize=9, textColor=colors.HexColor("#6b7280")))],
-        # Row 2: Signature cells (nested tables with line below)
-        [left_sig, right_sig],
+        # Row 2: Signature lines — completely separate columns
+        [left_inner, Paragraph("", body_s), right_inner],
         # Row 3: Spacer
-        [Paragraph("", body_s), Paragraph("", body_s)],
+        [Paragraph("", body_s), Paragraph("", body_s), Paragraph("", body_s)],
         # Row 4: Printed name
-        [Paragraph("Printed Name: ________________________________", body_s),
+        [Paragraph("Printed Name: ________________________", body_s),
+         Paragraph("", body_s),
          Paragraph("Printed Name: <b>Sidney Muhammad</b>", body_s)],
         # Row 5: Spacer
-        [Paragraph("", body_s), Paragraph("", body_s)],
+        [Paragraph("", body_s), Paragraph("", body_s), Paragraph("", body_s)],
         # Row 6: Date
-        [Paragraph("Date: ________________________________________", body_s),
+        [Paragraph("Date: ______________________________", body_s),
+         Paragraph("", body_s),
          Paragraph(f"Date: <b>{datetime.now().strftime('%B %d, %Y')}</b>", body_s)],
-    ], colWidths=[half, half])
+    ], colWidths=[half, gap, half])
 
     sig_outer.setStyle(TableStyle([
         ("VALIGN",        (0,0), (-1,-1), "BOTTOM"),
         ("TOPPADDING",    (0,0), (-1,-1), 5),
         ("BOTTOMPADDING", (0,0), (-1,-1), 4),
         ("LEFTPADDING",   (0,0), (-1,-1), 4),
-        # Header row underline
         ("LINEBELOW",     (0,0), (-1,0),  0.5, colors.HexColor("#1e3a5f")),
         ("BACKGROUND",    (0,0), (-1,0),  colors.HexColor("#f8f8f8")),
     ]))
