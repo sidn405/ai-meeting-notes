@@ -215,6 +215,45 @@ def create_proposal_pdf(filepath, data):
     ))
     story.append(Spacer(1, 0.12*inch))
 
+    # Build dynamic deliverables for Milestone 2 based on selected add-ons
+    addon_labels = [a.get('label', '').lower() for a in data.get('addons', [])]
+    has_sms      = any('sms' in l or 'whatsapp' in l for l in addon_labels)
+    has_mobile   = any('mobile' in l or 'ios' in l or 'android' in l for l in addon_labels)
+    has_voice    = any('voice' in l or 'phone' in l or 'twilio' in l for l in addon_labels)
+    has_analytics= any('analytics' in l for l in addon_labels)
+    has_multilang= any('language' in l for l in addon_labels)
+    has_multiloc = any('location' in l for l in addon_labels)
+
+    m2_deliverables = [
+        "Full AI chatbot build with all approved conversation flows implemented",
+        "24/7 automated client intake — captures leads, qualifies cases, collects contact info",
+        "Case-specific intake forms for each selected practice area",
+        "Consultation scheduling integration (Calendly, Google Calendar, or built-in CRM)",
+        "CRM/case management integration (Clio, Salesforce, MyCase, or equivalent)",
+        "Document capture capability — clients can upload supporting documents through the bot",
+        "Payment processor integration for accepting retainer payments through the chat",
+        "Website embedding — widget installed and tested on your law firm website",
+        "Internal quality assurance testing across all conversation paths",
+    ]
+    if has_sms:
+        m2_deliverables.insert(7, "SMS & WhatsApp integration — multi-channel client outreach enabled")
+    if has_mobile:
+        m2_deliverables.insert(7, "Native iOS & Android mobile app build and App Store submission")
+    if has_voice:
+        m2_deliverables.insert(7, "Voice/phone integration via Twilio — clients can call or receive automated follow-up calls")
+    if has_analytics:
+        m2_deliverables.insert(7, "Advanced analytics dashboard — lead tracking, conversion rates, and intake performance metrics")
+    if has_multilang:
+        m2_deliverables.insert(7, "Multi-language support — bot configured to serve clients in selected languages")
+    if has_multiloc:
+        m2_deliverables.insert(7, "Multi-location support — separate intake flows configured per office location")
+
+    dynamic_scope = {
+        1: MILESTONE_SCOPE[1]['deliverables'],
+        2: m2_deliverables,
+        3: MILESTONE_SCOPE[3]['deliverables'],
+    }
+
     for i in range(1, 4):
         sc  = MILESTONE_SCOPE[i]
         amt = amounts[i-1]
@@ -237,7 +276,7 @@ def create_proposal_pdf(filepath, data):
             ('LEFTPADDING', (0,0), (-1,-1), 10),
         ]))
 
-        deliv = Table([[Paragraph(f"&#10003;  {d}", bullet_s)] for d in sc['deliverables']], colWidths=[W])
+        deliv = Table([[Paragraph(f"&#10003;  {d}", bullet_s)] for d in dynamic_scope[i]], colWidths=[W])
         deliv.setStyle(TableStyle([
             ('TOPPADDING', (0,0), (-1,-1), 3), ('BOTTOMPADDING', (0,0), (-1,-1), 3),
             ('LEFTPADDING', (0,0), (-1,-1), 12),
@@ -292,6 +331,8 @@ def create_proposal_pdf(filepath, data):
 
     # ── MAINTENANCE ───────────────────────────────────────────────────────────
     mt = data.get('maintenance_tier', 'None')
+    sub_label = data.get('subscription_label', '')
+    sub_price = data.get('subscription_price', 0)
     story.append(bar("ONGOING MAINTENANCE (OPTIONAL)"))
     story.append(Spacer(1, 0.1*inch))
     if not mt or mt in ('None', 'none'):
@@ -300,7 +341,9 @@ def create_proposal_pdf(filepath, data):
             "independently. A maintenance plan can be added at any time after launch.", body_s))
     elif mt in MAINTENANCE_FEATURES:
         info = MAINTENANCE_FEATURES[mt]
-        story.append(Paragraph(f"<b>Selected Plan: {mt} — {info['price']}</b>",
+        display_price = f"${sub_price:,.0f}/month" if sub_price else info['price']
+        display_label = sub_label if sub_label else f"{mt} Maintenance"
+        story.append(Paragraph(f"<b>Selected Plan: {display_label} — {display_price}</b>",
                                 S('MPH', fontSize=11, fontName='Helvetica-Bold',
                                   textColor=colors.HexColor('#1e3a5f'), spaceAfter=3)))
         story.append(Paragraph("Automatically billed monthly starting 30 days after project launch. Cancel anytime.",
@@ -309,7 +352,7 @@ def create_proposal_pdf(filepath, data):
         for f in info['features']:
             story.append(Paragraph(f"&#10003;  {f}", bullet_s))
     else:
-        story.append(Paragraph(f"<b>Selected Plan: {mt}</b>", body_s))
+        story.append(Paragraph(f"<b>Selected Plan: {sub_label or mt}</b>", body_s))
     story.append(Spacer(1, 0.15*inch))
 
     # ── NEXT STEPS ────────────────────────────────────────────────────────────
@@ -364,26 +407,42 @@ def create_proposal_pdf(filepath, data):
     story.append(Spacer(1, 0.3*inch))
 
     sig = [
+        # Row 0: Column headers
         [Paragraph('<b>CLIENT SIGNATURE</b>', S('SH1', fontSize=10, fontName='Helvetica-Bold',
                                                   textColor=colors.HexColor('#1e3a5f'))),
-         Paragraph('<b>4D GAMING AUTHORIZED SIGNATURE</b>', S('SH2', fontSize=10, fontName='Helvetica-Bold',
+         Paragraph('<b>4D GAMING LLC — AUTHORIZED SIGNATURE</b>', S('SH2', fontSize=10, fontName='Helvetica-Bold',
                                                                 textColor=colors.HexColor('#1e3a5f')))],
+        # Row 1: Company names
         [Paragraph(data['firm_name'], S('FN', fontSize=9, textColor=colors.HexColor('#6b7280'))),
          Paragraph('4D Gaming LLC', S('CO', fontSize=9, textColor=colors.HexColor('#6b7280')))],
-        ['', RLImage(SIGNATURE_PATH, width=1.6*inch, height=0.6*inch) if os.path.exists(SIGNATURE_PATH) else ''],
-        [Paragraph('Signature: ' + '_' * 36, body_s), Paragraph('', body_s)],
-        ['', ''],
-        [Paragraph('Printed Name: ' + '_' * 30, body_s),
-         Paragraph('Printed Name: Sidney Muhammad', S('PN', fontSize=10, textColor=colors.HexColor('#374151')))],
-        ['', ''],
-        [Paragraph('Date: ' + '_' * 38, body_s),
-         Paragraph(f"Date: {datetime.now().strftime('%B %d, %Y')}", S('DS', fontSize=10, textColor=colors.HexColor('#374151')))],
+        # Row 2: Signature image (right) floats above line; line drawn via LINEBELOW on this row
+        [Paragraph('', body_s),
+         RLImage(SIGNATURE_PATH, width=1.5*inch, height=0.5*inch) if os.path.exists(SIGNATURE_PATH) else Paragraph('', body_s)],
+        # Row 3: Signature lines — underline on row 2 acts as the line the image sits on
+        [Paragraph('Signature: ___________________________________', body_s),
+         Paragraph('', body_s)],
+        [Paragraph('', body_s), Paragraph('', body_s)],
+        # Row 5: Printed name
+        [Paragraph('Printed Name: ________________________________', body_s),
+         Paragraph('Printed Name: <b>Sidney Muhammad</b>', body_s)],
+        [Paragraph('', body_s), Paragraph('', body_s)],
+        # Row 7: Date
+        [Paragraph('Date: ________________________________________', body_s),
+         Paragraph(f'Date: <b>{datetime.now().strftime("%B %d, %Y")}</b>', body_s)],
     ]
     st = Table(sig, colWidths=[W/2 - 0.1*inch, W/2 - 0.1*inch])
     st.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('TOPPADDING', (0,0), (-1,-1), 4), ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-        ('LINEBELOW', (0,0), (-1,0), 0.5, colors.HexColor('#1e3a5f')),
+        ('VALIGN',        (0, 0), (-1, -1), 'BOTTOM'),
+        ('TOPPADDING',    (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 4),
+        # Header underline
+        ('LINEBELOW',     (0, 0), (-1, 0),  0.5, colors.HexColor('#1e3a5f')),
+        ('BACKGROUND',    (0, 0), (-1, 0),  colors.HexColor('#f8f8f8')),
+        # This is the signature LINE — drawn below the image row so image sits ON the line
+        ('LINEBELOW',     (0, 2), (-1, 2),  0.8, colors.HexColor('#333333')),
+        ('BOTTOMPADDING', (0, 2), (-1, 2),  0),
+        ('TOPPADDING',    (0, 2), (-1, 2),  2),
     ]))
     story += [st, Spacer(1, 0.35*inch)]
 
