@@ -83,6 +83,9 @@ def _build_proposal_data(project: Project, owner: PortalUser) -> dict:
     total_price = pricing.get("totalPrice") or pricing.get("total") or sum(m.get("amount", 0) for m in milestones)
     service    = project.service or "lawbot360"
 
+    # Question answers are stored under notes.questions.*
+    q = notes.get("questions") or {}
+
     # ── Add-ons: portal stores as selectedAddons [{id, price, type}] ──────────
     ADDON_LABELS = {
         "nativeapps":       "Native iOS & Android Mobile Apps",
@@ -149,10 +152,10 @@ def _build_proposal_data(project: Project, owner: PortalUser) -> dict:
 
     return {
         "proposal_number":       proposal_number,
-        "firm_name":             notes.get("firm_name") or owner.name,
-        "contact_name":          notes.get("contact_name") or owner.name,
-        "contact_email":         notes.get("contact_email") or owner.email,
-        "contact_phone":         notes.get("contact_phone"),
+        "firm_name":             q.get("firm_name") or notes.get("firm_name") or owner.name,
+        "contact_name":          q.get("contact_name") or notes.get("contact_name") or owner.name,
+        "contact_email":         q.get("contact_email") or notes.get("contact_email") or owner.email,
+        "contact_phone":         q.get("contact_phone") or notes.get("contact_phone"),
         "current_intake_method": notes.get("description") or notes.get("brief_description"),
         "practice_areas":        notes.get("practice_areas") or [service],
         "addons":                addons,
@@ -162,14 +165,14 @@ def _build_proposal_data(project: Project, owner: PortalUser) -> dict:
         "maintenance_tier":      maintenance,
         "subscription_label":    sub_label,
         "subscription_price":    float(subscription.get("price", 0)),
-        # Project detail fields from the portal form
-        "crm":                   notes.get("crm") or notes.get("current_crm"),
-        "scheduling_system":     notes.get("scheduling_system") or notes.get("calendar_system"),
-        "payment_processor":     notes.get("payment_processor") or notes.get("preferred_payment"),
-        "website_url":           notes.get("website_url") or notes.get("law_firm_website"),
-        "practice_areas_text":   notes.get("practice_areas_text") or notes.get("primary_practice_areas"),
-        "special_requirements":  notes.get("special_requirements") or notes.get("special_reqs"),
-        "monthly_visitors":      notes.get("monthly_visitors") or notes.get("approximate_monthly_visitors"),
+        # Project detail fields — read from questions sub-object with correct portal key names
+        "crm":                   q.get("crm_system") or q.get("crm"),
+        "scheduling_system":     q.get("calendar_system") or q.get("scheduling_system"),
+        "payment_processor":     q.get("payment_processor"),
+        "website_url":           q.get("website_url"),
+        "practice_areas_text":   q.get("practice_areas"),
+        "special_requirements":  q.get("special_requirements"),
+        "monthly_visitors":      q.get("monthly_visitors"),
     }
 
 

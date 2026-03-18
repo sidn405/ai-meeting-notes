@@ -225,7 +225,7 @@ def create_proposal_pdf(filepath, data):
 
     # ── HEADER ───────────────────────────────────────────────────────────────
     story += [
-        Spacer(1, 0.1*inch),
+        Spacer(1, 0.3*inch),
         Paragraph("4D GAMING", title_s),
         Paragraph("LawBot 360 — AI Client Intake System", sub_s),
         Paragraph(
@@ -233,8 +233,8 @@ def create_proposal_pdf(filepath, data):
             f"Date: {datetime.now().strftime('%B %d, %Y')}",
             sub_s,
         ),
-        Spacer(1, 0.1*inch),
-        HRFlowable(width="100%", thickness=2, color=colors.HexColor("#1e3a5f"), spaceAfter=12),
+        Spacer(1, 0.2*inch),
+        HRFlowable(width="100%", thickness=2, color=colors.HexColor("#1e3a5f"), spaceAfter=16),
     ]
 
     # ── CLIENT INFO ──────────────────────────────────────────────────────────
@@ -574,7 +574,7 @@ def create_proposal_pdf(filepath, data):
 
     story += [sig_outer, Spacer(1, 0.35*inch)]
 
-    # ── FOOTER  ───────────────────────────────────────────────────────────────
+    # ── FOOTER ───────────────────────────────────────────────────────────────
     story.append(HRFlowable(width="100%", thickness=0.5,
                              color=colors.HexColor("#e5e7eb"), spaceAfter=5))
     story.append(Paragraph(
