@@ -44,6 +44,12 @@ FRONTEND_URL     = "https://4dgaming.games"
 if RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
 
+# Validate AWS credentials at startup
+print(f"🔍 AWS_ACCESS_KEY_ID set: {bool(AWS_ACCESS_KEY_ID)} ({AWS_ACCESS_KEY_ID[:6] + '...' if AWS_ACCESS_KEY_ID else 'MISSING'})")
+print(f"🔍 AWS_SECRET_ACCESS_KEY set: {bool(AWS_SECRET_ACCESS_KEY)}")
+print(f"🔍 AWS_REGION: {AWS_REGION}")
+print(f"🔍 AWS_BUCKET_NAME: {AWS_BUCKET_NAME}")
+
 s3 = boto3.client(
     "s3",
     aws_access_key_id=AWS_ACCESS_KEY_ID,
