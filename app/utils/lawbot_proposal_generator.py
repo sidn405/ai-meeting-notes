@@ -579,7 +579,8 @@ def create_proposal_pdf(filepath, data):
                              color=colors.HexColor("#e5e7eb"), spaceAfter=5))
     story.append(Paragraph(
         f"Proposal #{data['proposal_number']} &nbsp;|&nbsp; 4D Gaming LLC &nbsp;|&nbsp; "
-        "legaltech@4dgaming.games &nbsp;|
+        "legaltech@4dgaming.games &nbsp;|&nbsp; (504) 383-3692 &nbsp;|&nbsp; 4dgaming.games",
+        small_s,
     ))
     story.append(Paragraph(
         "This proposal is valid for 30 days from the date of issue. "
