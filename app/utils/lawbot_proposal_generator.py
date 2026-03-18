@@ -194,9 +194,9 @@ def create_proposal_pdf(filepath, data):
         return ParagraphStyle(name, parent=styles[base], **kw)
 
     title_s  = S("T",  fontSize=26, fontName="Helvetica-Bold",
-                 textColor=colors.HexColor("#1e3a5f"), alignment=TA_CENTER, spaceAfter=2)
+                 textColor=colors.HexColor("#1e3a5f"), alignment=TA_CENTER, spaceAfter=4)
     sub_s    = S("Su", fontSize=10, textColor=colors.HexColor("#6b7280"),
-                 alignment=TA_CENTER, spaceAfter=4)
+                 alignment=TA_CENTER, spaceAfter=16)
     hdr_s    = S("HD", fontSize=11, fontName="Helvetica-Bold", textColor=colors.white)
     body_s   = S("Bo", fontSize=10, leading=15, alignment=TA_JUSTIFY,
                  textColor=colors.HexColor("#1f2937"))
@@ -225,7 +225,7 @@ def create_proposal_pdf(filepath, data):
 
     # ── HEADER ───────────────────────────────────────────────────────────────
     story += [
-        Spacer(1, 0.1*inch),
+        Spacer(1, 0.5*inch),
         Paragraph("4D GAMING", title_s),
         Paragraph("LawBot 360 — AI Client Intake System", sub_s),
         Paragraph(
