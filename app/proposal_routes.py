@@ -19,8 +19,8 @@ from sqlmodel import Session, select
 
 from app.portal_db import get_session, Project, PortalUser
 from app.client_portal_routes import get_current_user, require_admin
-from app.lawbot_proposal_generator import create_proposal_pdf
-from app.lawbot_receipt_generator import create_receipt_pdf
+from app.utils.lawbot_proposal_generator import create_proposal_pdf
+from app.utils.lawbot_receipt_generator import create_receipt_pdf
 
 proposal_router = APIRouter(prefix="/api", tags=["proposals"])
 
