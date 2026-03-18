@@ -41,12 +41,7 @@ def _auth() -> tuple:
 
 def _handle(resp: httpx.Response) -> dict:
     if resp.status_code in (200, 201):
-        data = resp.json()
-        # TEMP DEBUG
-        print(f"🔍 Escrow API response keys: {list(data.keys())}")
-        print(f"🔍 landing_page: {data.get('landing_page')}")
-        print(f"🔍 payment_methods: {data.get('payment_methods')}")
-        return data
+        return resp.json()
     raise EscrowAPIError(resp.status_code, resp.text)
 
 
@@ -99,10 +94,9 @@ def create_project_transaction(
         "description": f"4D Gaming – {project_name} (Project #{project_id})",
         "items": items,
         "parties": [
-            {"role": "buyer",  "customer": client_email, "agreed": False},
-            {"role": "seller", "customer": "me",         "agreed": True, "initiator": True},
+            {"role": "buyer",  "customer": client_email, "agreed": False, "fee_payer": "50/50"},
+            {"role": "seller", "customer": "me",         "agreed": True,  "fee_payer": "50/50"},
         ],
-        "fee_payer": "seller",
     }
 
     with httpx.Client(timeout=30) as client:
@@ -200,17 +194,24 @@ def calculate_milestone_amounts(
     return milestones
 
 
-def get_funding_url(transaction_data: dict) -> Optional[str]:
-    """Extract client funding URL from Escrow.com transaction response."""
-    # TEMP DEBUG - log full response to find correct URL field
-    print(f"🔍 Transaction response keys: {list(transaction_data.keys())}")
-    print(f"🔍 landing_page: {transaction_data.get('landing_page')}")
-    print(f"🔍 payment_methods: {transaction_data.get('payment_methods')}")
-    print(f"🔍 transaction id: {transaction_data.get('id')}")
-    # 1. Escrow Pay hosted checkout (best UX)
+def get_funding_url(transaction_data: dict, buyer_email: str = None) -> Optional[str]:
+    """
+    Build the URL to send the buyer to fund the escrow transaction.
+
+    Production standard API does not return landing_page or payment_methods.
+    Escrow.com emails the buyer automatically, but we also redirect them directly
+    using the same signup-page URL format Escrow uses in their emails.
+
+    New buyers create an account; existing buyers are prompted to log in.
+    Both land on their pending transaction after authenticating.
+    """
+    import base64
+
+    # 1. Escrow Pay landing_page (returned by Escrow Pay API — not standard API)
     landing = transaction_data.get("landing_page")
     if landing:
         return landing
+
     # 2. Standard payment_methods field
     try:
         url = transaction_data["payment_methods"]["escrow"]["url"]
@@ -218,13 +219,22 @@ def get_funding_url(transaction_data: dict) -> Optional[str]:
             return url
     except (KeyError, TypeError):
         pass
-    # 3. Construct from transaction ID
+
+    # 3. Construct signup/login URL from buyer email (same format Escrow uses in emails)
     tid = transaction_data.get("id")
-    if not tid:
-        return None
-    if _SANDBOX:
-        return f"https://my.escrow-sandbox.com/myescrow/transaction.asp?tid={tid}"
-    return f"https://www.escrow.com/transactions/{tid}"
+    if buyer_email and tid:
+        encoded = base64.b64encode(buyer_email.encode()).decode()
+        if _SANDBOX:
+            return f"https://www.escrow-sandbox.com/signup-page?signup={encoded}"
+        return f"https://www.escrow.com/signup-page?signup={encoded}"
+
+    # 4. Last resort — direct transaction URL (requires existing logged-in account)
+    if tid:
+        if _SANDBOX:
+            return f"https://my.escrow-sandbox.com/myescrow/transaction.asp?tid={tid}"
+        return f"https://www.escrow.com/transactions/{tid}"
+
+    return None
 
 
 def get_item_ids(transaction_data: dict) -> dict:

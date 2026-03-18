@@ -121,7 +121,7 @@ async def admin_setup_project_escrow(
     except escrow.EscrowAPIError as e:
         raise HTTPException(status_code=502, detail=f"Escrow API error: {e.detail}")
 
-    funding_url = escrow.get_funding_url(tx)
+    funding_url = escrow.get_funding_url(tx, buyer_email=owner.email)
     item_ids = escrow.get_item_ids(tx)
 
     # Save project-level record
@@ -529,7 +529,7 @@ async def client_fund_escrow(
     except escrow.EscrowAPIError as e:
         raise HTTPException(status_code=502, detail=f"Escrow API error: {e.detail}")
 
-    funding_url = escrow.get_funding_url(tx)
+    funding_url = escrow.get_funding_url(tx, buyer_email=current_user.email)
     item_ids    = escrow.get_item_ids(tx)
 
     # Persist project-level escrow record
