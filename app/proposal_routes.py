@@ -78,44 +78,98 @@ def _build_proposal_data(project: Project, owner: PortalUser) -> dict:
     except (json.JSONDecodeError, TypeError):
         notes = {}
 
-    pricing     = notes.get("pricing") or {}
-    milestones  = pricing.get("milestones", [])
-    addons      = pricing.get("addons", [])
-    total_price = pricing.get("total", sum(m.get("amount", 0) for m in milestones))
-    maintenance = pricing.get("maintenance", "None")
-    service     = project.service or "lawbot360"
+    pricing    = notes.get("pricing") or {}
+    milestones = pricing.get("milestones", [])
+    total_price = pricing.get("totalPrice") or pricing.get("total") or sum(m.get("amount", 0) for m in milestones)
+    service    = project.service or "lawbot360"
 
-    # Build timeline phases from milestones
-    timeline_phases = []
+    # ── Add-ons: portal stores as selectedAddons [{id, price, type}] ──────────
+    ADDON_LABELS = {
+        "nativeapps":       "Native iOS & Android Mobile Apps",
+        "multilanguage":    "Multi-Language Support",
+        "smswhatsapp":      "SMS / WhatsApp Integration",
+        "analytics":        "Advanced Analytics Dashboard",
+        "multilocation":    "Multi-Location Support",
+        "voicephone":       "Voice / Phone Integration (Twilio)",
+        # fallbacks
+        "mobile":           "Native iOS & Android Mobile Apps",
+        "voice":            "Voice / Phone Integration (Twilio)",
+        "whatsapp":         "SMS / WhatsApp Integration",
+    }
+    raw_addons = pricing.get("selectedAddons") or pricing.get("addons") or []
+    addons = []
+    for a in raw_addons:
+        addon_id    = str(a.get("id", "")).lower().replace("_", "").replace("-", "").replace(" ", "")
+        addon_price = float(a.get("price", 0))
+        addon_label = a.get("label") or ADDON_LABELS.get(addon_id) or a.get("id", "").replace("_", " ").title()
+        if addon_price > 0:
+            addons.append({"label": addon_label, "price": addon_price})
+
+    # ── Maintenance: portal stores as subscription {id, label, price} ─────────
+    MAINTENANCE_ID_MAP = {
+        "maintenance_basic":      "Basic",
+        "maintenance_pro":        "Professional",
+        "maintenance_enterprise": "Enterprise",
+        "none":                   "None",
+    }
+    subscription = pricing.get("subscription") or {}
+    sub_id    = str(subscription.get("id", "")).lower()
+    sub_label = subscription.get("label", "")
+
+    # Map to the tier name the generator expects
+    if sub_id in MAINTENANCE_ID_MAP:
+        maintenance = MAINTENANCE_ID_MAP[sub_id]
+    elif "basic" in sub_label.lower():
+        maintenance = "Basic"
+    elif "professional" in sub_label.lower() or "pro" in sub_label.lower():
+        maintenance = "Professional"
+    elif "enterprise" in sub_label.lower():
+        maintenance = "Enterprise"
+    elif sub_id == "none" or not sub_id:
+        maintenance = "None"
+    else:
+        maintenance = pricing.get("maintenance", "None")
+
+    # ── Timeline phases from milestones ───────────────────────────────────────
     phase_names = {
         1: "Discovery & Custom Flow Design",
         2: "Bot Build & System Integrations",
         3: "Testing, Training & Launch",
     }
+    timeline_phases = []
     for i, ms in enumerate(milestones, start=1):
         weeks = ms.get("weeksFromStart", i * 0.5)
         timeline_phases.append({
             "name":        ms.get("name", phase_names.get(i, f"Milestone {i}")),
             "duration":    f"Week {weeks}",
-            "deliverables": ms.get("description", "Deliverables per scope of work"),
+            "deliverables": ms.get("description", ""),
         })
 
-    # Proposal number from project id
     proposal_number = f"4DG-{project.id:04d}"
 
     return {
-        "proposal_number":    proposal_number,
-        "firm_name":          notes.get("firm_name") or owner.name,
-        "contact_name":       notes.get("contact_name") or owner.name,
-        "contact_email":      notes.get("contact_email") or owner.email,
-        "contact_phone":      notes.get("contact_phone"),
+        "proposal_number":       proposal_number,
+        "firm_name":             notes.get("firm_name") or owner.name,
+        "contact_name":          notes.get("contact_name") or owner.name,
+        "contact_email":         notes.get("contact_email") or owner.email,
+        "contact_phone":         notes.get("contact_phone"),
         "current_intake_method": notes.get("description") or notes.get("brief_description"),
-        "practice_areas":     notes.get("practice_areas") or [service],
-        "addons":             addons,
-        "timeline_weeks":     max(int(m.get("weeksFromStart", 2)) for m in milestones) if milestones else 6,
-        "timeline_phases":    timeline_phases,
-        "total_price":        float(total_price),
-        "maintenance_tier":   maintenance if maintenance else "None",
+        "practice_areas":        notes.get("practice_areas") or [service],
+        "addons":                addons,
+        "timeline_weeks":        int(pricing.get("timelineWeeks") or max((m.get("weeksFromStart", 2) for m in milestones), default=6)),
+        "timeline_phases":       timeline_phases,
+        "total_price":           float(total_price),
+        "maintenance_tier":      maintenance,
+        "subscription_label":    sub_label,
+        "subscription_price":    float(subscription.get("price", 0)),
+        # Project detail fields from the portal form
+        "crm":                   notes.get("crm") or notes.get("current_crm"),
+        "scheduling_system":     notes.get("scheduling_system") or notes.get("calendar_system"),
+        "payment_processor":     notes.get("payment_processor") or notes.get("preferred_payment"),
+        "website_url":           notes.get("website_url") or notes.get("law_firm_website"),
+        "practice_areas_text":   notes.get("practice_areas_text") or notes.get("primary_practice_areas"),
+        "special_requirements":  notes.get("special_requirements") or notes.get("special_reqs"),
+        "monthly_visitors":      notes.get("monthly_visitors") or notes.get("approximate_monthly_visitors"),
     }
 
 
