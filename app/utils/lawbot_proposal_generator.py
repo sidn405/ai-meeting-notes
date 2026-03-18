@@ -152,7 +152,7 @@ def create_proposal_pdf(filepath, data):
     amounts[2] = round(total_price - amounts[0] - amounts[1], 2)
     phases = data.get('timeline_phases', [])
 
-    # ── HEADER ────────────────────────────────────────────────────────────────
+    # ── HEADER  ────────────────────────────────────────────────────────────────
     story += [
         Spacer(1, 0.1*inch),
         Paragraph("4D GAMING", title_s),
@@ -162,7 +162,7 @@ def create_proposal_pdf(filepath, data):
         HRFlowable(width='100%', thickness=2, color=colors.HexColor('#1e3a5f'), spaceAfter=12),
     ]
 
-    # ── CLIENT INFO ───────────────────────────────────────────────────────────
+    # ── CLIENT INFO  ───────────────────────────────────────────────────────────
     story.append(bar("CLIENT INFORMATION"))
     story.append(Spacer(1, 0.1*inch))
     ci_rows = [
