@@ -83,10 +83,10 @@ MAINTENANCE_FEATURES = {
 
 def _build_m2_deliverables(data):
     """Build Milestone 2 deliverable list dynamically from project details."""
-    crm       = data.get("crm", "").strip()
-    sched     = data.get("scheduling_system", "").strip()
-    payment   = data.get("payment_processor", "").strip()
-    areas     = data.get("practice_areas_text", "").strip()
+    crm       = (data.get("crm") or "").strip()
+    sched     = (data.get("scheduling_system") or "").strip()
+    payment   = (data.get("payment_processor") or "").strip()
+    areas     = (data.get("practice_areas_text") or "").strip()
     addons    = [a.get("label", "").lower() for a in data.get("addons", [])]
 
     has_sms      = any("sms" in a or "whatsapp" in a for a in addons)
@@ -307,8 +307,8 @@ def create_proposal_pdf(filepath, data):
 
     # Milestone 1 — discovery items mention specific CRM/scheduling if provided
     m1_deliverables = list(M1_BASE)
-    crm   = data.get("crm", "").strip()
-    sched = data.get("scheduling_system", "").strip()
+    crm   = (data.get("crm") or "").strip()
+    sched = (data.get("scheduling_system") or "").strip()
     if crm or sched:
         systems = " and ".join(filter(None, [crm, sched]))
         m1_deliverables[4] = (
@@ -579,8 +579,7 @@ def create_proposal_pdf(filepath, data):
                              color=colors.HexColor("#e5e7eb"), spaceAfter=5))
     story.append(Paragraph(
         f"Proposal #{data['proposal_number']} &nbsp;|&nbsp; 4D Gaming LLC &nbsp;|&nbsp; "
-        "legaltech@4dgaming.games &nbsp;|&nbsp; (504) 383-3692 &nbsp;|&nbsp; 4dgaming.games",
-        small_s,
+        "legaltech@4dgaming.games &nbsp;|
     ))
     story.append(Paragraph(
         "This proposal is valid for 30 days from the date of issue. "
