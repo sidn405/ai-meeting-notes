@@ -24,11 +24,17 @@ from app.utils.lawbot_receipt_generator import create_receipt_pdf
 
 proposal_router = APIRouter(prefix="/api", tags=["proposals"])
 
-# ── B2 / S3 client (reuse portal creds) ──────────────────────────────────────
+# ── B2 client (for existing project files) ───────────────────────────────────
 B2_ENDPOINT_URL      = os.getenv("B2_ENDPOINT_URL")
 B2_ACCESS_KEY_ID     = os.getenv("B2_ACCESS_KEY_ID")
 B2_SECRET_ACCESS_KEY = os.getenv("B2_SECRET_ACCESS_KEY")
 B2_BUCKET_NAME       = os.getenv("B2_BUCKET_NAME", "4dgaming-client-files")
+
+# ── AWS S3 client (for proposals & receipts) ─────────────────────────────────
+AWS_ACCESS_KEY_ID     = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_REGION            = os.getenv("AWS_REGION", "us-east-1")
+AWS_BUCKET_NAME       = os.getenv("AWS_BUCKET_NAME", "lawfirm-docs-2024")
 
 RESEND_API_KEY   = os.getenv("RESEND_API_KEY")
 ADMIN_EMAIL      = os.getenv("ADMIN_EMAIL", "4dgamingllc@gmail.com")
@@ -40,23 +46,23 @@ if RESEND_API_KEY:
 
 s3 = boto3.client(
     "s3",
-    endpoint_url=B2_ENDPOINT_URL,
-    aws_access_key_id=B2_ACCESS_KEY_ID,
-    aws_secret_access_key=B2_SECRET_ACCESS_KEY,
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    region_name=AWS_REGION,
 )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _upload_pdf_to_b2(pdf_bytes: bytes, key: str) -> str:
-    """Upload PDF bytes to B2 and return public URL."""
+    """Upload PDF bytes to AWS S3 and return public URL."""
     s3.upload_fileobj(
         io.BytesIO(pdf_bytes),
-        B2_BUCKET_NAME,
+        AWS_BUCKET_NAME,
         key,
         ExtraArgs={"ContentType": "application/pdf"},
     )
-    return f"{B2_ENDPOINT_URL}/{B2_BUCKET_NAME}/{key}"
+    return f"https://{AWS_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{key}"
 
 
 def _build_proposal_data(project: Project, owner: PortalUser) -> dict:
